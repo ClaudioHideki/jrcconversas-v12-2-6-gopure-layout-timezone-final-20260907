@@ -1375,7 +1375,7 @@ const menuSections = computed(() => {
         <template v-else>
           <div class="flex w-full items-center rounded-2xl px-1 py-1">
             <img
-              src="/brand-assets/gopure-brand-header.png"
+              :src="'/brand-assets/gopure-brand-header.png'"
               alt="GoPure JRC Conversas"
               class="h-14 w-full max-w-[222px] rounded-xl object-cover shadow-sm ring-1 ring-white/10"
             />
