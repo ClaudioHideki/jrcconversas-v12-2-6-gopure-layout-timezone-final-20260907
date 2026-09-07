@@ -1,0 +1,176 @@
+<script setup>
+import { computed, ref, watch, onMounted } from 'vue';
+import { until } from '@vueuse/core';
+import { useI18n } from 'vue-i18n';
+import { useRoute, useRouter } from 'vue-router';
+import { useMapGetter, useStore } from 'dashboard/composables/store';
+import { useAlert } from 'dashboard/composables';
+import { useAdmin } from 'dashboard/composables/useAdmin';
+import { isVoiceCallEnabled } from 'dashboard/helper/inbox';
+import { FEATURE_FLAGS } from 'dashboard/featureFlags';
+import { useCallHistoryStore } from 'dashboard/stores/callHistory';
+
+import CallListItem from 'dashboard/components-next/Calls/CallListItem.vue';
+import CallsEmptyState from 'dashboard/components-next/Calls/CallsEmptyState.vue';
+import CallsFilterBar from 'dashboard/components-next/Calls/CallsFilterBar.vue';
+import { CALL_ACTIVITY_PARAMS } from 'dashboard/components-next/Calls/constants';
+import PaginationFooter from 'dashboard/components-next/pagination/PaginationFooter.vue';
+import Spinner from 'dashboard/components-next/spinner/Spinner.vue';
+
+const RESULTS_PER_PAGE = 25;
+
+const { t } = useI18n();
+const route = useRoute();
+const router = useRouter();
+const store = useStore();
+const callHistoryStore = useCallHistoryStore();
+
+const inboxes = useMapGetter('inboxes/getInboxes');
+const accountId = useMapGetter('getCurrentAccountId');
+const currentUserId = useMapGetter('getCurrentUserID');
+const agents = useMapGetter('agents/getVerifiedAgents');
+const isFeatureEnabledonAccount = useMapGetter(
+  'accounts/isFeatureEnabledonAccount'
+);
+
+// CallFinder scopes non-admins to their own accepted calls, so the assignee
+// filter is only meaningful for admins; everyone else defaults to themselves.
+const { isAdmin } = useAdmin();
+
+const voiceInboxes = computed(() => inboxes.value.filter(isVoiceCallEnabled));
+
+const isVoiceEnabled = computed(
+  () =>
+    isFeatureEnabledonAccount.value(
+      accountId.value,
+      FEATURE_FLAGS.CHANNEL_VOICE
+    ) && voiceInboxes.value.length > 0
+);
+
+const isCallsPreview = true;
+const calls = computed(() => callHistoryStore.records);
+const meta = computed(() => callHistoryStore.meta);
+const isFetching = computed(() => callHistoryStore.uiFlags.isFetching);
+const accountUiFlags = useMapGetter('accounts/getUIFlags');
+
+const isInitializing = ref(true);
+
+// Filters are seeded from the URL so a shared link restores the same view.
+const activity = ref(
+  CALL_ACTIVITY_PARAMS[route.query.activity] ? route.query.activity : null
+);
+
+const assigneeId = ref(
+  isAdmin.value ? Number(route.query.assignee_id) || null : currentUserId.value
+);
+const inboxId = ref(Number(route.query.inbox_id) || null);
+const currentPage = ref(Number(route.query.page) || 1);
+
+const syncFiltersToUrl = () => {
+  router.replace({
+    query: {
+      ...(activity.value && { activity: activity.value }),
+      ...(isAdmin.value &&
+        assigneeId.value && { assignee_id: assigneeId.value }),
+      ...(inboxId.value && { inbox_id: inboxId.value }),
+      ...(currentPage.value > 1 && { page: currentPage.value }),
+    },
+  });
+};
+
+const fetchCalls = async () => {
+  syncFiltersToUrl();
+  try {
+    await callHistoryStore.fetchCalls({
+      page: currentPage.value,
+      ...(CALL_ACTIVITY_PARAMS[activity.value] || {}),
+      ...(assigneeId.value ? { agent_id: assigneeId.value } : {}),
+      ...(inboxId.value ? { inbox_id: inboxId.value } : {}),
+    });
+  } catch (error) {
+    useAlert(error.message);
+  }
+};
+
+watch([activity, assigneeId, inboxId], () => {
+  currentPage.value = 1;
+  fetchCalls();
+});
+
+const onPageChange = page => {
+  currentPage.value = page;
+  fetchCalls();
+};
+
+onMounted(async () => {
+  try {
+    await Promise.all([
+      store.dispatch('inboxes/get'),
+      until(() => accountUiFlags.value.isFetchingItem).toBe(false),
+    ]);
+    if (!isVoiceEnabled.value) return;
+    // Only admins see the assignee filter, so only they need the agent list.
+    if (isAdmin.value) store.dispatch('agents/get');
+    await fetchCalls();
+  } finally {
+    isInitializing.value = false;
+  }
+});
+</script>
+
+<template>
+  <div
+    v-if="isInitializing"
+    class="flex items-center justify-center w-full h-full bg-n-surface-1"
+  >
+    <Spinner :size="24" />
+  </div>
+  <CallsEmptyState v-else-if="!isVoiceEnabled && !isCallsPreview" />
+  <section
+    v-else
+    class="jrc-visible-scrollbar flex h-full w-full flex-col overflow-y-auto" style="background:linear-gradient(135deg,#eff6ff 0%,#ffffff 48%,#f8fafc 100%)"
+  >
+    <header class="mx-6 mt-6 shrink-0 rounded-3xl border p-6 shadow-sm" style="background:linear-gradient(135deg,#dbeafe,#eff6ff);border-color:#60a5fa">
+      <div class="w-full">
+        <div class="flex items-center gap-4"><span class="flex size-12 items-center justify-center rounded-2xl text-white shadow-md" style="background:#2563eb;color:#ffffff"><span class="i-lucide-history size-6"></span></span><div><h1 class="text-3xl font-bold text-n-slate-12">Histórico de ligações</h1><p class="mt-1 text-sm text-n-slate-10">Consulte as ligações realizadas e recebidas pelos agentes.</p></div></div>
+      </div>
+      <CallsFilterBar
+        v-model:activity="activity"
+        v-model:assignee-id="assigneeId"
+        v-model:inbox-id="inboxId"
+        class="mt-5 pb-4 border-b border-n-weak mx-6"
+        :total-count="isFetching ? null : meta.count"
+        :agents="agents"
+        :inboxes="voiceInboxes"
+        :show-assignee="isAdmin"
+      />
+    </header>
+    <section class="mx-6 mt-5 grid shrink-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"><article class="rounded-2xl border p-5 shadow-sm" style="background:#dbeafe;border-color:#60a5fa;border-top:4px solid #2563eb"><span class="text-sm font-semibold text-blue-700">Total de ligações</span><strong class="mt-2 block text-3xl text-blue-700">{{ meta.summary?.total || 0 }}</strong></article><article class="rounded-2xl border p-5 shadow-sm" style="background:#dcfce7;border-color:#4ade80;border-top:4px solid #16a34a"><span class="text-sm font-semibold text-green-700">Atendidas</span><strong class="mt-2 block text-3xl text-green-700">{{ meta.summary?.answered || 0 }}</strong></article><article class="rounded-2xl border p-5 shadow-sm" style="background:#fee2e2;border-color:#f87171;border-top:4px solid #dc2626"><span class="text-sm font-semibold text-red-700">Perdidas</span><strong class="mt-2 block text-3xl text-red-700">{{ meta.summary?.missed || 0 }}</strong></article><article class="rounded-2xl border p-5 shadow-sm" style="background:#fef3c7;border-color:#f59e0b;border-top:4px solid #d97706"><span class="text-sm font-semibold text-amber-700">Sem resposta</span><strong class="mt-2 block text-3xl text-amber-700">{{ meta.summary?.noReply || 0 }}</strong></article></section>
+    <main class="flex-1 px-6 overflow-y-auto">
+      <div class="w-full">
+        <div v-if="isFetching" class="flex items-center justify-center py-16">
+          <Spinner :size="24" />
+        </div>
+        <div
+          v-else-if="!calls.length"
+          class="flex items-center justify-center py-16"
+        >
+          <span class="text-base text-n-slate-11">
+            {{ t('CALLS_PAGE.EMPTY_STATE') }}
+          </span>
+        </div>
+        <template v-else>
+          <CallListItem v-for="call in calls" :key="call.id" :call="call" />
+        </template>
+      </div>
+    </main>
+    <footer v-if="calls.length" class="sticky bottom-0 shrink-0">
+      <PaginationFooter
+        :current-page="currentPage"
+        :total-items="meta.count"
+        :items-per-page="RESULTS_PER_PAGE"
+        @update:current-page="onPageChange"
+      />
+    </footer>
+  </section>
+</template>
