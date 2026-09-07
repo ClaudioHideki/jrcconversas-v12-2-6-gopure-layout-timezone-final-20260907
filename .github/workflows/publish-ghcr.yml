@@ -1,4 +1,4 @@
-ï»¿name: Publicar imagem JRC Conversas no GHCR
+name: Publicar imagem JRC Conversas no GHCR
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
       image_tag:
         description: Tag da imagem Docker
         required: true
-        default: 4.16.2-jrc-v12.2.1-20260905
+        default: 4.16.2-jrc-v12.2.6-gopure-20260907
   push:
     tags:
       - 'v*'
@@ -17,14 +17,14 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: claudiohideki/jrcconversas-v12-2-1-campanhas-whatsapp-email-fix-20260905
+  IMAGE_NAME: claudiohideki/jrcconversas-v12-2-6-gopure-layout-timezone-final-20260907
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Baixar o cÃ³digo
+      - name: Baixar o código
         uses: actions/checkout@v4
 
       - name: Definir a tag da imagem
@@ -40,7 +40,7 @@ jobs:
           TAG="$(printf '%s' "$TAG" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9._-')"
 
           if [ -z "$TAG" ]; then
-            echo "Tag invÃ¡lida." >&2
+            echo "Tag inválida." >&2
             exit 1
           fi
 
@@ -66,7 +66,7 @@ jobs:
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image.outputs.tag }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v12.2.1
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v12.2.6
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false

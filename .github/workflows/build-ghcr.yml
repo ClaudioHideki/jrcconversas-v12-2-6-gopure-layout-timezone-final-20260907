@@ -1,4 +1,4 @@
-name: Build JRC Conversas V12.2.3 - NICO CRM Campanhas
+name: Build JRC Conversas V12.2.6 - GoPure Layout Timezone
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: claudiohideki/jrcconversas-v12-2-3-nico-crm-campanhas-20260906
+  IMAGE_NAME: claudiohideki/jrcconversas-v12-2-6-gopure-layout-timezone-final-20260907
 
 jobs:
   build-and-push:
