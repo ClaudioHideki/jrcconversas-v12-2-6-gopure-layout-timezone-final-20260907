@@ -1,4 +1,4 @@
-name: Build JRC Conversas V12.2.6 - GoPure Layout Timezone
+name: Build GoPure - CRM e disponibilidade
 
 on:
   push:
@@ -38,7 +38,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=4.16.2-jrc-v12-2-3-nico-crm-campanhas-20260906
+            type=raw,value=4.16.2-jrc-v12.2.6-gopure-20260914
             type=sha,prefix=sha-
 
       - name: Construir e publicar imagem

@@ -7,7 +7,10 @@ import { useI18n } from 'vue-i18n';
 import { useAlert } from 'dashboard/composables';
 import Button from 'dashboard/components-next/button/Button.vue';
 import Auth from '../../../../api/auth';
-import wootConstants from 'dashboard/constants/globals';
+import {
+  AVAILABILITY_STATUSES,
+  LEGACY_BUSY_STATUS,
+} from 'dashboard/helper/availabilityStatus';
 
 const props = defineProps({
   id: {
@@ -46,8 +49,6 @@ const props = defineProps({
 
 const emit = defineEmits(['close']);
 
-const { AVAILABILITY_STATUS_KEYS } = wootConstants;
-
 const store = useStore();
 const { t } = useI18n();
 
@@ -55,7 +56,6 @@ const agentName = ref(props.name);
 const agentAvailability = ref(props.availability);
 const selectedRoleId = ref(props.customRoleId || props.type);
 const agentCredentials = ref({ email: props.email });
-const crmEnabled = ref(props.crmEnabled);
 
 const rules = {
   agentName: { required, minLength: minLength(1) },
@@ -106,22 +106,10 @@ const selectedRole = computed(() =>
   )
 );
 
-const statusList = computed(() => {
-  return [
-    t('PROFILE_SETTINGS.FORM.AVAILABILITY.STATUS.ONLINE'),
-    t('PROFILE_SETTINGS.FORM.AVAILABILITY.STATUS.BUSY'),
-    t('PROFILE_SETTINGS.FORM.AVAILABILITY.STATUS.OFFLINE'),
-  ];
-});
-
-const availabilityStatuses = computed(() =>
-  statusList.value.map((statusLabel, index) => ({
-    label: statusLabel,
-    value: AVAILABILITY_STATUS_KEYS[index],
-    disabled: props.availability === AVAILABILITY_STATUS_KEYS[index],
-  }))
-);
-
+const availabilityStatuses = computed(() => [
+  ...AVAILABILITY_STATUSES,
+  ...(props.availability === 'busy' ? [LEGACY_BUSY_STATUS] : []),
+]);
 const editAgent = async () => {
   v$.value.$touch();
   if (v$.value.$invalid) return;
@@ -131,7 +119,6 @@ const editAgent = async () => {
       id: props.id,
       name: agentName.value,
       availability: agentAvailability.value,
-      crm_enabled: crmEnabled.value,
     };
 
     if (selectedRole.value.name.startsWith('custom_')) {
@@ -207,16 +194,6 @@ const resetPassword = async () => {
           <span v-if="v$.agentAvailability.$error" class="message">
             {{ $t('AGENT_MGMT.EDIT.FORM.AGENT_AVAILABILITY.ERROR') }}
           </span>
-        </label>
-      </div>
-
-      <div class="w-full rounded-lg border border-n-weak bg-n-alpha-1 p-4 mb-4">
-        <label class="flex items-center justify-between gap-4 m-0">
-          <div>
-            <span class="block text-sm font-semibold text-n-slate-12">Acesso ao JRC CRM</span>
-            <span class="block mt-1 text-xs text-n-slate-10">Permite que este agente visualize e utilize o módulo CRM quando ele estiver liberado para a conta.</span>
-          </div>
-          <input v-model="crmEnabled" type="checkbox" class="h-5 w-5" />
         </label>
       </div>
 

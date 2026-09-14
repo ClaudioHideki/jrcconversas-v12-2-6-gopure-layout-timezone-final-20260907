@@ -1,7 +1,10 @@
 <script setup>
 import { computed, h } from 'vue';
 import { useMapGetter, useStore } from 'dashboard/composables/store';
-import wootConstants from 'dashboard/constants/globals';
+import {
+  AVAILABILITY_STATUSES,
+  getAvailabilityStatus,
+} from 'dashboard/helper/availabilityStatus';
 import { useAlert } from 'dashboard/composables';
 import { useI18n } from 'vue-i18n';
 import { useImpersonation } from 'dashboard/composables/useImpersonation';
@@ -24,27 +27,18 @@ const currentUserAutoOffline = useMapGetter('getCurrentUserAutoOffline');
 
 const { isImpersonating } = useImpersonation();
 
-const { AVAILABILITY_STATUS_KEYS } = wootConstants;
-const statusList = computed(() => {
-  return ['Disponível', 'Ocupado', 'Indisponível'];
-});
+const availabilityStatuses = computed(() =>
+  AVAILABILITY_STATUSES.map(status => ({
+    ...status,
+    icon: h('span', {
+      class: [status.color, 'size-3 shrink-0 rounded-full'],
+    }),
+  }))
+);
 
-const statusColors = ['bg-n-teal-9', 'bg-n-amber-9', 'bg-n-slate-9'];
-
-const availabilityStatuses = computed(() => {
-  return statusList.value.map((statusLabel, index) => ({
-    label: statusLabel,
-    value: AVAILABILITY_STATUS_KEYS[index],
-    color: statusColors[index],
-    icon: h('span', { class: [statusColors[index], 'size-[12px] rounded'] }),
-    active: currentUserAvailability.value === AVAILABILITY_STATUS_KEYS[index],
-  }));
-});
-
-const activeStatus = computed(() => {
-  return availabilityStatuses.value.find(status => status.active);
-});
-
+const activeStatus = computed(() =>
+  getAvailabilityStatus(currentUserAvailability.value)
+);
 const autoOfflineToggle = computed({
   get: () => currentUserAutoOffline.value,
   set: autoOffline => {
@@ -96,7 +90,10 @@ function changeAvailabilityStatus(availability) {
             >
               <div class="flex gap-1 items-center min-w-0 text-sm">
                 <div class="p-1 flex-shrink-0">
-                  <div class="size-2 rounded-sm" :class="activeStatus.color" />
+                  <div
+                    class="size-2 rounded-full"
+                    :class="activeStatus.color"
+                  />
                 </div>
                 <span class="truncate max-w-[7rem]">
                   {{ activeStatus.label }}
@@ -106,7 +103,7 @@ function changeAvailabilityStatus(availability) {
           </template>
           <DropdownBody
             strong
-            class="min-w-36 z-20 [&>ul]:!border-[#d8e4f0] [&>ul]:!bg-white [&>ul]:!shadow-xl [&_.n-dropdown-item>*]:!text-[#173a5e]"
+            class="w-52 z-20 [&>ul]:max-h-[min(28rem,65vh)] [&>ul]:overflow-y-auto [&>ul]:!border-[#d8e4f0] [&>ul]:!bg-white [&>ul]:!shadow-xl [&_.n-dropdown-item>*]:!text-[#173a5e]"
           >
             <DropdownItem
               v-for="status in availabilityStatuses"

@@ -110,6 +110,7 @@ module JrcAi
         conversations_open: open_conversations.count,
         conversations_waiting: waiting_conversations.count,
         emails_open: email_inbox_ids.empty? ? 0 : open_conversations.where(inbox_id: email_inbox_ids).count,
+        emails_unread: email_unread_count,
         active_channels: account.inboxes.count,
         email_channels: email_inbox_ids.count,
         whatsapp_channels: whatsapp_inbox_ids.count,
@@ -130,6 +131,45 @@ module JrcAi
         online_agents: account.account_users.online.count,
         total_agents: account.account_users.count
       }
+    end
+
+
+    def email_unread_count
+      return 0 if email_inbox_ids.empty?
+
+      direct_email_unread_count
+    rescue StandardError
+      0
+    end
+
+    def direct_email_unread_count
+      inbox_ids = if administrator?
+                    email_inbox_ids
+                  else
+                    user.inboxes.where(account_id: account.id, id: email_inbox_ids).pluck(:id)
+                  end
+      return 0 if inbox_ids.empty?
+
+      conversations = account.conversations.open.where(inbox_id: inbox_ids)
+      if account_user&.agent? && account_user.custom_role_id.present?
+        permissions = account_user.permissions
+        conversations = if permissions.include?(::Conversations::UnreadCounts::Counter::MANAGE_ALL_PERMISSION)
+                          conversations
+                        elsif permissions.include?(::Conversations::UnreadCounts::Counter::UNASSIGNED_PERMISSION)
+                          conversations.where(assignee_id: [nil, user.id])
+                        elsif permissions.include?(::Conversations::UnreadCounts::Counter::PARTICIPATING_PERMISSION)
+                          conversations.where(assignee_id: user.id)
+                        else
+                          return 0
+                        end
+      end
+
+      conversations.joins(:messages)
+                   .merge(Message.incoming.reorder(nil))
+                   .where(messages: { account_id: account.id })
+                   .where(Conversation.unread_messages_condition(Message.arel_table, Conversation.arel_table))
+                   .distinct
+                   .count
     end
 
     def estimated_sla_percent
@@ -203,11 +243,18 @@ module JrcAi
     end
 
     def team_summary
-      return { online: account_user&.online? ? 1 : 0, busy: account_user&.busy? ? 1 : 0, offline: account_user&.offline? ? 1 : 0 } unless administrator?
+      counts = if administrator?
+                 account.account_users.group(:availability).count.transform_keys(&:to_s)
+               else
+                 { account_user.availability => 1 }
+               end
 
-      account.account_users.group(:availability).count.transform_keys(&:to_s)
+      {
+        online: counts.fetch('online', 0),
+        offline: counts.values_at('offline', 'end_shift').sum(&:to_i),
+        busy: counts.except('online', 'offline', 'end_shift').values.sum
+      }
     end
-
     def ai_agents
       return [] unless ai_configured?
 

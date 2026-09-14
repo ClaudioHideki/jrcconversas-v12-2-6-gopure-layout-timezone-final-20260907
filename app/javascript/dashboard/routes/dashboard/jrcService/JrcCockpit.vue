@@ -118,7 +118,7 @@ const summaryCards = computed(() => {
     {
       key: 'email',
       label: 'E-mails não lidos',
-      value: formatNumber(emailUnreadCount.value),
+      value: formatNumber(summary.emails_unread ?? emailUnreadCount.value),
       detail: `${formatNumber(summary.emails_open)} em atendimento`,
       icon: 'i-lucide-mail',
       tone: 'amber',
@@ -210,7 +210,7 @@ const quickLinks = computed(() => {
     {
       label: 'E-mails',
       description: 'Caixas de e-mail, pendências e histórico do cliente.',
-      value: emailUnreadCount.value,
+      value: Number(summary.emails_unread ?? emailUnreadCount.value),
       icon: 'i-lucide-mail-open',
       tone: 'amber',
       route: 'jrc_email_center',
@@ -599,7 +599,7 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
             </div>
             <button
               v-if="aiConfigured"
-              class="rounded-xl bg-[#009b63] px-4 py-2 text-xs font-semibold text-white"
+              class="rounded-xl bg-[#087ff5] px-4 py-2 text-xs font-semibold text-white"
               @click="
                 openWithPrompt(
                   'O que precisa da minha atenção agora? Organize por urgência e explique a próxima ação.'
@@ -647,7 +647,7 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
                 <div class="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    class="rounded-lg bg-[#009b63] px-3 py-2 text-xs font-semibold text-white"
+                    class="rounded-lg bg-[#087ff5] px-3 py-2 text-xs font-semibold text-white"
                     @click="openAttention(item)"
                   >
                     Abrir e agir
@@ -1002,7 +1002,7 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
           </label>
         </div>
         <button
-          class="mt-5 w-full rounded-xl bg-[#009b63] py-3 text-sm font-semibold text-white"
+          class="mt-5 w-full rounded-xl bg-[#087ff5] py-3 text-sm font-semibold text-white"
           @click="savePreferences"
         >
           Salvar preferências

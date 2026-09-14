@@ -48,6 +48,7 @@ const emit = defineEmits([
 const { accountScopedRoute, isOnChatwootCloud } = useAccount();
 const { isEnterprise } = useConfig();
 const store = useStore();
+
 const isAccountAdministrator = computed(
   () =>
     store.getters.getCurrentRole === 'administrator' &&
@@ -271,6 +272,7 @@ const inboxes = useMapGetter('inboxes/getInboxes');
 const labels = useMapGetter('labels/getLabelsOnSidebar');
 const JRC_BRAND_TEXT = Object.freeze({
   group: 'GoPure',
+  logo: '/brand-assets/gopure-brand-header.png',
   messageLineOne: 'Suplementos premium,',
   messageLineTwo: 'atendimento com excelência.',
   superAdminReturn: 'Voltar ao Super Admin',
@@ -1373,11 +1375,15 @@ const menuSections = computed(() => {
           />
         </template>
         <template v-else>
-          <div class="flex w-full items-center rounded-2xl px-1 py-1">
+          <div class="flex w-full min-w-0 flex-col gap-1 rounded-2xl px-2 py-2">
             <img
-              :src="'/brand-assets/gopure-brand-header.png'"
+              :src="JRC_BRAND_TEXT.logo"
               alt="GoPure JRC Conversas"
               class="h-14 w-full max-w-[222px] rounded-xl object-cover shadow-sm ring-1 ring-white/10"
+            />
+            <SidebarAccountSwitcher
+              class="-mx-2 min-w-0"
+              @show-create-account-modal="emit('showCreateAccountModal')"
             />
           </div>
         </template>

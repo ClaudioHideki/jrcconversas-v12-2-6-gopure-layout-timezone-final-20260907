@@ -33,7 +33,11 @@ class AccountUser < ApplicationRecord
   belongs_to :inviter, class_name: 'User', optional: true
 
   enum role: { agent: 0, administrator: 1 }
-  enum availability: { online: 0, offline: 1, busy: 2 }
+  enum availability: {
+    online: 0, offline: 1, busy: 2,
+    meeting: 3, feedback: 4, end_shift: 5,
+    training: 6, bathroom_break: 7, lunch_break: 8, manual_call: 9
+  }
 
   accepts_nested_attributes_for :account
 
@@ -58,7 +62,7 @@ class AccountUser < ApplicationRecord
 
   def permissions
     base_permissions = administrator? ? ['administrator'] : ['agent']
-    base_permissions << 'jrc_crm' if administrator? || crm_enabled?
+    base_permissions << 'jrc_crm' if account.feature_enabled?('jrc_crm')
     base_permissions
   end
 

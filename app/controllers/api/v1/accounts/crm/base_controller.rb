@@ -4,7 +4,6 @@ module Api
       module Crm
         class BaseController < Api::V1::Accounts::BaseController
           before_action :ensure_crm_enabled
-          before_action :ensure_crm_user_access
           around_action :use_account_timezone
 
           rescue_from ActiveRecord::StaleObjectError, with: :handle_stale_object_conflict
@@ -15,12 +14,6 @@ module Api
             return if Current.account.feature_enabled?('jrc_crm')
 
             render json: { error: 'CRM module is not enabled for this account' }, status: :forbidden
-          end
-
-          def ensure_crm_user_access
-            return if Current.account_user.administrator? || Current.account_user.crm_enabled?
-
-            render json: { error: 'CRM access is not enabled for this agent' }, status: :forbidden
           end
 
           def crm_admin?

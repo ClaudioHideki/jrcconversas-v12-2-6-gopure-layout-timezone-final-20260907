@@ -10,7 +10,9 @@ const showBackButton = computed(
 </script>
 
 <template>
-  <div class="w-full overflow-auto bg-n-background px-4 sm:px-6">
+  <div
+    class="jrc-visible-scrollbar h-full min-h-0 w-full overflow-y-auto bg-n-background px-4 sm:px-6"
+  >
     <div class="mx-auto max-w-7xl pb-12">
       <div v-if="showBackButton" class="pt-4">
         <RouterLink

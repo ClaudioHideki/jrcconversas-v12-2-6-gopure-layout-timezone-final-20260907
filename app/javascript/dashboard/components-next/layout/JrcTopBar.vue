@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { useAccount } from 'dashboard/composables/useAccount';
 import { useKbd } from 'dashboard/composables/utils/useKbd';
 import { useMapGetter } from 'dashboard/composables/store';
-import wootConstants from 'dashboard/constants/globals';
+import { getAvailabilityStatus } from 'dashboard/helper/availabilityStatus';
 
 import Avatar from 'next/avatar/Avatar.vue';
 import SidebarNotificationBell from 'dashboard/components-next/sidebar/SidebarNotificationBell.vue';
@@ -19,22 +19,9 @@ const SEARCH_PLACEHOLDER = 'Pesquisar conversas, contatos ou mensagens...';
 const currentUser = useMapGetter('getCurrentUser');
 const currentUserAvailability = useMapGetter('getCurrentUserAvailability');
 
-const availability = computed(() => {
-  const labels = {
-    [wootConstants.AVAILABILITY_STATUS_KEYS[0]]: 'Disponível',
-    [wootConstants.AVAILABILITY_STATUS_KEYS[1]]: 'Ocupado',
-    [wootConstants.AVAILABILITY_STATUS_KEYS[2]]: 'Indisponível',
-  };
-
-  return {
-    label: labels[currentUserAvailability.value],
-    color: {
-      online: 'bg-n-teal-9',
-      busy: 'bg-n-amber-9',
-      offline: 'bg-n-slate-9',
-    }[currentUserAvailability.value],
-  };
-});
+const availability = computed(() =>
+  getAvailabilityStatus(currentUserAvailability.value)
+);
 </script>
 
 <template>

@@ -1,11 +1,12 @@
 module JrcCrm
   class ProductSerializer
-    def initialize(product)
+    def initialize(product, include_commercial_sensitive: true)
       @product = product
+      @include_commercial_sensitive = include_commercial_sensitive
     end
 
     def as_json(options = {})
-      {
+      data = {
         id: @product.id,
         name: @product.name,
         sku: @product.sku,
@@ -19,11 +20,8 @@ module JrcCrm
         recurring: @product.recurring?,
         unit_price_cents: @product.unit_price_cents,
         monthly_equivalent_cents: @product.monthly_equivalent_cents,
-        cost_cents: @product.cost_cents,
         setup_fee_cents: @product.setup_fee_cents,
         minimum_price_cents: @product.minimum_price_cents,
-        estimated_margin_cents: @product.estimated_margin_cents,
-        estimated_margin_percent: @product.estimated_margin_percent,
         tax_rate: @product.tax_rate.to_f,
         commission_rate: @product.commission_rate.to_f,
         included_quantity: @product.included_quantity.to_f,
@@ -57,6 +55,14 @@ module JrcCrm
         created_at: @product.created_at,
         updated_at: @product.updated_at
       }
+
+      return data unless @include_commercial_sensitive
+
+      data.merge(
+        cost_cents: @product.cost_cents,
+        estimated_margin_cents: @product.estimated_margin_cents,
+        estimated_margin_percent: @product.estimated_margin_percent
+      )
     end
   end
 end

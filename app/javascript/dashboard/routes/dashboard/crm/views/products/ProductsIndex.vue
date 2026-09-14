@@ -292,43 +292,50 @@ const averageMargin = computed(() => {
   );
 });
 
-const productStats = computed(() => [
-  {
-    label: 'Produtos ativos',
-    value: activeProducts.value.length,
-    detail: 'Disponíveis para venda',
-    icon: 'i-lucide-package-check',
-    tone: 'teal',
-  },
-  {
-    label: 'Serviços recorrentes',
-    value: recurringProducts.value.length,
-    detail: 'Mensal, anual ou por uso',
-    icon: 'i-lucide-refresh-cw',
-    tone: 'iris',
-  },
-  {
-    label: 'Receita mensal equivalente',
-    value: formatBRL(monthlyRevenue.value),
-    detail: 'Base ativa do catálogo',
-    icon: 'i-lucide-circle-dollar-sign',
-    tone: 'blue',
-  },
-  {
-    label: 'Margem média',
-    value: `${averageMargin.value}%`,
-    detail: 'Preço menos custo interno',
-    icon: 'i-lucide-chart-no-axes-combined',
-    tone: 'teal',
-  },
-  {
-    label: 'Itens inativos',
-    value: products.value.filter(product => !product.active).length,
-    detail: 'Fora do catálogo atual',
-    icon: 'i-lucide-package-x',
-    tone: 'ruby',
-  },
-]);
+const productStats = computed(() => {
+  const stats = [
+    {
+      label: 'Produtos ativos',
+      value: activeProducts.value.length,
+      detail: 'Disponíveis para venda',
+      icon: 'i-lucide-package-check',
+      tone: 'teal',
+    },
+    {
+      label: 'Serviços recorrentes',
+      value: recurringProducts.value.length,
+      detail: 'Mensal, anual ou por uso',
+      icon: 'i-lucide-refresh-cw',
+      tone: 'iris',
+    },
+    {
+      label: 'Receita mensal equivalente',
+      value: formatBRL(monthlyRevenue.value),
+      detail: 'Base ativa do catálogo',
+      icon: 'i-lucide-circle-dollar-sign',
+      tone: 'blue',
+    },
+    {
+      label: 'Itens inativos',
+      value: products.value.filter(product => !product.active).length,
+      detail: 'Fora do catálogo atual',
+      icon: 'i-lucide-package-x',
+      tone: 'ruby',
+    },
+  ];
+
+  if (isAdmin.value) {
+    stats.splice(3, 0, {
+      label: 'Margem média',
+      value: `${averageMargin.value}%`,
+      detail: 'Preço menos custo interno',
+      icon: 'i-lucide-chart-no-axes-combined',
+      tone: 'teal',
+    });
+  }
+
+  return stats;
+});
 
 const marginPreview = computed(() => {
   const price = toCents(form.unit_price);
@@ -1029,21 +1036,21 @@ onMounted(refresh);
                 <th class="px-5 py-3">Tipo e categoria</th>
                 <th class="px-5 py-3">Cobrança</th>
                 <th class="px-5 py-3">Preço / implantação</th>
-                <th class="px-5 py-3">Margem</th>
+                <th v-if="isAdmin" class="px-5 py-3">Margem</th>
                 <th class="px-5 py-3">Vigência</th>
                 <th class="px-5 py-3">Status</th>
-                <th class="px-5 py-3 text-right">Ações</th>
+                <th v-if="isAdmin" class="px-5 py-3 text-right">Ações</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-n-weak">
               <tr v-if="isLoading">
-                <td colspan="8" class="px-6 py-14 text-center text-n-slate-10">
+                <td :colspan="isAdmin ? 8 : 6" class="px-6 py-14 text-center text-n-slate-10">
                   <i class="i-lucide-loader-circle mr-2 size-5 animate-spin" />
                   Carregando catálogo...
                 </td>
               </tr>
               <tr v-else-if="!filteredProducts.length">
-                <td colspan="8" class="px-6 py-14 text-center text-n-slate-10">
+                <td :colspan="isAdmin ? 8 : 6" class="px-6 py-14 text-center text-n-slate-10">
                   <div
                     class="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-n-alpha-3"
                   >
@@ -1101,7 +1108,7 @@ onMounted(refresh);
                     Implantação: {{ formatBRL(product.setup_fee_cents) }}
                   </p>
                 </td>
-                <td class="px-5 py-4">
+                <td v-if="isAdmin" class="px-5 py-4">
                   <p
                     class="font-bold"
                     :class="
@@ -1134,10 +1141,9 @@ onMounted(refresh);
                     {{ product.active ? 'Ativo' : 'Inativo' }}
                   </span>
                 </td>
-                <td class="px-5 py-4">
+                <td v-if="isAdmin" class="px-5 py-4">
                   <div class="flex justify-end gap-2">
                     <button
-                      v-if="isAdmin"
                       type="button"
                       class="flex size-9 items-center justify-center rounded-xl bg-n-blue-3 text-n-blue-11 transition hover:bg-n-blue-4"
                       aria-label="Editar produto"

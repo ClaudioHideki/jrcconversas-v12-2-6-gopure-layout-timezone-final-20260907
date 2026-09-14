@@ -69,7 +69,7 @@ module Api
           end
 
           def serialize(product)
-            JrcCrm::ProductSerializer.new(product).as_json
+            JrcCrm::ProductSerializer.new(product, include_commercial_sensitive: crm_admin?).as_json
           end
 
           def product_params

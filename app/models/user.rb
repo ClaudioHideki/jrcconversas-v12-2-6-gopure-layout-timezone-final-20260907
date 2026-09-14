@@ -71,7 +71,11 @@ class User < ApplicationRecord
 
   # TODO: remove in a future version once online status is moved to account users
   # remove the column availability from users
-  enum availability: { online: 0, offline: 1, busy: 2 }
+  enum availability: {
+    online: 0, offline: 1, busy: 2,
+    meeting: 3, feedback: 4, end_shift: 5,
+    training: 6, bathroom_break: 7, lunch_break: 8, manual_call: 9
+  }
 
   # The validation below has been commented out as it does not
   # work because :validatable in devise overrides this.
