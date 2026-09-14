@@ -41,10 +41,6 @@ const props = defineProps({
     type: Number,
     default: null,
   },
-  crmEnabled: {
-    type: Boolean,
-    default: false,
-  },
 });
 
 const emit = defineEmits(['close']);
