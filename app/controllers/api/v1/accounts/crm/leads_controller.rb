@@ -38,14 +38,29 @@ module Api
           end
 
           def create
-            lead = crm_scope.jrc_crm_leads.new(lead_params)
-            lead.owner ||= Current.user
-            
-            if lead.save
-              render json: JrcCrm::LeadSerializer.new(lead).as_json, status: :created
-            else
-              render json: { errors: lead.errors.full_messages }, status: :unprocessable_entity
+            authorize crm_scope.jrc_crm_leads.new, :create?
+            attributes = lead_params.to_h
+            attributes['status'] = normalized_write_status(attributes['status']) if attributes['status'].present?
+            result = JrcCrm::LeadCreationService.new(account: crm_scope, actor: Current.user, attributes: attributes).call do |contact|
+              authorize contact, contact.persisted? ? :show? : :create?
             end
+            lead = result[:lead]
+            unless visible_to_current_user(crm_scope.jrc_crm_leads).exists?(lead.id)
+              return render json: { errors: ['Este contato já possui Lead. Solicite acesso ao administrador.'] }, status: :conflict
+            end
+
+            render json: JrcCrm::LeadSerializer.new(lead).as_json, status: result[:created] ? :created : :ok
+          rescue ActiveRecord::RecordInvalid => e
+            Rails.logger.info("CRM lead creation rejected account=#{crm_scope.id} model=#{e.record.class.name} errors=#{e.record.errors.attribute_names}")
+            render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
+          end
+
+          def for_contact
+            contact = crm_scope.contacts.find(params.require(:contact_id))
+            authorize contact, :show?
+            lead = crm_scope.jrc_crm_leads.where(contact_id: contact.id).order(updated_at: :desc, id: :desc).first
+            visible = lead && visible_to_current_user(crm_scope.jrc_crm_leads).exists?(lead.id)
+            render json: { linked: lead.present?, lead_id: visible ? lead.id : nil }
           end
 
           def update
@@ -98,6 +113,7 @@ module Api
           def lead_params
             allowed = [:name, :company_name, :email, :phone, :source, :status, :contact_id, :conversation_id, :team_id,
                        :temperature, :notes]
+            allowed << :identifier if action_name == 'create'
             allowed << :owner_id if crm_admin?
             params.require(:lead).permit(*allowed)
           end

@@ -276,6 +276,7 @@ Rails.application.routes.draw do
               resource :dashboard, only: :show, controller: :dashboards
               resources :reports, only: :index
               resources :leads, only: [:index, :show, :create, :update] do
+                get :for_contact, on: :collection
                 post :from_conversation, on: :collection
                 member do
                 post :convert

@@ -65,6 +65,33 @@
         "CANCELED": "Cancelada",
         "UNKNOWN": "Não informado"
       }
+    },
+    "LEAD_FORM": {
+      "TITLE": "Novo Lead",
+      "CLOSE": "Fechar",
+      "NAME": "Nome *",
+      "COMPANY": "Empresa",
+      "SOURCE": "Canal ou origem",
+      "EMAIL": "E-mail",
+      "PHONE": "Telefone / WhatsApp",
+      "PHONE_HINT": "+55 11 99999-9999",
+      "STATUS": "Status",
+      "NOTES": "Observações comerciais",
+      "SAVE": "Salvar Lead",
+      "SAVING": "Salvando…",
+      "LINKED_CONTACT": "Vinculado a {name} (Contato #{id}).",
+      "IDENTITY_HINT": "Informe e-mail ou telefone com código do país. Se o contato já existir, ele será reutilizado.",
+      "SUCCESS": "Lead criado e vinculado ao contato com sucesso.",
+      "EXISTING": "Este contato já possui Lead. O vínculo existente foi mantido.",
+      "ERROR": "Não foi possível salvar o Lead. Seus dados foram mantidos; tente novamente."
+    },
+    "CONTACT_LEAD": {
+      "CREATE": "+ Criar Lead",
+      "VIEW": "Ver Lead",
+      "RESTRICTED": "Lead vinculado — solicite acesso ao administrador",
+      "LOADING": "Consultando Lead…",
+      "RETRY": "Não foi possível consultar o Lead. Tentar novamente",
+      "REFRESH_ERROR": "Lead salvo. Não foi possível atualizar o contato; atualize a lista para consultar o vínculo."
     }
   }
 }

@@ -156,6 +156,7 @@ class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
 
     filtrate(contacts)
       .includes(includes_hash)
+      .order(id: :asc)
       .page(@current_page)
       .per(RESULTS_PER_PAGE)
   end
@@ -168,6 +169,7 @@ class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
     offset = (@current_page.to_i - 1) * RESULTS_PER_PAGE
     results = filtrate(contacts)
               .includes(includes_hash)
+              .order(id: :asc)
               .offset(offset)
               .limit(RESULTS_PER_PAGE + 1)
               .to_a
