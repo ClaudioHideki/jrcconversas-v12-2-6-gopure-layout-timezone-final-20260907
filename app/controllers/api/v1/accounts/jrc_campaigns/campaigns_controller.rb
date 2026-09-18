@@ -1,7 +1,21 @@
 require 'csv'
 
 class Api::V1::Accounts::JrcCampaigns::CampaignsController < Api::V1::Accounts::JrcCampaigns::BaseController
-  before_action :set_campaign, only: [:show, :update, :destroy, :launch, :pause, :resume, :cancel, :duplicate, :report, :export, :preview]
+  before_action :set_campaign, only: [:show, :update, :destroy, :launch, :pause, :resume, :cancel, :duplicate, :report, :export, :preview, :request_review, :approve]
+
+  def request_review
+    @campaign.request_review!
+    render json: serialize(@campaign).merge(review_snapshot: @campaign.review_snapshot)
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
+  end
+
+  def approve
+    @campaign.approve!(Current.user, params[:digest])
+    render json: serialize(@campaign)
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
+  end
 
   def index
     campaigns = scope.includes(:steps, :executions, campaign_inboxes: :inbox).order(created_at: :desc)

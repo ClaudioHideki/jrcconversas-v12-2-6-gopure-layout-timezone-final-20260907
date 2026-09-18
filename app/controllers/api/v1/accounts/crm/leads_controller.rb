@@ -3,7 +3,7 @@ module Api
     module Accounts
       module Crm
         class LeadsController < BaseController
-          before_action :set_lead, only: [:show, :update, :convert, :lose]
+          before_action :set_lead, only: [:show, :update, :destroy, :convert, :lose]
 
           def index
             leads = visible_to_current_user(crm_scope.jrc_crm_leads)
@@ -73,6 +73,17 @@ module Api
             else
               render json: { errors: @lead.errors.full_messages }, status: :unprocessable_entity
             end
+          end
+
+          def destroy
+            authorize @lead, :destroy?
+
+            if @lead.deal.present?
+              return render json: { error: 'Este lead possui um negócio vinculado. O negócio deve ser tratado antes da exclusão do lead.' }, status: :conflict
+            end
+
+            @lead.destroy!
+            head :no_content
           end
 
           def convert

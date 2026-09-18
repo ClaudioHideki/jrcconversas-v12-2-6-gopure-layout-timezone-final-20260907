@@ -6,6 +6,7 @@ export const CONVERSATION_ATTRIBUTES = {
   PRIORITY: 'priority',
   ASSIGNEE_ID: 'assignee_id',
   INBOX_ID: 'inbox_id',
+  CHANNEL_TYPE: 'channel_type',
   TEAM_ID: 'team_id',
   CONTACT_ID: 'contact_id',
   DISPLAY_ID: 'display_id',

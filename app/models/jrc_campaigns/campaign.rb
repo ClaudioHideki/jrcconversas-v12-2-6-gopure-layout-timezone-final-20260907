@@ -1,9 +1,64 @@
+# == Schema Information
+#
+# Table name: jrc_campaigns
+#
+#  id                   :bigint           not null, primary key
+#  audience_config      :jsonb            not null
+#  audience_type        :string           default("all_contacts"), not null
+#  clicked_count        :integer          default(0), not null
+#  completed_at         :datetime
+#  conversation_mode    :string           default("reply_only"), not null
+#  delay_max_seconds    :integer          default(20), not null
+#  delay_min_seconds    :integer          default(5), not null
+#  delivered_count      :integer          default(0), not null
+#  delivery_channel     :string           default("whatsapp"), not null
+#  estimated_recipients :integer          default(0), not null
+#  failed_count         :integer          default(0), not null
+#  follow_up_config     :jsonb            not null
+#  last_error           :text
+#  last_execution_at    :datetime
+#  message_body         :text             default(""), not null
+#  metadata             :jsonb            not null
+#  name                 :string           not null
+#  paused_at            :datetime
+#  read_count           :integer          default(0), not null
+#  recurrence_config    :jsonb            not null
+#  replied_count        :integer          default(0), not null
+#  rotation_mode        :string           default("round_robin"), not null
+#  scheduled_at         :datetime
+#  sending_window       :jsonb            not null
+#  sent_count           :integer          default(0), not null
+#  started_at           :datetime
+#  status               :string           default("draft"), not null
+#  trigger_type         :string           default("manual"), not null
+#  created_at           :datetime         not null
+#  updated_at           :datetime         not null
+#  account_id           :bigint           not null
+#  created_by_id        :bigint
+#  inbox_id             :bigint
+#
+# Indexes
+#
+#  index_jrc_campaigns_on_account_id                       (account_id)
+#  index_jrc_campaigns_on_account_id_and_delivery_channel  (account_id,delivery_channel)
+#  index_jrc_campaigns_on_account_id_and_scheduled_at      (account_id,scheduled_at)
+#  index_jrc_campaigns_on_account_id_and_status            (account_id,status)
+#  index_jrc_campaigns_on_created_by_id                    (created_by_id)
+#  index_jrc_campaigns_on_inbox_id                         (inbox_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (account_id => accounts.id)
+#  fk_rails_...  (created_by_id => users.id)
+#  fk_rails_...  (inbox_id => inboxes.id)
+#
 class JrcCampaigns::Campaign < ApplicationRecord
   self.table_name = 'jrc_campaigns'
 
   belongs_to :account
   belongs_to :inbox, optional: true
   belongs_to :created_by, class_name: 'User', optional: true
+  belongs_to :approved_by, class_name: 'User', optional: true
 
   has_many :campaign_inboxes, class_name: 'JrcCampaigns::CampaignInbox', dependent: :destroy
   has_many :inboxes, through: :campaign_inboxes
@@ -38,17 +93,35 @@ class JrcCampaigns::Campaign < ApplicationRecord
   validate :delay_range_is_valid
   validate :sending_window_is_valid
   validate :recurrence_is_valid
+  validate :legacy_inbox_belongs_to_account
 
   before_save :refresh_estimated_recipients, if: :audience_changed?
 
   def launch!
+    with_lock { launch_approved! }
+  end
+
+  def request_review!
+    JrcCampaigns::ApprovalService.new(self).request_review!
+  end
+
+  def approve!(user, digest)
+    JrcCampaigns::ApprovalService.new(self).approve!(user, digest)
+  end
+
+  def approval_valid?
+    JrcCampaigns::ApprovalService.new(self).valid?
+  end
+
+  def ensure_approved!
+    JrcCampaigns::ApprovalService.new(self).ensure_valid!
+  end
+
+  def launch_approved!
     ensure_status!('draft')
+    ensure_approved!
     raise ActiveRecord::RecordInvalid, self if steps.empty?
     raise ActiveRecord::RecordInvalid, self if sending_inbox_links.empty?
-    if JrcCampaigns::AudienceResolver.new(self).estimated_count.zero?
-      errors.add(:base, 'Selecione pelo menos um destinatário para iniciar a campanha.')
-      raise ActiveRecord::RecordInvalid, self
-    end
 
     if trigger_type == 'scheduled' && scheduled_at.present? && scheduled_at.future?
       update!(status: 'scheduled', last_error: nil)
@@ -121,6 +194,11 @@ class JrcCampaigns::Campaign < ApplicationRecord
   end
 
   private
+
+  def legacy_inbox_belongs_to_account
+    errors.add(:inbox, 'deve pertencer à mesma conta') if inbox && inbox.account_id != account_id
+  end
+
 
   def ensure_status!(*allowed)
     return if status.in?(allowed)

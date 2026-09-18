@@ -2,7 +2,7 @@ class JrcCampaigns::TestMessageService
   CampaignContext = Data.define(:account)
   RecipientContext = Data.define(:campaign, :contact, :name, :phone_number, :email)
 
-  def initialize(account:, user:, delivery_channel:, phone_number:, email:, inbox_id:, step:)
+  def initialize(account:, user:, delivery_channel: 'whatsapp', phone_number: nil, email: nil, inbox_id:, step:)
     @account = account
     @user = user
     @delivery_channel = delivery_channel.presence || 'whatsapp'
@@ -28,6 +28,11 @@ class JrcCampaigns::TestMessageService
   def send_whatsapp
     raise ArgumentError, 'Informe um número válido para o teste.' if phone_number.blank?
     raise ArgumentError, 'A caixa selecionada não é WhatsApp.' unless channel.is_a?(Channel::Whatsapp)
+
+    eligibility = JrcCampaigns::EligibilityPolicy.new(account: account, phone_number: phone_number)
+    rejection = eligibility.rejection_reason
+    raise ArgumentError, rejection if rejection
+    eligibility.freeform_conversation!(inbox) unless step[:kind] == 'template'
 
     message_id = step[:kind] == 'template' ? send_template : send_freeform
     raise StandardError, proxy.external_error.presence || 'O provedor não confirmou o envio do teste.' if message_id.blank?

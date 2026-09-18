@@ -28,6 +28,7 @@ const FloatingCallWidget = defineAsyncComponent(
 
 import JrcCopilotLauncher from 'dashboard/components-next/jrcCopilot/JrcCopilotLauncher.vue';
 import JrcCopilotPanel from 'dashboard/components-next/jrcCopilot/JrcCopilotPanel.vue';
+import { useJrcCopilot } from 'dashboard/components-next/jrcCopilot/useJrcCopilot';
 
 import MobileSidebarLauncher from 'dashboard/components-next/sidebar/MobileSidebarLauncher.vue';
 import JrcTopBar from 'dashboard/components-next/layout/JrcTopBar.vue';
@@ -68,6 +69,13 @@ export default {
       accountId,
       upgradePageRef,
       windowWidth,
+      nicoOpen: useJrcCopilot().isFull,
+      nicoCallActive: computed(
+        () =>
+          callsStore.hasActiveCall ||
+          callsStore.hasIncomingCall ||
+          sipWebphone.hasCall.value
+      ),
       hasActiveCall: computed(() => callsStore.hasActiveCall),
       hasIncomingCall: computed(() => callsStore.hasIncomingCall),
     };
@@ -158,10 +166,13 @@ export default {
     />
 
     <main
-      class="flex flex-1 flex-col h-full w-full min-h-0 overflow-hidden bg-n-surface-1"
+      class="flex flex-1 flex-col h-full w-full min-w-0 min-h-0 overflow-hidden bg-n-surface-1"
     >
       <JrcTopBar />
-      <div class="relative flex min-h-0 flex-1 overflow-hidden">
+      <div
+        class="relative flex min-h-0 flex-1 overflow-hidden"
+        :class="!showUpgradePage && !nicoOpen ? 'pe-16 sm:pe-24' : ''"
+      >
         <UpgradePage
           v-show="showUpgradePage"
           ref="upgradePageRef"
@@ -173,16 +184,22 @@ export default {
           />
         </UpgradePage>
         <template v-if="!showUpgradePage">
-          <div class="h-full w-full min-w-0 flex-1 overflow-hidden"><router-view /></div>
+          <div
+            :class="nicoOpen ? 'hidden sm:block' : ''"
+            class="h-full min-h-0 w-full min-w-0 flex-1 overflow-auto"
+          >
+            <router-view />
+          </div>
           <CommandBar />
-          <JrcCopilotLauncher />
           <MobileSidebarLauncher
+            v-if="!nicoOpen || windowWidth >= 640"
             :is-mobile-sidebar-open="isMobileSidebarOpen"
             @toggle="toggleMobileSidebar"
           />
           <JrcCopilotPanel />
           <FloatingCallWidget v-if="hasActiveCall || hasIncomingCall" />
           <SipCallWidget />
+          <JrcCopilotLauncher :call-active="nicoCallActive" />
         </template>
       </div>
       <AddAccountModal

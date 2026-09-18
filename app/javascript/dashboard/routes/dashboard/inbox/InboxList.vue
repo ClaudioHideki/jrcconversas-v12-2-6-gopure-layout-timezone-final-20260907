@@ -259,7 +259,7 @@ onMounted(async () => {
         </button>
       </nav>
 
-      <div class="jrc-visible-scrollbar min-h-0 flex-1 overflow-y-auto py-2">
+      <div class="min-h-0 flex-1 overflow-y-auto py-2">
         <ConversationCard
           v-for="conversation in conversations"
           :key="conversation.id"

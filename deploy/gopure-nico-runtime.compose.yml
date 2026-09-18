@@ -1,0 +1,34 @@
+# Dokploy: serviço separado, conectado à mesma rede da aplicação GoPure.
+services:
+  gopure-nico-runtime:
+    image: ghcr.io/claudiohideki/jrcconversas-v12-2-6-gopure-layout-timezone-final-20260907:nico-runtime-gopure-20260918-r1
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: '3108'
+      NICO_MODE: provider
+      NICO_ALLOWED_ACCOUNTS: ${GOPURE_ACCOUNT_ID:?Informe o ID real da conta GoPure}
+      NICO_SERVICE_TOKEN: ${NICO_SERVICE_TOKEN:?Defina um token novo com pelo menos 32 caracteres}
+      NICO_PROVIDER_API_KEY: ${NICO_PROVIDER_API_KEY:?Defina a nova chave no Dokploy}
+      NICO_PROVIDER_BASE_URL: https://api.openai.com/v1
+      NICO_MODEL: gpt-4.1-mini
+      NICO_TRANSCRIPTION_MODEL: gpt-4o-mini-transcribe
+      NICO_PGLITE_DATA_DIR: /runtime-data/nico
+    volumes:
+      - gopure_nico_data:/runtime-data
+    expose: ['3108']
+    networks:
+      dokploy:
+        aliases: [gopure-nico-runtime]
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3108/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+volumes:
+  gopure_nico_data:
+networks:
+  dokploy:
+    external: true
+    name: ${DOKPLOY_NETWORK:-dokploy-network}

@@ -119,6 +119,10 @@ class Account < ApplicationRecord
   has_many :jrc_crm_deals, class_name: 'JrcCrm::Deal', dependent: :destroy_async
   has_many :jrc_crm_products, class_name: 'JrcCrm::Product', dependent: :destroy_async
   has_many :jrc_crm_proposals, class_name: 'JrcCrm::Proposal', dependent: :destroy_async
+  has_many :jrc_crm_sales_orders, class_name: 'JrcCrm::SalesOrder', dependent: :destroy_async
+  has_many :jrc_crm_contracts, class_name: 'JrcCrm::Contract', dependent: :destroy_async
+  has_many :jrc_crm_sales_commissions, class_name: 'JrcCrm::SalesCommission', dependent: :destroy_async
+  has_many :jrc_crm_sales_goals, class_name: 'JrcCrm::SalesGoal', dependent: :destroy_async
   has_many :jrc_crm_activities, class_name: 'JrcCrm::Activity', dependent: :destroy_async
   has_many :jrc_crm_follow_ups, class_name: 'JrcCrm::FollowUp', dependent: :destroy_async
   has_many :jrc_crm_audit_events, class_name: 'JrcCrm::AuditEvent', dependent: :destroy_async

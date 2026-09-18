@@ -22,6 +22,9 @@ class Messages::MessageBuilder
   end
 
   def perform
+    if @user.is_a?(User) && !@private && @message_type == 'outgoing'
+      JrcNico::DelegationService.stop(@conversation, reason: 'human_message', user: @user)
+    end
     @message = @conversation.messages.build(message_params)
     process_attachments
     process_emails

@@ -11,6 +11,9 @@ import { VOICE_CALL_DIRECTION } from 'dashboard/components-next/message/constant
 import WindowVisibilityHelper from 'dashboard/helper/AudioAlerts/WindowVisibilityHelper';
 import CallCard from 'dashboard/components-next/call/CallCard.vue';
 import countriesList from 'shared/constants/countries.js';
+import { useJrcCopilot } from 'dashboard/components-next/jrcCopilot/useJrcCopilot';
+
+const { isFull: nicoOpen } = useJrcCopilot();
 
 const RINGTONE_URL = '/audio/dashboard/ringtone.mp3';
 
@@ -238,7 +241,12 @@ onBeforeUnmount(stopRingtone);
 <template>
   <div
     v-if="incomingCalls.length || hasActiveCall"
-    class="fixed ltr:right-4 rtl:left-4 bottom-4 z-50 flex flex-col gap-3 w-[400px]"
+    class="fixed z-50 flex flex-col gap-3 w-[min(400px,calc(100vw-2rem))]"
+    :class="
+      nicoOpen
+        ? 'top-20 ltr:right-4 rtl:left-4 lg:top-auto lg:bottom-4 lg:ltr:right-[416px] lg:rtl:left-[416px] min-[1920px]:ltr:right-[436px] min-[1920px]:rtl:left-[436px]'
+        : 'ltr:right-4 rtl:left-4 bottom-4'
+    "
   >
     <!-- Stacked incoming calls (shown above the primary card) -->
     <CallCard

@@ -8,6 +8,8 @@ import CampaignReport from './components/CampaignReport.vue';
 import CampaignPerformanceChart from './components/CampaignPerformanceChart.vue';
 import SanitizedLists from './components/SanitizedLists.vue';
 import BlacklistPanel from './components/BlacklistPanel.vue';
+import CampaignApproval from './components/CampaignApproval.vue';
+import ConsentPanel from './components/ConsentPanel.vue';
 
 const { t } = useI18n();
 const campaigns = ref([]);
@@ -34,6 +36,7 @@ const activeTab = ref('dispatches');
 const showWizard = ref(false);
 const editingCampaign = ref(null);
 const reportCampaign = ref(null);
+const reviewCampaign = ref(null);
 const period = ref('30');
 const campaignFilter = ref('');
 const channelFilter = ref('');
@@ -41,6 +44,11 @@ const showAdvancedFilters = ref(false);
 const statusFilters = ref([]);
 
 const tabs = computed(() => [
+  {
+    key: 'consents',
+    label: t('JRC_CAMPAIGNS.GOVERNANCE.CONSENTS'),
+    icon: 'i-lucide-shield-check',
+  },
   {
     key: 'dispatches',
     label: t('JRC_CAMPAIGNS.TABS.DISPATCHES'),
@@ -278,6 +286,10 @@ const saved = async () => {
   await fetchData();
 };
 const runAction = async (campaign, action) => {
+  if (action === 'launch' && !campaign.approval_valid) {
+    reviewCampaign.value = campaign;
+    return;
+  }
   try {
     await JrcCampaignsAPI[action](campaign.id);
     useAlert(t('JRC_CAMPAIGNS.ALERTS.ACTION_OK'));
@@ -797,6 +809,15 @@ onMounted(fetchData);
                     <td class="px-4 py-4">
                       <div class="flex justify-end gap-1">
                         <button
+                          v-if="['draft', 'scheduled'].includes(campaign.status)"
+                          type="button"
+                          class="rounded-lg p-2 text-n-violet-11 hover:bg-n-violet-3"
+                          :title="$t('JRC_CAMPAIGNS.GOVERNANCE.REVIEW')"
+                          @click="reviewCampaign = campaign"
+                        >
+                          <span class="i-lucide-shield-check size-4" />
+                        </button>
+                        <button
                           v-if="campaign.status === 'draft'"
                           type="button"
                           class="rounded-lg p-2 text-n-teal-11 hover:bg-n-teal-3"
@@ -889,6 +910,7 @@ onMounted(fetchData);
         @changed="fetchData"
       />
       <BlacklistPanel v-else-if="activeTab === 'blacklist'" />
+      <ConsentPanel v-else-if="activeTab === 'consents'" />
       <template v-else>
         <div class="mb-5">
           <h2 class="text-xl font-semibold text-n-slate-12">
@@ -947,6 +969,12 @@ onMounted(fetchData);
       v-if="reportCampaign"
       :campaign="reportCampaign"
       @close="reportCampaign = null"
+    />
+    <CampaignApproval
+      v-if="reviewCampaign"
+      :campaign="reviewCampaign"
+      @close="reviewCampaign = null"
+      @approved="reviewCampaign = null; fetchData()"
     />
   </div>
 </template>

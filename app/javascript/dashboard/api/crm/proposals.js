@@ -12,6 +12,8 @@ proposalsAPI.accept = (id, payload) =>
 proposalsAPI.reject = (id, reason) =>
   axios.post(`${proposalsAPI.url}/${id}/reject`, { reason });
 proposalsAPI.cancel = id => axios.post(`${proposalsAPI.url}/${id}/cancel`);
+proposalsAPI.convertToOrder = id =>
+  axios.post(`${proposalsAPI.url}/${id}/convert_to_order`);
 proposalsAPI.duplicate = id =>
   axios.post(`${proposalsAPI.url}/${id}/duplicate`);
 proposalsAPI.requestApproval = id =>

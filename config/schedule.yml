@@ -1,4 +1,9 @@
 # https://github.com/ondrejbartas/sidekiq-cron
+nico_queue_recovery_job:
+  cron: '* * * * *'
+  class: 'JrcNico::RecoveryJob'
+  queue: scheduled_jobs
+
 # use https://crontab.guru/ to validate
 # validations for this file exist in /spec/configs/schedule_spec.rb
 

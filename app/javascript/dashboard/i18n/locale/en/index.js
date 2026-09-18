@@ -48,8 +48,10 @@ import sales from './sales.json';
 import crm from './crm.json';
 import whatsappCalling from './whatsappCalling.json';
 import jrcCampaigns from './jrcCampaigns.json';
+import jrcNico from './jrcNico.json';
 
 export default {
+  ...jrcNico,
   ...advancedFilters,
   ...agentBots,
   ...agentMgmt,

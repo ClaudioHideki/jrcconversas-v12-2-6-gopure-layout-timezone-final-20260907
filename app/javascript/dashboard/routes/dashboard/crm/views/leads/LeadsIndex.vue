@@ -22,6 +22,7 @@ const showForm = ref(false);
 const viewMode = ref('list');
 const saving = ref(false);
 const changingId = ref(null);
+const deletingId = ref(null);
 const convertingLead = ref(null);
 const pipelines = ref([]);
 const products = ref([]);
@@ -76,6 +77,20 @@ const changeStatus = async (lead, status) => {
     );
   } finally {
     changingId.value = null;
+  }
+};
+
+const deleteLead = async lead => {
+  if (!window.confirm(`Excluir o lead ${lead.name}?\n\nO contato continuará cadastrado. Negócios vinculados não serão excluídos.`)) return;
+  deletingId.value = lead.id;
+  try {
+    await store.dispatch('jrcCrm/leads/deleteLead', { leadId: lead.id, params: filters });
+    if (String(route.query.leadId) === String(lead.id)) closeDetails();
+    useAlert('Lead excluído com sucesso.');
+  } catch (error) {
+    useAlert(error.response?.data?.error || 'Não foi possível excluir o lead.');
+  } finally {
+    deletingId.value = null;
   }
 };
 
@@ -207,16 +222,17 @@ onMounted(async () => {
           class="bg-n-alpha-2 text-left text-xs font-semibold uppercase text-n-slate-11"
         >
           <tr>
-            <th class="px-5 py-3">Nome / empresa</th>
-            <th class="px-5 py-3">Status</th>
-            <th class="px-5 py-3">Origem</th>
-            <th class="px-5 py-3">Responsável</th>
-            <th class="px-5 py-3 text-right">Próximo passo</th>
+            <th class="w-[34%] px-4 py-3">Nome / empresa</th>
+            <th class="w-[15%] px-3 py-3">Status</th>
+            <th class="w-[13%] px-3 py-3">Origem</th>
+            <th class="w-[14%] px-3 py-3">Responsável</th>
+            <th class="w-[18%] px-3 py-3 text-right">Próximo passo</th>
+            <th class="w-[6%] px-3 py-3 text-right">Ações</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-n-weak">
           <tr v-if="!leads.length">
-            <td colspan="5" class="px-5 py-14 text-center text-n-slate-11">
+            <td colspan="6" class="px-5 py-14 text-center text-n-slate-11">
               Nenhum lead encontrado.
             </td>
           </tr>
@@ -226,13 +242,13 @@ onMounted(async () => {
             class="cursor-pointer transition-colors hover:bg-n-alpha-2"
             @click="openDetails(lead)"
           >
-            <td class="px-5 py-4">
-              <p class="font-semibold text-n-slate-12">{{ lead.name }}</p>
+            <td class="px-4 py-3">
+              <p class="truncate font-semibold text-n-slate-12" :title="lead.name">{{ lead.name }}</p>
               <p class="text-xs text-n-slate-11">
                 {{ lead.company_name || 'Empresa não informada' }}
               </p>
             </td>
-            <td class="px-5 py-4">
+            <td class="px-3 py-3">
               <select
                 v-if="!['converted'].includes(lead.status)"
                 :value="lead.status"
@@ -247,13 +263,13 @@ onMounted(async () => {
                 <option value="discarded">Descartado</option></select
               ><CrmStatusBadge v-else :value="lead.status" />
             </td>
-            <td class="px-5 py-4 font-medium text-n-slate-11">
+            <td class="px-3 py-3 font-medium text-n-slate-11">
               {{ lead.source || '—' }}
             </td>
-            <td class="px-5 py-4 text-n-slate-11">
+            <td class="px-3 py-3 text-n-slate-11">
               {{ lead.owner?.name || '—' }}
             </td>
-            <td class="px-5 py-4 text-right">
+            <td class="px-3 py-3 text-right">
               <button
                 v-if="['new', 'in_contact'].includes(lead.status)"
                 type="button"
@@ -279,6 +295,17 @@ onMounted(async () => {
               <span v-else class="text-xs text-n-slate-10">
                 Sem ação pendente
               </span>
+            </td>
+            <td class="px-3 py-3 text-right">
+              <button
+                type="button"
+                :disabled="deletingId === lead.id"
+                class="inline-flex size-9 items-center justify-center rounded-lg border border-n-weak text-n-ruby-11 transition hover:bg-n-ruby-3 disabled:opacity-50"
+                title="Excluir lead"
+                @click.stop="deleteLead(lead)"
+              >
+                <i class="i-lucide-trash-2 size-4" />
+              </button>
             </td>
           </tr>
         </tbody>

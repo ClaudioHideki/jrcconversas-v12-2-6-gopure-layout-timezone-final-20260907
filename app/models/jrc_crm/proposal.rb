@@ -17,11 +17,14 @@
 #  commercial_notes             :text
 #  customer_notes               :text
 #  discount_cents               :bigint           default(0), not null
+#  down_payment_cents           :bigint           default(0), not null
 #  financial_approval_status    :string           default("not_required"), not null
 #  first_billing_days           :integer          default(0), not null
 #  follow_up_days               :integer          default(3), not null
 #  follow_up_enabled            :boolean          default(TRUE), not null
+#  has_monthly_fee              :boolean          default(TRUE), not null
 #  implementation_cents         :bigint           default(0), not null
+#  installments_count           :integer          default(1), not null
 #  issuer_company_name          :string           default("Grupo JRC"), not null
 #  issuer_unit                  :string
 #  last_sent_channel            :string
@@ -31,6 +34,7 @@
 #  monthly_cents                :bigint           default(0), not null
 #  next_steps                   :text
 #  notes                        :text
+#  payment_condition            :string           default("cash"), not null
 #  payment_method               :string
 #  proposal_number              :string           not null
 #  public_token_digest          :string           not null
@@ -39,6 +43,9 @@
 #  rejected_at                  :datetime
 #  renewal_type                 :string           default("automatic"), not null
 #  sent_at                      :datetime
+#  shipping_cents               :bigint           default(0), not null
+#  shipping_in_installments     :boolean          default(TRUE), not null
+#  shipping_mode                :string           default("not_applicable"), not null
 #  solution_description         :text
 #  status                       :string           default("draft"), not null
 #  subtotal_cents               :bigint           default(0), not null
@@ -54,6 +61,7 @@
 #  created_at                   :datetime         not null
 #  updated_at                   :datetime         not null
 #  account_id                   :integer          not null
+#  business_unit_id             :bigint
 #  deal_id                      :bigint           not null
 #  issuer_tax_id                :string
 #  last_sent_conversation_id    :integer
@@ -64,6 +72,7 @@
 #
 #  idx_jrc_crm_proposals_account_number                  (account_id,proposal_number) UNIQUE
 #  index_jrc_crm_proposals_on_account_id                 (account_id)
+#  index_jrc_crm_proposals_on_business_unit_id           (business_unit_id)
 #  index_jrc_crm_proposals_on_deal_id                    (deal_id)
 #  index_jrc_crm_proposals_on_last_sent_conversation_id  (last_sent_conversation_id)
 #  index_jrc_crm_proposals_on_last_sent_message_id       (last_sent_message_id)
@@ -73,6 +82,7 @@
 # Foreign Keys
 #
 #  fk_rails_...  (account_id => accounts.id)
+#  fk_rails_...  (business_unit_id => jrc_crm_business_units.id)
 #  fk_rails_...  (deal_id => jrc_crm_deals.id)
 #  fk_rails_...  (owner_id => users.id)
 #
@@ -93,6 +103,7 @@ module JrcCrm
     has_many :items, class_name: 'JrcCrm::ProposalItem', foreign_key: :proposal_id, dependent: :destroy
     has_many :events, class_name: 'JrcCrm::ProposalEvent', foreign_key: :proposal_id, dependent: :destroy
     has_many :proposal_items, class_name: 'JrcCrm::ProposalItem', foreign_key: :proposal_id, dependent: :destroy
+    has_many :sales_orders, class_name: 'JrcCrm::SalesOrder', dependent: :restrict_with_error
 
     validates :title, presence: true
     validates :proposal_number, presence: true, uniqueness: { scope: :account_id }
@@ -104,11 +115,18 @@ module JrcCrm
     validates :first_billing_days, :follow_up_days, numericality: { greater_than_or_equal_to: 0 }
     validates :cancellation_penalty_percent,
               numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }
+    validates :shipping_mode, inclusion: { in: %w[not_applicable included separate] }
+    validates :payment_condition, inclusion: { in: %w[cash down_payment_installments installments] }
+    validates :shipping_cents, :down_payment_cents, numericality: { greater_than_or_equal_to: 0 }
+    validates :installments_count, numericality: { greater_than: 0, less_than_or_equal_to: 120 }
     validates :approval_status, :commercial_approval_status,
               :financial_approval_status, :technical_approval_status,
               inclusion: { in: APPROVAL_VALUES }
 
     enum status: STATUS_VALUES.index_with(&:itself)
+
+    validate :owner_belongs_to_account
+    validate :payment_terms_are_consistent
 
     before_validation :generate_secure_public_token, on: :create
     before_validation :assign_proposal_number, on: :create
@@ -235,6 +253,25 @@ module JrcCrm
       )
     end
 
+    def contract_total_cents
+      total_cents.to_i + (shipping_mode == 'separate' ? shipping_cents.to_i : 0)
+    end
+
+    def payable_base_cents
+      base = total_cents.to_i
+      base += shipping_cents.to_i if shipping_mode == 'separate' && shipping_in_installments?
+      base
+    end
+
+    def installment_plan_cents
+      count = [installments_count.to_i, 1].max
+      return [] if payment_condition == 'cash'
+
+      balance = [payable_base_cents - (payment_condition == 'down_payment_installments' ? down_payment_cents.to_i : 0), 0].max
+      quotient, remainder = balance.divmod(count)
+      Array.new(count) { |index| quotient + (index < remainder ? 1 : 0) }
+    end
+
     def reset_approvals!
       update_columns(
         status: 'draft',
@@ -275,6 +312,22 @@ module JrcCrm
     end
 
     private
+
+    def owner_belongs_to_account
+      errors.add(:owner, 'must belong to account') if owner && !account.users.exists?(owner.id)
+    end
+
+    def payment_terms_are_consistent
+      return if payment_condition.blank?
+
+      if payment_condition == 'cash'
+        errors.add(:installments_count, 'must be 1 for cash payment') if installments_count.to_i != 1
+      elsif payment_condition == 'installments'
+        errors.add(:down_payment_cents, 'must be zero when there is no down payment') if down_payment_cents.to_i.positive?
+      elsif down_payment_cents.to_i > payable_base_cents
+        errors.add(:down_payment_cents, 'cannot exceed the payable amount')
+      end
+    end
 
     def assign_proposal_number
       return if proposal_number.present?

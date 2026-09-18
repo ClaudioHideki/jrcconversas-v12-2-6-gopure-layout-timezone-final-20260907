@@ -1,0 +1,18 @@
+<% config = account.custom_attributes %>
+<section class="mt-8 rounded-lg border border-n-weak p-6">
+  <h2 class="mb-4 text-xl font-semibold"><%= t('nico_admin.title') %></h2>
+  <p class="mb-4"><%= t('nico_admin.help') %></p>
+  <%= form_with url: update_nico_super_admin_account_path(account), method: :patch, scope: :nico do |form| %>
+    <div class="mb-4">
+      <%= form.check_box :enabled, checked: config['nico_enabled'] == true %>
+      <%= form.label :enabled, t('nico_admin.enabled') %>
+    </div>
+    <% { monthly_run_limit: 1000, monthly_token_limit: 1_000_000, concurrency: 3 }.each do |key, default| %>
+      <div class="mb-4">
+        <%= form.label key, t("nico_admin.#{key}") %>
+        <%= form.number_field key, value: config.fetch("nico_#{key}", default), min: 1, max: key == :concurrency ? 8 : nil, required: true %>
+      </div>
+    <% end %>
+    <%= form.submit t('nico_admin.save') %>
+  <% end %>
+</section>

@@ -86,6 +86,26 @@ class SuperAdmin::AccountsController < SuperAdmin::ApplicationController
     )
   end
 
+  def update_nico
+    config = params.require(:nico).permit(:enabled, :monthly_run_limit, :monthly_token_limit, :concurrency)
+    run_limit = Integer(config.fetch(:monthly_run_limit), 10)
+    token_limit = Integer(config.fetch(:monthly_token_limit), 10)
+    concurrency = Integer(config.fetch(:concurrency), 10)
+    raise ArgumentError unless run_limit.positive? && token_limit.positive? && concurrency.between?(1, 8)
+
+    requested_resource.with_lock do
+      requested_resource.update!(custom_attributes: requested_resource.custom_attributes.merge(
+        'nico_enabled' => ActiveModel::Type::Boolean.new.cast(config[:enabled]),
+        'nico_monthly_run_limit' => run_limit,
+        'nico_monthly_token_limit' => token_limit,
+        'nico_concurrency' => concurrency
+      ))
+    end
+    redirect_to edit_super_admin_account_path(requested_resource), notice: I18n.t('nico_admin.saved')
+  rescue ArgumentError, KeyError
+    redirect_to edit_super_admin_account_path(requested_resource), alert: I18n.t('nico_admin.invalid')
+  end
+
   def destroy
     account = Account.find(params[:id])
 

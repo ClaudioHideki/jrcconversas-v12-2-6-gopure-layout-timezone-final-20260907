@@ -14,6 +14,11 @@ const ActivitiesIndex = () => import('./views/activities/ActivitiesIndex.vue');
 const CalendarView = () => import('./views/calendar/CalendarView.vue');
 const ProductsIndex = () => import('./views/products/ProductsIndex.vue');
 const ProposalsIndex = () => import('./views/proposals/ProposalsIndex.vue');
+const SalesOrdersView = () => import('./views/orders/SalesOrdersView.vue');
+const ContractsView = () => import('./views/contracts/ContractsView.vue');
+const GoalsView = () => import('./views/goals/GoalsView.vue');
+const CommissionsView = () => import('./views/commissions/CommissionsView.vue');
+const Customer360View = () => import('./views/customers/Customer360View.vue');
 
 const meta = {
   featureFlag: FEATURE_FLAGS.JRC_CRM,
@@ -87,6 +92,11 @@ export default {
           component: ProposalsIndex,
           meta,
         },
+        { path: 'orders', name: 'crm_orders', component: SalesOrdersView, meta },
+        { path: 'contracts', name: 'crm_contracts', component: ContractsView, meta },
+        { path: 'goals', name: 'crm_goals', component: GoalsView, meta },
+        { path: 'commissions', name: 'crm_commissions', component: CommissionsView, meta },
+        { path: 'customers/:customerId', name: 'crm_customer_360', component: Customer360View, meta },
       ],
     },
   ],

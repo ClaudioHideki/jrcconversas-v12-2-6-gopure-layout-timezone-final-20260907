@@ -81,7 +81,7 @@ const emailUnreadCount = computed(() =>
 );
 
 const formatNumber = value =>
-  new Intl.NumberFormat('pt-BR').format(Number(value || 0));
+  value == null ? '--' : new Intl.NumberFormat('pt-BR').format(Number(value));
 const formatPercent = value =>
   value === null || value === undefined ? '--' : `${value}%`;
 const formatDuration = seconds => {
@@ -288,6 +288,12 @@ const statusClasses = status =>
   })[status] || 'bg-slate-100 text-slate-600';
 const statusLabel = status =>
   ({
+    not_run: 'Ainda não executado',
+    queued: 'Na fila',
+    running: 'Em análise',
+    completed: 'Concluído',
+    failed: 'Falhou',
+    cancelled: 'Cancelado',
     active: 'Ativo',
     attention: 'Atenção',
     ready: 'Pronto',

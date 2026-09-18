@@ -7,13 +7,20 @@ class JrcCampaigns::DispatchStepService
   end
 
   def perform
+    @provider_attempted = false
+    @accepted_external_id = nil
+    delivery = recipient.deliveries.find_by(step: step)
+    return reconcile_delivery(delivery) if delivery&.sent_at.present?
+
+    campaign.reload
     return if campaign.canceled?
+
     if campaign.paused?
       recipient.update!(metadata: recipient.metadata.to_h.merge('pending_step_id' => step.id))
       return
     end
     return if recipient.status.in?(%w[failed canceled skipped])
-    return if recipient.deliveries.where(step: step, status: %w[sent delivered read failed]).exists?
+    return if delivery && !delivery.queued?
 
     recipient.update!(metadata: recipient.metadata.to_h.except('pending_step_id')) if recipient.metadata.to_h.key?('pending_step_id')
     if step.only_if_no_reply? && recipient.replied_at.present?
@@ -21,42 +28,109 @@ class JrcCampaigns::DispatchStepService
       return
     end
 
-    recipient.update!(status: 'processing') if recipient.queued?
-    delivery = recipient.deliveries.find_or_initialize_by(step: step)
-    delivery.inbox = inbox
-    delivery.status = 'queued' if delivery.new_record?
-    delivery.save!
+    delivery = claim_delivery
+    return unless delivery
+    return if defer_for_campaign_state(delivery)
 
-    dispatch_result = dispatch_message(delivery)
-    external_id = dispatch_result.is_a?(Hash) ? dispatch_result[:external_id] : dispatch_result
-    raise 'O provedor não retornou o identificador da mensagem' if external_id.blank?
+    rejection = sending_rejection
+    return skip_delivery(delivery, rejection) if rejection
 
-    now = Time.current
-    delivery.update!(external_id: external_id, status: 'sent', sent_at: now, error_message: nil)
-    recipient.update!(status: 'sent', sent_at: recipient.sent_at || now, error_message: nil)
-    JrcCampaigns::EventLogger.call(
-      campaign: campaign,
-      execution: recipient.execution,
-      recipient: recipient,
-      event_type: 'message_sent',
-      payload: { step_id: step.id, external_id: external_id, inbox_id: inbox.id, kind: step.kind }
-    )
-    unless campaign.email?
-      attach_existing_conversation
-      create_conversation_if_requested
-      record_conversation_message(delivery, external_id)
-    end
-    schedule_next_step_or_finish
+    @accepted_external_id = dispatch_message(delivery)
+    raise 'O provedor não retornou o identificador da mensagem' if @accepted_external_id.blank?
+
+    delivery.update!(external_id: @accepted_external_id, status: 'sent', sent_at: Time.current, error_message: nil)
+    reconcile_delivery(delivery)
   rescue StandardError => e
-    fail_delivery(e)
+    handle_failure(delivery, e)
   end
 
   private
 
   attr_reader :recipient, :step, :campaign, :inbox
 
+  def claim_delivery
+    # Commit the claim before crossing the provider boundary. A crashed/overlapping
+    # job must never reclaim a request whose external outcome could be unknown.
+    recipient.with_lock do
+      delivery = recipient.deliveries.find_or_initialize_by(step: step)
+      next unless delivery.new_record? || delivery.queued?
+
+      delivery.update!(inbox: inbox, status: 'sending')
+      recipient.update!(status: 'processing', metadata: recipient.metadata.to_h.except('pending_step_id'))
+      delivery
+    end
+  end
+
+  def sending_rejection
+    campaign.reload.ensure_approved!
+    return 'Contato bloqueado.' if recipient.contact&.reload&.blocked?
+    return nil if campaign.email?
+
+    eligibility.rejection_reason
+  rescue ActiveRecord::RecordInvalid => e
+    e.record.errors.full_messages.join(', ')
+  end
+
+  def defer_for_campaign_state(delivery)
+    campaign.reload
+    return false if campaign.running?
+
+    recipient.with_lock do
+      if campaign.paused?
+        delivery.update!(status: 'queued')
+        recipient.update!(status: 'queued', metadata: recipient.metadata.to_h.merge('pending_step_id' => step.id))
+      else
+        delivery.update!(status: 'skipped', error_message: 'Campanha não está em execução.')
+        recipient.update!(status: campaign.canceled? ? 'canceled' : 'skipped', metadata: recipient.metadata.to_h.except('pending_step_id'))
+      end
+    end
+    true
+  end
+
+  def eligibility
+    JrcCampaigns::EligibilityPolicy.new(account: campaign.account, phone_number: recipient.phone_number, contact: recipient.contact)
+  end
+
+  def skip_delivery(delivery, reason)
+    delivery.update!(status: 'skipped', error_message: reason)
+    recipient.update!(status: 'skipped', error_message: reason, metadata: recipient.metadata.to_h.except('pending_step_id'))
+    JrcCampaigns::ExecutionCompletionService.new(recipient.execution).check!
+  end
+
+  def reconcile_delivery(delivery)
+    recipient.with_lock do
+      delivery.reload
+      next if delivery.metadata.to_h['reconciled_at'].present?
+
+      status = recipient.status.in?(%w[delivered read replied failed]) ? recipient.status : 'sent'
+      recipient.update!(status: status, sent_at: recipient.sent_at || delivery.sent_at,
+                        error_message: recipient.failed? ? recipient.error_message : nil)
+      JrcCampaigns::EventLogger.call(
+        campaign: campaign, execution: recipient.execution, recipient: recipient, event_type: 'message_sent',
+        payload: { step_id: step.id, external_id: delivery.external_id, inbox_id: inbox.id, kind: step.kind }
+      )
+      unless campaign.email?
+        attach_existing_conversation
+        create_conversation_if_requested
+        record_conversation_message(delivery, delivery.external_id)
+      end
+      advance_execution
+      delivery.update!(metadata: delivery.metadata.to_h.except('reconciliation_error').merge('reconciled_at' => Time.current.iso8601))
+    end
+  end
+
+  def advance_execution
+    return if campaign.reload.canceled?
+    return JrcCampaigns::ExecutionCompletionService.new(recipient.execution).check! if recipient.failed?
+
+    schedule_next_step_or_finish
+  end
+
   def dispatch_message(delivery)
-    return dispatch_email(delivery) if campaign.email?
+    if campaign.email?
+      @provider_attempted = true
+      return dispatch_email(delivery).fetch(:external_id)
+    end
 
     channel = inbox.channel
     raise 'A caixa selecionada não é WhatsApp' unless channel.is_a?(Channel::Whatsapp)
@@ -72,6 +146,7 @@ class JrcCampaigns::DispatchStepService
         media_url: effective_value('media_url', step.media_url),
         file_name: effective_value('file_name', step.file_name)
       )
+      @provider_attempted = true
       external_id = channel.send_message(recipient.phone_number, proxy)
       raise proxy.external_error if external_id.blank? && proxy.external_error.present?
 
@@ -120,6 +195,7 @@ class JrcCampaigns::DispatchStepService
     raise 'Template não aprovado ou não encontrado na caixa selecionada' if name.blank?
 
     proxy = JrcCampaigns::ProviderMessageProxy.new(kind: 'text', body: '')
+    @provider_attempted = true
     external_id = channel.send_template(
       recipient.phone_number,
       { name: name, namespace: namespace, lang_code: lang_code, parameters: parameters },
@@ -131,15 +207,7 @@ class JrcCampaigns::DispatchStepService
   end
 
   def ensure_freeform_allowed!
-    contact = recipient.contact
-    raise 'Mensagem livre exige contato existente; use template para o primeiro contato' unless contact
-
-    conversation = contact.conversations.where(inbox_id: inbox.id).order(updated_at: :desc).first
-    raise 'Mensagem livre fora da janela de atendimento; use template aprovado da Meta' unless conversation
-    unless Conversations::MessageWindowService.new(conversation).can_reply?
-      raise 'Mensagem livre fora da janela de atendimento; use template aprovado da Meta'
-    end
-
+    conversation = eligibility.freeform_conversation!(inbox)
     recipient.update!(conversation: conversation) unless recipient.conversation_id == conversation.id
   end
 
@@ -161,6 +229,7 @@ class JrcCampaigns::DispatchStepService
                     step.delay_after_seconds.seconds
                   end
       target_time = JrcCampaigns::ScheduleWindow.new(campaign).next_time(Time.current + wait_time)
+      recipient.update!(metadata: recipient.metadata.to_h.merge('pending_step_id' => next_step.id))
       JrcCampaigns::DispatchStepJob.set(wait_until: target_time).perform_later(recipient.id, next_step.id)
     else
       JrcCampaigns::ExecutionCompletionService.new(recipient.execution).check!
@@ -177,6 +246,7 @@ class JrcCampaigns::DispatchStepService
   def record_conversation_message(delivery, external_id)
     conversation = recipient.conversation
     return unless conversation
+    return if conversation.messages.exists?(source_id: external_id)
 
     message = conversation.messages.build(
       account: campaign.account,
@@ -231,6 +301,28 @@ class JrcCampaigns::DispatchStepService
       status: campaign.conversation_mode == 'pending' ? 'pending' : 'open'
     )
     recipient.update!(conversation: conversation)
+  end
+
+  def handle_failure(delivery, error)
+    if @accepted_external_id.present? && delivery.reload.sent_at.blank?
+      delivery.update!(external_id: @accepted_external_id, status: 'sent', sent_at: Time.current)
+    end
+    return reconcile_later(delivery, error) if delivery&.sent_at.present?
+
+    if @provider_attempted
+      delivery.update!(status: 'unknown', error_message: error.message)
+      recipient.update!(error_message: "Resultado do provedor desconhecido; reenvio automático bloqueado: #{error.message}")
+      return
+    end
+
+    fail_delivery(error)
+  end
+
+  def reconcile_later(delivery, error)
+    attempts = delivery.metadata.to_h.fetch('reconciliation_attempts', 0).to_i + 1
+    delivery.update!(metadata: delivery.metadata.to_h.merge('reconciliation_error' => error.message, 'reconciliation_attempts' => attempts))
+    recipient.update!(error_message: "Enviado; sincronização local pendente: #{error.message}")
+    JrcCampaigns::DispatchStepJob.set(wait: 1.minute).perform_later(recipient.id, step.id) if attempts <= 5
   end
 
   def fail_delivery(error)

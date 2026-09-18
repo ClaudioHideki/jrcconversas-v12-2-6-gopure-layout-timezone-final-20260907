@@ -33,7 +33,7 @@ module JrcCrm
     
     validates :event_type, :description, presence: true
     
-    VALID_TYPES = %w[created sent viewed accepted rejected canceled revoked item_added item_removed pdf_generated]
+    VALID_TYPES = %w[created updated approval_requested approval_updated sent viewed accepted rejected canceled revoked item_added item_removed pdf_generated].freeze
     validates :event_type, inclusion: { in: VALID_TYPES }
   end
 end

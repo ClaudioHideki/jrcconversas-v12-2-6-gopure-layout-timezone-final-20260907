@@ -11,6 +11,12 @@ tmp
 .codeclimate.yml
 public/packs
 node_modules
+**/node_modules
+**/dist
+.git
+.codex
+services/**/.env*
+!services/**/.env.example
 vendor/bundle
 .DS_Store
 *.swp

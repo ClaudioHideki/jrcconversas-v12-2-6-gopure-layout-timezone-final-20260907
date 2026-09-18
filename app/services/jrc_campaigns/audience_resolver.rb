@@ -54,6 +54,11 @@ class JrcCampaigns::AudienceResolver
         next
       end
 
+      if campaign.whatsapp? && JrcCampaigns::EligibilityPolicy.new(account: account, phone_number: destination, contact: entry.contact).rejection_reason
+        counters[:without_consent_count] += 1
+        next
+      end
+
       normalized
     end
     selectable_entries = eligible.uniq { |entry| entry.destination(campaign.delivery_channel) }
@@ -69,6 +74,7 @@ class JrcCampaigns::AudienceResolver
       without_email_count: campaign.email? ? counters[:without_destination_count] : 0,
       blacklisted_count: counters[:blacklisted_count],
       blocked_count: counters[:blocked_count],
+      without_consent_count: counters[:without_consent_count],
       duplicate_count: eligible.size - selectable_entries.size,
       selectable_entries: selectable_entries,
       entries: selected_entries

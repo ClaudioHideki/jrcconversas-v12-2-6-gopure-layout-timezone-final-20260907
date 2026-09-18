@@ -11,6 +11,26 @@ class JrcCampaignsAPI extends ApiClient {
     return axios.post(`${this.url}/${id}/launch`);
   }
 
+  requestReview(id) {
+    return axios.post(`${this.url}/${id}/request_review`);
+  }
+
+  approve(id, digest) {
+    return axios.post(`${this.url}/${id}/approve`, { digest });
+  }
+
+  consents() {
+    return axios.get(`${super.baseUrl()}/jrc_campaigns/consents`);
+  }
+
+  createConsent(consent) {
+    return axios.post(`${super.baseUrl()}/jrc_campaigns/consents`, { consent });
+  }
+
+  revokeConsent(id) {
+    return axios.delete(`${super.baseUrl()}/jrc_campaigns/consents/${id}`);
+  }
+
   pause(id) {
     return axios.post(`${this.url}/${id}/pause`);
   }

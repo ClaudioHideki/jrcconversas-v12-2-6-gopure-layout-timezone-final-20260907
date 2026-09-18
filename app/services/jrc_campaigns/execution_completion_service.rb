@@ -8,6 +8,7 @@ class JrcCampaigns::ExecutionCompletionService
     execution.refresh_counters!
     campaign.refresh_counters!
     return if execution.recipients.where(status: %w[queued processing]).exists?
+    return if execution.recipients.where("metadata ? 'pending_step_id'").exists?
 
     execution.update!(status: 'completed', completed_at: Time.current)
     JrcCampaigns::EventLogger.call(campaign: campaign, execution: execution, event_type: 'execution_completed')

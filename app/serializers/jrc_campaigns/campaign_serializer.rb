@@ -7,6 +7,7 @@ class JrcCampaigns::CampaignSerializer
     campaign.as_json(only: scalar_fields).merge(
       campaign_inboxes: campaign.campaign_inboxes.sort_by(&:position).map { |link| inbox_json(link) },
       steps: campaign.steps.map { |step| step_json(step) },
+      approval_valid: campaign.approval_valid?,
       latest_execution: execution_json(campaign.latest_execution)
     )
   end
@@ -19,6 +20,7 @@ class JrcCampaigns::CampaignSerializer
     [:id, :name, :delivery_channel, :status, :trigger_type, :scheduled_at, :audience_type, :audience_config, :message_body, :inbox_id,
      :rotation_mode, :delay_min_seconds, :delay_max_seconds, :sending_window, :conversation_mode, :recurrence_config, :follow_up_config,
      :estimated_recipients, :sent_count, :failed_count, :delivered_count, :read_count, :replied_count, :clicked_count, :started_at,
+     :review_digest, :approved_at, :approved_by_id, :approval_expires_at,
      :paused_at, :completed_at, :last_execution_at, :last_error, :created_at, :updated_at]
   end
 

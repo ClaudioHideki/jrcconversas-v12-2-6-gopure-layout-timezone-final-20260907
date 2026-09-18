@@ -1,4 +1,4 @@
-﻿{
+{
   "JRC_CAMPAIGNS": {
     "TITLE": "Campanhas",
     "BRAND_BADGE": "JRC",
@@ -435,7 +435,35 @@
       "4": "Qui",
       "5": "Sex",
       "6": "Sáb"
+    },
+    "GOVERNANCE": {
+      "REVIEW": "Revisar e aprovar envio",
+      "SAVE_FOR_REVIEW": "Salvar e revisar",
+      "APPROVE": "Aprovar este público e configuração",
+      "APPROVAL_UNTIL": "Aprovada até",
+      "REVIEW_REQUIRED": "Revisão e aprovação necessárias",
+      "APPROVED": "Aprovação registrada por 48 horas. Agora você pode iniciar a campanha.",
+      "POLICY": "A aprovação vale por 48 horas e abrange somente este público. Alterações na configuração exigem nova revisão. Envios sem consentimento positivo, bloqueados ou na blacklist serão impedidos, inclusive testes e follow-ups.",
+      "ATTEST": "Revisei as mensagens e todos os destinatários abaixo e autorizo explicitamente esta campanha.",
+      "SCHEDULE": "Agendamento",
+      "MANUAL": "Início manual após aprovação",
+      "INTERVAL": "Intervalo de envio",
+      "SECONDS": "{min}–{max} segundos",
+      "HOURS": "{count} horas",
+      "WINDOW": "Dias (0=domingo) e horário permitido",
+      "INBOXES": "Caixas de envio",
+      "ROTATION": "Distribuição entre caixas",
+      "RECURRENCE": "Recorrência",
+      "CONVERSATION": "Criação de conversa",
+      "FOLLOW_UP": "Retorno após",
+      "AUDIENCE": "Destinatários aprovados",
+      "EMPTY_AUDIENCE": "Nenhum destinatário com consentimento ativo. Registre o consentimento na aba Blacklist antes de revisar novamente.",
+      "CONSENTS": "Consentimentos para campanhas",
+      "CONSENT_HELP": "Registre o opt-in de cada telefone com a origem e data da autorização. Esse registro atende contatos e listas importadas; contatos existentes não são considerados autorizados automaticamente.",
+      "EVIDENCE": "Evidência do opt-in (origem, data ou referência)",
+      "RECORD_CONSENT": "Registrar opt-in",
+      "REVOKE": "Revogar",
+      "REVOKED": "Revogado"
     }
   }
 }
-

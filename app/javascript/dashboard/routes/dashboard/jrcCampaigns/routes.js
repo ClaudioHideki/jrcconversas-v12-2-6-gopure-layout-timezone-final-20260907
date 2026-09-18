@@ -2,7 +2,7 @@ import { frontendURL } from 'dashboard/helper/URLHelper';
 import { FEATURE_FLAGS } from 'dashboard/featureFlags';
 import store from 'dashboard/store';
 
-const JrcCampaignsPage = () => import('./JrcCampaignsPage.vue');
+const JrcCampaignsPage = () => import('./JrcCampaignsAccountPage.vue');
 
 const meta = {
   featureFlag: FEATURE_FLAGS.JRC_CAMPAIGNS,

@@ -5,7 +5,7 @@ module Api
         class ProposalsController < BaseController
           before_action :set_proposal, only: [
             :show, :update, :destroy, :send_proposal, :pdf, :accept, :reject,
-            :cancel, :duplicate, :request_approval, :approve
+            :cancel, :duplicate, :request_approval, :approve, :convert_to_order
           ]
           before_action :ensure_unlocked_proposal!, only: [:update, :destroy, :request_approval, :approve, :accept, :reject, :cancel]
 
@@ -34,6 +34,8 @@ module Api
 
           def update
             attributes = proposal_params.to_h.symbolize_keys
+            validate_proposal_owner!(attributes[:owner_id]) if attributes[:owner_id].present?
+            normalize_payment_attributes!(attributes)
             if @proposal.proposal_items.exists?
               attributes.except!(:implementation_cents, :monthly_cents, :subtotal_cents, :total_cents)
             end
@@ -251,6 +253,13 @@ module Api
             render json: { message: 'Proposta cancelada', proposal: serialize(@proposal.reload) }
           end
 
+          def convert_to_order
+            order = JrcCrm::ProposalToOrderService.new(proposal: @proposal, actor: Current.user).call
+            render json: { id: order.id, order_number: order.order_number, status: order.status, total_cents: order.total_cents }, status: :created
+          rescue StandardError => e
+            render json: { errors: [e.message] }, status: :unprocessable_entity
+          end
+
           private
 
           def set_proposal
@@ -330,6 +339,24 @@ module Api
             end
           end
 
+          def validate_proposal_owner!(owner_id)
+            user = crm_scope.users.find_by(id: owner_id)
+            raise Pundit::NotAuthorizedError unless user
+          end
+
+          def normalize_payment_attributes!(attributes)
+            condition = attributes[:payment_condition].presence || @proposal.payment_condition
+            case condition
+            when 'cash'
+              attributes[:down_payment_cents] = 0
+              attributes[:installments_count] = 1
+            when 'installments'
+              attributes[:down_payment_cents] = 0
+            end
+            attributes[:monthly_cents] = 0 if attributes.key?(:has_monthly_fee) && !ActiveModel::Type::Boolean.new.cast(attributes[:has_monthly_fee])
+            attributes[:shipping_cents] = 0 if attributes[:shipping_mode].present? && attributes[:shipping_mode] != 'separate'
+          end
+
           def proposal_params
             params.require(:proposal).permit(
               :title, :discount_cents,
@@ -339,7 +366,8 @@ module Api
               :issuer_tax_id, :issuer_unit, :payment_method, :billing_day,
               :first_billing_days, :taxes_included, :annual_adjustment_index,
               :renewal_type, :cancellation_penalty_percent, :follow_up_enabled,
-              :follow_up_days
+              :follow_up_days, :owner_id, :shipping_cents, :shipping_mode, :payment_condition,
+              :down_payment_cents, :installments_count, :has_monthly_fee, :shipping_in_installments
             )
           end
         end

@@ -1,3 +1,24 @@
+# == Schema Information
+#
+# Table name: jrc_campaign_media_assets
+#
+#  id            :bigint           not null, primary key
+#  kind          :string
+#  created_at    :datetime         not null
+#  updated_at    :datetime         not null
+#  account_id    :integer          not null
+#  created_by_id :integer
+#
+# Indexes
+#
+#  index_jrc_campaign_media_assets_on_account_id     (account_id)
+#  index_jrc_campaign_media_assets_on_created_by_id  (created_by_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (account_id => accounts.id)
+#  fk_rails_...  (created_by_id => users.id)
+#
 class JrcCampaigns::MediaAsset < ApplicationRecord
   self.table_name = 'jrc_campaign_media_assets'
 

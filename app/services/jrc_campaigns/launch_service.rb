@@ -5,8 +5,10 @@ class JrcCampaigns::LaunchService
 
   def perform
     campaign.with_lock do
-      return if campaign.canceled? || campaign.paused? || campaign.completed?
-      return campaign.latest_execution if campaign.running? && campaign.latest_execution&.running?
+      next if campaign.canceled? || campaign.paused? || campaign.completed?
+      next campaign.latest_execution if campaign.running? && campaign.latest_execution&.running?
+
+      campaign.ensure_approved!
 
       campaign.update!(status: 'running', started_at: campaign.started_at || Time.current, last_execution_at: Time.current, last_error: nil)
       execution = campaign.executions.create!(
@@ -29,20 +31,19 @@ class JrcCampaigns::LaunchService
   attr_reader :campaign
 
   def build_recipients(execution)
-    resolver = JrcCampaigns::AudienceResolver.new(campaign)
     rotation = JrcCampaigns::RotationSelector.new(campaign)
 
-    resolver.entries.each_with_index do |entry, index|
+    campaign.review_snapshot.fetch('recipients').each_with_index do |entry, index|
       execution.recipients.create!(
         campaign: campaign,
-        contact: entry.contact,
+        contact: campaign.account.contacts.find_by(id: entry['contact_id']),
         inbox: rotation.inbox_for(index),
-        name: entry.name,
-        phone_number: entry.phone_number,
-        email: entry.email,
-        destination: entry.destination(campaign.delivery_channel),
-        source: entry.source,
-        metadata: entry.metadata
+        name: entry['name'],
+        email: entry['email'],
+        destination: entry['destination'],
+        phone_number: entry['phone_number'],
+        source: entry['source'],
+        metadata: entry['metadata']
       )
     end
 

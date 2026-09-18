@@ -1,0 +1,11 @@
+en:
+  nico_admin:
+    title: "NICO"
+    help: "Ative o NICO para esta conta e defina os limites compartilhados entre administradores e agentes. As permissões do CRM continuam sendo respeitadas."
+    enabled: "NICO habilitado"
+    monthly_run_limit: "Execuções por mês"
+    monthly_token_limit: "Tokens por mês"
+    concurrency: "Execuções simultâneas (1 a 8)"
+    save: "Salvar NICO"
+    saved: "Configuração do NICO salva."
+    invalid: "Informe limites positivos e simultaneidade entre 1 e 8."

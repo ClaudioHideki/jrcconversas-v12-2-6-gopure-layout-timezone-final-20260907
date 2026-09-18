@@ -41,6 +41,8 @@ module JrcAi
     end
 
     def activity_scope
+      return JrcCrm::Activity.none unless crm_allowed?
+
       @activity_scope ||= begin
         scope = account.jrc_crm_activities
         administrator? ? scope : scope.where(user_id: user.id)
@@ -48,6 +50,8 @@ module JrcAi
     end
 
     def lead_scope
+      return JrcCrm::Lead.none unless crm_allowed?
+
       @lead_scope ||= begin
         scope = account.jrc_crm_leads
         administrator? ? scope : scope.where(owner_id: user.id)
@@ -55,6 +59,8 @@ module JrcAi
     end
 
     def deal_scope
+      return JrcCrm::Deal.none unless crm_allowed?
+
       @deal_scope ||= begin
         scope = account.jrc_crm_deals
         administrator? ? scope : scope.where(owner_id: user.id)
@@ -115,9 +121,9 @@ module JrcAi
         email_channels: email_inbox_ids.count,
         whatsapp_channels: whatsapp_inbox_ids.count,
         unassigned_conversations: administrator? ? open_conversations.where(assignee_id: nil).count : 0,
-        calls_in_progress: 0,
-        whatsapp_calls: 0,
-        missed_calls: 0,
+        calls_in_progress: nil,
+        whatsapp_calls: nil,
+        missed_calls: nil,
         pending_tasks: pending_activities.count,
         overdue_returns: pending_activities.where(activity_type: %w[follow_up call]).where('due_at < ?', Time.current).count,
         appointments_today: pending_activities.where(due_at: Time.current.all_day).count,
@@ -255,48 +261,30 @@ module JrcAi
         busy: counts.except('online', 'offline', 'end_shift').values.sum
       }
     end
+
+    def crm_allowed?
+      account.feature_enabled?('jrc_crm')
+    end
+
     def ai_agents
-      return [] unless ai_configured?
+      return [] unless account.custom_attributes['nico_enabled'] == true
 
-      open_count = open_conversations.count
-      waiting_count = waiting_over(WAITING_ALERT_MINUTES).count
-      overdue_count = pending_activities.overdue.count
-      today_count = pending_activities.where(due_at: Time.current.all_day).count
-      commercial_count = lead_scope.active.count + deal_scope.open_deals.count
-      sla_risk = waiting_over(SLA_RISK_MINUTES).count
-
-      [
-        agent('priorities', 'IA de Prioridades', 'Analisa filas e define o que e urgente.', waiting_count.positive? ? 'attention' : 'active', "#{waiting_count} atendimento(s) em prioridade imediata", 'O que precisa da minha atencao?'),
-        agent('service', 'IA de Atendimento', 'Resume contexto e sugere respostas.', open_count.positive? ? 'active' : 'idle', "#{open_count} conversa(s) disponiveis para apoio", 'Resuma meus atendimentos em aberto'),
-        agent('quality', 'IA de Qualidade', 'Analisa sentimento, risco e qualidade.', 'ready', 'Pronta para analisar conversas e chamadas selecionadas', 'Analise a qualidade dos meus atendimentos'),
-        agent('returns', 'IA de Retorno', 'Controla retornos e compromissos.', overdue_count.positive? ? 'attention' : 'active', "#{overdue_count} retorno(s) vencido(s)", 'Organize meus retornos por prioridade'),
-        agent('commercial', 'IA Comercial', 'Detecta oportunidades e proximas acoes.', commercial_count.positive? ? 'active' : 'idle', "#{commercial_count} lead(s) e negocio(s) ativos", 'Mostre minhas oportunidades comerciais'),
-        agent('calendar', 'IA de Agenda', 'Organiza tarefas e compromissos.', today_count.positive? ? 'active' : 'idle', "#{today_count} compromisso(s) para hoje", 'Organize minha agenda de hoje'),
-        agent('sla', 'IA de SLA', 'Monitora risco de estouro.', sla_risk.positive? ? 'attention' : 'active', "#{sla_risk} atendimento(s) em risco", 'Analise o risco de SLA agora'),
-        agent('supervisor', 'IA Supervisor', 'Analisa capacidade e gargalos da equipe.', administrator? ? 'active' : 'restricted', administrator? ? "#{account.account_users.online.count} agente(s) online" : 'Disponivel para supervisores e administradores', 'Analise a operacao da equipe')
-      ]
+      JrcNico::AgentCatalog.for_account(account).map do |agent|
+        run = JrcNico::Run.where(account: account, user: user, agent_key: agent[:key], conversation_id: conversation_scope.select(:id)).order(id: :desc).first
+        agent.merge(status: run&.status || 'not_run', last_result: run ? "Última execução: #{run.status}" : 'Nenhuma análise executada.',
+                    analyzed_at: run&.finished_at&.iso8601)
+      end
     end
-
-    def agent(key, name, description, status, last_result, prompt)
-      { key: key, name: name, description: description, status: status, last_result: last_result, prompt: prompt, analyzed_at: Time.current.iso8601 }
-    end
-
-    def ai_configured?
-      account.jrc_ai_providers.enabled.any?(&:api_key_configured?)
-    rescue StandardError
-      false
-    end
-
     def usage_summary
       events = account.jrc_ai_usage_events.current_month
       {
         tokens_today: account.jrc_ai_usage_events.today.sum(:total_tokens),
         tokens_month: events.sum(:total_tokens),
-        estimated_cost_cents_month: events.sum(:estimated_cost_cents),
+        estimated_cost_cents_month: events.where("metadata @> ?", { cost_available: false }.to_json).exists? ? nil : events.sum(:estimated_cost_cents),
         providers_configured: account.jrc_ai_providers.enabled.count(&:api_key_configured?)
       }
     rescue StandardError
-      { tokens_today: 0, tokens_month: 0, estimated_cost_cents_month: 0, providers_configured: 0 }
+      { tokens_today: nil, tokens_month: nil, estimated_cost_cents_month: nil, providers_configured: nil }
     end
   end
 end

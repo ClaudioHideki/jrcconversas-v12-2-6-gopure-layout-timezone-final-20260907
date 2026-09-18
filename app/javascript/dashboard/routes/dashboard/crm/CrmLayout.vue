@@ -14,6 +14,10 @@ const navigation = [
   { name: 'crm_calendar', label: 'Agenda', icon: 'i-lucide-calendar-days', tone: 'violet' },
   { name: 'crm_products', label: 'Produtos', icon: 'i-lucide-package', tone: 'green' },
   { name: 'crm_proposals', label: 'Propostas', icon: 'i-lucide-file-signature', tone: 'rose' },
+  { name: 'crm_orders', label: 'Pedidos', icon: 'i-lucide-shopping-cart', tone: 'green' },
+  { name: 'crm_contracts', label: 'Contratos', icon: 'i-lucide-file-check-2', tone: 'blue' },
+  { name: 'crm_goals', label: 'Metas', icon: 'i-lucide-target', tone: 'cyan' },
+  { name: 'crm_commissions', label: 'Comissões', icon: 'i-lucide-badge-dollar-sign', tone: 'orange' },
 ];
 
 const activeTabClass = item => {

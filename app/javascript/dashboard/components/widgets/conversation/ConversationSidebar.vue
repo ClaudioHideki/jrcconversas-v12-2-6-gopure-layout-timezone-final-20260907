@@ -131,7 +131,7 @@ watch(() => [props.currentChat?.id, hasCrm.value], loadCrmLinks, {
       },
     ]"
   >
-    <div class="jrc-visible-scrollbar flex flex-1 flex-col overflow-y-auto">
+    <div class="flex flex-1 flex-col overflow-auto">
       <ContactPanel
         v-show="activeTab === 0"
         :conversation-id="currentChat.id"

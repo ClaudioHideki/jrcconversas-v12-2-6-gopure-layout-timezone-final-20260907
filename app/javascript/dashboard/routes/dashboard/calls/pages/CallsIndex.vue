@@ -47,18 +47,8 @@ const isVoiceEnabled = computed(
     ) && voiceInboxes.value.length > 0
 );
 
-const isCallsPreview = true;
-const previewNow = Math.floor(Date.now() / 1000);
-const previewCalls = [
-  { callId: 'preview-1', status: 'completed', direction: 'inbound', durationSeconds: 184, createdAt: previewNow - 300, messageId: 1001, recordingUrl: null, conversation: { id: 101, displayId: 101 }, inbox: { id: 1, name: 'WhatsApp Comercial', channelType: 'Channel::Whatsapp', medium: null }, agent: { id: 1, name: 'JRC ADM', avatar: '' }, contact: { id: 1, name: 'Cliente Alpha', phoneNumber: '+5511999990001', avatar: '' } },
-  { callId: 'preview-2', status: 'completed', direction: 'outbound', durationSeconds: 96, createdAt: previewNow - 900, messageId: 1002, recordingUrl: null, conversation: { id: 102, displayId: 102 }, inbox: { id: 1, name: 'WhatsApp Comercial', channelType: 'Channel::Whatsapp', medium: null }, agent: { id: 1, name: 'JRC ADM', avatar: '' }, contact: { id: 2, name: 'Mariana Souza', phoneNumber: '+5511999990002', avatar: '' } },
-  { callId: 'preview-3', status: 'no-answer', direction: 'inbound', durationSeconds: 0, createdAt: previewNow - 1800, messageId: 1003, recordingUrl: null, conversation: { id: 103, displayId: 103 }, inbox: { id: 1, name: 'WhatsApp Comercial', channelType: 'Channel::Whatsapp', medium: null }, agent: null, contact: { id: 3, name: 'Carlos Lima', phoneNumber: '+5511999990003', avatar: '' } },
-  { callId: 'preview-4', status: 'no-answer', direction: 'outbound', durationSeconds: 0, createdAt: previewNow - 3600, messageId: 1004, recordingUrl: null, conversation: { id: 104, displayId: 104 }, inbox: { id: 1, name: 'WhatsApp Comercial', channelType: 'Channel::Whatsapp', medium: null }, agent: { id: 1, name: 'JRC ADM', avatar: '' }, contact: { id: 4, name: 'Empresa Delta', phoneNumber: '+5511999990004', avatar: '' } },
-  { callId: 'preview-5', status: 'in-progress', direction: 'outbound', durationSeconds: 37, createdAt: previewNow - 60, messageId: 1005, recordingUrl: null, conversation: { id: 105, displayId: 105 }, inbox: { id: 1, name: 'WhatsApp Comercial', channelType: 'Channel::Whatsapp', medium: null }, agent: { id: 1, name: 'JRC ADM', avatar: '' }, contact: { id: 5, name: 'Fernanda Rocha', phoneNumber: '+5511999990005', avatar: '' } },
-];
-const previewMeta = { count: 5, currentPage: 1, totalPages: 1, summary: { total: 5, answered: 2, missed: 1, noReply: 1 } };
-const calls = computed(() => isCallsPreview ? previewCalls : callHistoryStore.records);
-const meta = computed(() => isCallsPreview ? previewMeta : callHistoryStore.meta);
+const calls = computed(() => callHistoryStore.records);
+const meta = computed(() => callHistoryStore.meta);
 const isFetching = computed(() => callHistoryStore.uiFlags.isFetching);
 const accountUiFlags = useMapGetter('accounts/getUIFlags');
 
@@ -134,7 +124,7 @@ onMounted(async () => {
   >
     <Spinner :size="24" />
   </div>
-  <CallsEmptyState v-else-if="!isVoiceEnabled && !isCallsPreview" />
+  <CallsEmptyState v-else-if="!isVoiceEnabled" />
   <section
     v-else
     class="jrc-visible-scrollbar flex h-full w-full flex-col overflow-y-auto" style="background:linear-gradient(135deg,#eff6ff 0%,#ffffff 48%,#f8fafc 100%)"

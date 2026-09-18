@@ -1,4 +1,4 @@
-name: Build GoPure - Contatos e Leads
+name: Build GoPure e NICO Runtime
 
 on:
   push:
@@ -11,8 +11,81 @@ env:
   IMAGE_NAME: claudiohideki/jrcconversas-v12-2-6-gopure-layout-timezone-final-20260907
 
 jobs:
-  build-and-push:
+  validate:
+    name: Validar GoPure e NICO
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      RAILS_ENV: test
+      NODE_ENV: test
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_USERNAME: postgres
+      POSTGRES_PASSWORD: qa-only
+      POSTGRES_DATABASE: gopure_nico_ci
+      REDIS_URL: redis://127.0.0.1:6379/0
+      SECRET_KEY_BASE: isolated-gopure-nico-ci-secret-not-for-production
+      NICO_MODE: fixture
+      FRONTEND_URL: http://localhost:3000
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: qa-only
+          POSTGRES_DB: gopure_nico_ci
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7.4.0-alpine
+        ports: ['6379:6379']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar bibliotecas do sistema
+        run: sudo apt-get update -qq && sudo apt-get install -y libvips-dev
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.2.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.13.0
+          cache: pnpm
+      - name: Instalar frontend
+        run: pnpm install --frozen-lockfile
+      - name: Preparar banco exclusivo de CI
+        run: bundle exec rails db:schema:load
+      - name: Testar backend e permissoes
+        run: >-
+          bundle exec ruby scripts/nico-specs.rb
+          spec/jobs/jrc_nico spec/requests/jrc_nico*
+          spec/services/jrc_nico spec/services/jrc_ai/nico_readiness_spec.rb
+          spec/services/jrc_campaigns/governance_spec.rb
+          spec/requests/api/v1/accounts/jrc_campaigns/governance_spec.rb
+          spec/requests/api/v1/accounts/crm/contact_leads_spec.rb
+          spec/requests/api/v1/accounts/contacts_pagination_spec.rb
+          spec/controllers/super_admin/accounts_controller_spec.rb
+      - name: Testar interface NICO
+        run: pnpm exec vitest run --config vitest.nico.config.ts
+      - name: Compilar e testar runtime
+        working-directory: services/nico-runtime
+        run: npm ci --include=dev && npm run build && npm test
+  build-and-push:
+    needs: validate
+    name: Publicar ${{ matrix.component }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: app
+            dockerfile: ./docker/Dockerfile
+            tag: 4.16.2-gopure-nico-20260918-r1
+          - component: runtime
+            dockerfile: ./docker/nico-runtime.Dockerfile
+            tag: nico-runtime-gopure-20260918-r1
 
     permissions:
       contents: read
@@ -37,19 +110,19 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: latest=false
           tags: |
-            type=raw,value=4.16.2-jrc-v12.2.6-gopure-contatos-leads-20260917
-            type=sha,prefix=sha-
+            type=raw,value=${{ matrix.tag }}
+            type=sha,prefix=${{ matrix.component }}-sha-
 
       - name: Construir e publicar imagem
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./docker/Dockerfile
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-
+          cache-from: type=gha,scope=gopure-${{ matrix.component }}
+          cache-to: type=gha,scope=gopure-${{ matrix.component }},mode=max

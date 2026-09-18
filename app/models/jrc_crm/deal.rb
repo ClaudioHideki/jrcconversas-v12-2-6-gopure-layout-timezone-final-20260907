@@ -23,6 +23,7 @@
 #  created_at                  :datetime         not null
 #  updated_at                  :datetime         not null
 #  account_id                  :integer          not null
+#  business_unit_id            :bigint
 #  company_id                  :bigint
 #  contact_id                  :integer
 #  lead_id                     :bigint
@@ -39,6 +40,7 @@
 #  idx_jrc_crm_deals_account_conversion      (account_id,conversion_key) UNIQUE WHERE (conversion_key IS NOT NULL)
 #  idx_jrc_crm_deals_legacy_sales            (account_id,legacy_sales_opportunity_id) UNIQUE WHERE (legacy_sales_opportunity_id IS NOT NULL)
 #  index_jrc_crm_deals_on_account_id         (account_id)
+#  index_jrc_crm_deals_on_business_unit_id   (business_unit_id)
 #  index_jrc_crm_deals_on_company_id         (company_id)
 #  index_jrc_crm_deals_on_expected_close_at  (expected_close_at)
 #  index_jrc_crm_deals_on_lead_id            (lead_id)
@@ -52,6 +54,7 @@
 # Foreign Keys
 #
 #  fk_rails_...  (account_id => accounts.id)
+#  fk_rails_...  (business_unit_id => jrc_crm_business_units.id)
 #  fk_rails_...  (contact_id => contacts.id)
 #  fk_rails_...  (lead_id => jrc_crm_leads.id)
 #  fk_rails_...  (lost_reason_id => jrc_crm_lost_reasons.id)
@@ -80,6 +83,8 @@ module JrcCrm
     has_many :deal_products, class_name: 'JrcCrm::DealProduct', dependent: :destroy
     has_many :products, through: :deal_products
     has_many :proposals, class_name: 'JrcCrm::Proposal', dependent: :destroy
+    has_many :sales_orders, class_name: 'JrcCrm::SalesOrder', dependent: :restrict_with_error
+    has_many :contracts, class_name: 'JrcCrm::Contract', dependent: :restrict_with_error
     has_many :activities, class_name: 'JrcCrm::Activity', foreign_key: :deal_id, dependent: :destroy
     has_many :follow_ups, class_name: 'JrcCrm::FollowUp', foreign_key: :deal_id, dependent: :destroy
     has_many :deal_conversations, class_name: 'JrcCrm::DealConversation', foreign_key: :deal_id, dependent: :destroy

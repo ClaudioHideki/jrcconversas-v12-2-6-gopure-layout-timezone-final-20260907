@@ -65,6 +65,8 @@ module Filters::FilterHelper
       date_filter(current_filter, query_hash, filter_operator_value)
     when 'labels'
       tag_filter_query(query_hash, current_index)
+    when 'channel'
+      channel_type_filter_query(query_hash, current_index)
     when 'text_case_insensitive'
       text_case_insensitive_filter(query_hash, filter_operator_value)
     else
@@ -77,6 +79,13 @@ module Filters::FilterHelper
   def date_filter(current_filter, query_hash, filter_operator_value)
     "(#{filter_config[:table_name]}.#{query_hash[:attribute_key]})::#{current_filter['data_type']} " \
       "#{filter_operator_value} #{query_hash[:query_operator]}"
+  end
+
+  def channel_type_filter_query(query_hash, current_index)
+    query_operator = query_hash[:query_operator]
+    negated = query_hash[:filter_operator] == 'not_equal_to'
+    predicate = negated ? 'NOT IN' : 'IN'
+    "#{filter_config[:table_name]}.inbox_id #{predicate} (SELECT inboxes.id FROM inboxes WHERE inboxes.account_id = #{@account.id.to_i} AND inboxes.channel_type IN (:value_#{current_index})) #{query_operator}"
   end
 
   def text_case_insensitive_filter(query_hash, filter_operator_value)

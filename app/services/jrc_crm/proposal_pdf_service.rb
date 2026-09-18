@@ -3,9 +3,10 @@ module JrcCrm
   class ProposalPdfService
     PAGE_WIDTH = 595.28
     PAGE_HEIGHT = 841.89
-    BLUE = [0.027, 0.196, 0.357].freeze
-    BLUE_2 = [0.035, 0.357, 0.650].freeze
-    LIGHT_BLUE = [0.925, 0.958, 0.985].freeze
+    GREEN = [0.055, 0.337, 0.231].freeze
+    GREEN_2 = [0.070, 0.404, 0.278].freeze
+    LIGHT_GREEN = [0.925, 0.965, 0.940].freeze
+    GOLD = [0.720, 0.565, 0.278].freeze
     TEXT = [0.075, 0.125, 0.180].freeze
     MUTED = [0.38, 0.43, 0.49].freeze
     WHITE = [1, 1, 1].freeze
@@ -30,21 +31,27 @@ module JrcCrm
     def build_cover
       page = Page.new
       page.fill_rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, WHITE)
-      page.fill_rect(0, 0, 12, PAGE_HEIGHT, BLUE_2)
-      page.logo(430, 690, 105, 105)
-      page.text(48, 742, 'JRC Conversas', size: 13, bold: true, color: BLUE)
-      page.text(48, 705, 'PROPOSTA COMERCIAL', size: 11, bold: true, color: BLUE_2)
-      page.text(48, 682, "#{@proposal.proposal_number} | VERSÃO #{@proposal.version_number}", size: 9, bold: true, color: MUTED)
-      page.multiline(48, 625, @proposal.title, size: 29, bold: true, color: BLUE, width_chars: 30, leading: 36)
-      page.multiline(48, 535, @proposal.solution_description.presence || 'Solução comercial integrada para atendimento, relacionamento e resultados.', size: 14, color: MUTED, width_chars: 62, leading: 21)
-      page.line(48, 455, 535, 455, color: BLUE_2, width: 2)
-      page.text(48, 418, 'Preparado para', size: 9, bold: true, color: MUTED)
-      page.text(48, 395, customer_name, size: 17, bold: true, color: TEXT)
-      page.text(48, 360, 'Validade', size: 9, bold: true, color: MUTED)
-      page.text(48, 339, valid_until_text, size: 13, bold: true, color: TEXT)
-      page.text(220, 360, 'Vigência', size: 9, bold: true, color: MUTED)
-      page.text(220, 339, "#{@proposal.term_months} meses", size: 13, bold: true, color: TEXT)
-      page.text(48, 64, "JRC | #{customer_name.upcase}", size: 8, bold: true, color: MUTED)
+      page.fill_rect(0, 0, 12, PAGE_HEIGHT, GREEN)
+      page.logo(390, 710, 150, 46)
+      page.text(48, 748, 'SUPLEMENTOS PREMIUM', size: 10, bold: true, color: GREEN)
+      page.text(48, 650, 'PROPOSTA COMERCIAL', size: 11, bold: true, color: GREEN_2)
+      page.multiline(48, 615, @proposal.title, size: 28, bold: true, color: GREEN, width_chars: 34, leading: 34)
+      page.multiline(48, 525, @proposal.solution_description.presence || 'Seleção de produtos e condições comerciais para formalização do pedido.', size: 12.5, color: MUTED, width_chars: 66, leading: 19)
+      page.fill_rect(48, 478, 245, 4, GREEN)
+      page.fill_rect(293, 478, 242, 4, GOLD)
+
+      page.fill_rect(48, 325, 487, 124, LIGHT_GREEN)
+      page.text(64, 422, 'PREPARADO PARA', size: 8, bold: true, color: MUTED)
+      page.text(64, 397, customer_name, size: 15, bold: true, color: TEXT)
+      page.text(308, 422, 'PROPOSTA', size: 8, bold: true, color: MUTED)
+      page.text(308, 397, @proposal.proposal_number, size: 15, bold: true, color: TEXT)
+      page.text(64, 362, 'VALIDADE', size: 8, bold: true, color: MUTED)
+      page.text(64, 340, valid_until_text, size: 11, color: TEXT)
+      page.text(308, 362, 'RESPONSÁVEL COMERCIAL', size: 8, bold: true, color: MUTED)
+      page.text(308, 340, proposal_owner_name, size: 11, bold: true, color: TEXT)
+
+      page.text(48, 64, 'Saúde hoje. Mais vida amanhã.', size: 8, color: MUTED)
+      page.text(432, 64, 'gopure.com.br', size: 8, bold: true, color: GREEN)
       @pages << page
     end
 
@@ -57,13 +64,13 @@ module JrcCrm
         page = standard_page(index.zero? ? 'Solução e investimento' : 'Continuação dos produtos')
         y = 744
         if index.zero?
-          page.text(48, y, 'Descrição da solução', size: 11, bold: true, color: BLUE_2)
+          page.text(48, y, 'Descrição da solução', size: 11, bold: true, color: GREEN_2)
           y -= 28
           y = page.multiline(48, y, @proposal.solution_description.presence || 'Solução comercial JRC conforme escopo do negócio.', size: 11, color: TEXT, width_chars: 82, leading: 16)
           y -= 24
         end
 
-        page.text(48, y, 'Produtos e serviços', size: 11, bold: true, color: BLUE_2)
+        page.text(48, y, 'Produtos e serviços', size: 11, bold: true, color: GREEN_2)
         y -= 22
         draw_items_table(page, chunk, y)
         @pages << page
@@ -71,63 +78,92 @@ module JrcCrm
     end
 
     def build_commercial_conditions
-      page = standard_page('Condições comerciais')
-      y = 744
+      page = standard_page('Condições do pedido')
+      y = 726
 
-      page.fill_rect(48, y - 92, 499, 92, LIGHT_BLUE)
-      page.text(66, y - 25, 'Mensalidade', size: 9, bold: true, color: MUTED)
-      page.text(66, y - 53, money(@proposal.monthly_cents), size: 19, bold: true, color: BLUE)
-      page.text(280, y - 25, 'Implantação', size: 9, bold: true, color: MUTED)
-      page.text(280, y - 53, money(@proposal.implementation_cents), size: 19, bold: true, color: BLUE)
-      y -= 126
-
-      page.text(48, y, 'Resumo da proposta', size: 11, bold: true, color: BLUE_2)
-      y -= 27
-      y = commercial_row(page, y, 'Implantação', money(@proposal.implementation_cents))
-      y = commercial_row(page, y, 'Recorrência mensal', money(@proposal.monthly_cents))
-      item_discount = @proposal.item_discount_cents
-      y = commercial_row(page, y, 'Descontos nos itens', "- #{money(item_discount)}") if item_discount.positive?
-      y = commercial_row(page, y, 'Desconto comercial adicional', "- #{money(@proposal.effective_general_discount_cents)}") if @proposal.effective_general_discount_cents.positive?
-      y = commercial_row(page, y, 'Total no primeiro mês', money(@proposal.total_cents), bold: true)
-      y -= 18
-
-      page.text(48, y, 'Validade e condições', size: 11, bold: true, color: BLUE_2)
-      y -= 25
-      page.text(48, y, "Validade: #{valid_until_text} | Vigência: #{@proposal.term_months} meses", size: 9.5, color: TEXT)
-      y -= 18
-      page.text(48, y, "Pagamento: #{@proposal.payment_method.presence || 'A definir'} | Vencimento: #{@proposal.billing_day.presence || 'A definir'}", size: 9.5, color: TEXT)
-      y -= 18
-      page.text(48, y, "Impostos: #{@proposal.taxes_included? ? 'inclusos' : 'não inclusos'} | Reajuste: #{@proposal.annual_adjustment_index.presence || 'A definir'}", size: 9.5, color: TEXT)
-      y -= 18
-      page.text(48, y, "Renovação: #{renewal_label} | Multa de cancelamento: #{percentage(@proposal.cancellation_penalty_percent)}", size: 9.5, color: TEXT)
-      y -= 38
-
-      page.text(48, y, 'Observações comerciais', size: 11, bold: true, color: BLUE_2)
-      y -= 23
-      y = page.multiline(48, y, @proposal.commercial_notes.presence || 'Condições sujeitas à validação comercial e técnica. Consumos variáveis e excedentes são faturados conforme utilização.', size: 10, color: TEXT, width_chars: 88, leading: 15)
+      page.text(48, y, 'Resumo comercial', size: 12, bold: true, color: GREEN_2)
       y -= 28
+      y = commercial_row(page, y, 'Produtos / serviços', money(@proposal.total_cents), bold: false)
+      if @proposal.shipping_mode == 'included'
+        y = commercial_row(page, y, 'Frete', 'Incluso')
+      elsif @proposal.shipping_mode == 'separate' && @proposal.shipping_cents.to_i.positive?
+        y = commercial_row(page, y, 'Frete', money(@proposal.shipping_cents))
+      end
+      y = commercial_row(page, y, 'Total da contratação', money(@proposal.contract_total_cents), bold: true)
+      y -= 16
 
-      page.text(48, y, 'Próximos passos', size: 11, bold: true, color: BLUE_2)
-      y -= 23
-      page.multiline(48, y, @proposal.next_steps.presence || "1. Aprovação comercial\n2. Alinhamento técnico\n3. Implantação e homologação\n4. Início da operação", size: 10, color: TEXT, width_chars: 88, leading: 17)
+      page.text(48, y, 'Condição de pagamento', size: 12, bold: true, color: GREEN_2)
+      y -= 25
+      y = commercial_row(page, y, 'Modalidade', payment_condition_label)
+      if @proposal.payment_condition == 'down_payment_installments'
+        y = commercial_row(page, y, 'Entrada', money(@proposal.down_payment_cents))
+        y = commercial_row(page, y, 'Saldo', money(payment_balance_cents))
+      end
+      y = commercial_row(page, y, 'Parcelamento', installment_plan_label) if @proposal.payment_condition != 'cash'
+      y = commercial_row(page, y, 'Forma de pagamento', payment_method_label)
+      if @proposal.shipping_mode == 'separate'
+        y = commercial_row(page, y, 'Frete no parcelamento', @proposal.shipping_in_installments? ? 'Sim' : 'Não')
+      end
+      y -= 16
+
+      if @proposal.has_monthly_fee?
+        page.text(48, y, 'Recorrência', size: 12, bold: true, color: GREEN_2)
+        y -= 25
+        y = commercial_row(page, y, 'Mensalidade', "#{money(@proposal.monthly_cents)}/mês")
+        y = commercial_row(page, y, 'Vigência', "#{@proposal.term_months} meses")
+        y -= 14
+      end
+
+      page.text(48, y, 'Observações comerciais', size: 12, bold: true, color: GREEN_2)
+      y -= 22
+      y = page.multiline(48, y, @proposal.commercial_notes.presence || 'Condições sujeitas à validação comercial, cadastral e operacional.', size: 9.2, color: TEXT, width_chars: 92, leading: 14)
+      y -= 20
+
+      page.text(48, y, 'Fluxo para conclusão', size: 12, bold: true, color: GREEN_2)
+      y -= 24
+      flow = [
+        ['1', 'Aprovação', 'Confirmação dos produtos, quantidades, valores, frete e condições comerciais.'],
+        ['2', 'Cadastro e crédito', 'Validação cadastral e, quando aplicável, análise de crédito para pagamento parcelado ou em boleto.'],
+        ['3', 'Pagamento', payment_flow_text],
+        ['4', 'Separação e entrega', 'Confirmação da disponibilidade, faturamento e programação da entrega conforme a condição de frete acordada.']
+      ]
+      flow.each do |number, title, description|
+        page.fill_rect(48, y - 34, 30, 34, GREEN)
+        page.text(60, y - 22, number, size: 10, bold: true, color: WHITE)
+        page.text(88, y - 18, title, size: 8.8, bold: true, color: TEXT)
+        page.multiline(190, y - 13, description, size: 7.8, color: TEXT, width_chars: 56, leading: 10)
+        page.line(48, y - 34, 547, y - 34, color: BORDER, width: 0.5)
+        y -= 38
+      end
+      y -= 10
+      page.text(48, y, 'Aceite comercial', size: 12, bold: true, color: GREEN_2)
+      y -= 22
+      page.multiline(48, y, 'Ao aprovar esta proposta, o cliente declara estar de acordo com os itens, quantidades, valores e condições comerciais aqui apresentados, ressalvadas as confirmações cadastrais e operacionais previstas.', size: 8.5, color: TEXT, width_chars: 94, leading: 13)
+      y -= 55
+      page.line(48, y, 270, y, color: MUTED, width: 0.6)
+      page.line(315, y, 537, y, color: MUTED, width: 0.6)
+      page.text(48, y - 18, customer_name, size: 8, bold: true, color: TEXT)
+      page.text(315, y - 18, "GoPure - #{proposal_owner_name}", size: 8, bold: true, color: TEXT)
       @pages << page
     end
 
     def standard_page(title)
       page = Page.new
       page.fill_rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, WHITE)
-      page.fill_rect(0, 0, 8, PAGE_HEIGHT, BLUE_2)
-      page.logo(470, 770, 68, 52)
-      page.text(48, 790, title, size: 22, bold: true, color: BLUE)
-      page.line(48, 770, 547, 770, color: BLUE_2, width: 1.4)
-      page.text(48, 40, "JRC | #{customer_name.upcase}", size: 8, bold: true, color: MUTED)
+      page.fill_rect(0, 0, 10, PAGE_HEIGHT, GREEN)
+      page.logo(420, 772, 120, 36)
+      page.text(48, 796, 'GOPURE | PROPOSTA COMERCIAL DE PRODUTOS', size: 8, bold: true, color: GREEN)
+      page.text(48, 770, title, size: 20, bold: true, color: GREEN)
+      page.line(48, 755, 547, 755, color: GREEN_2, width: 1)
+      page.text(48, 38, 'Saúde hoje. Mais vida amanhã.', size: 7.2, color: MUTED)
+      page.text(405, 38, "#{@proposal.proposal_number} | #{customer_name.upcase}", size: 6.8, bold: true, color: MUTED)
       page
     end
 
     def draw_items_table(page, items, y)
       widths = [150, 62, 35, 64, 57, 57, 74]
       x = 48
-      page.fill_rect(x, y - 28, widths.sum, 28, BLUE_2)
+      page.fill_rect(x, y - 28, widths.sum, 28, GREEN_2)
       headers = ['Produto / Serviço', 'Cobrança', 'Qtd.', 'Preço', 'Setup', 'Desc.', 'Total inicial']
       cx = x
       headers.each_with_index do |header, idx|
@@ -169,14 +205,14 @@ module JrcCrm
     end
 
     def commercial_row(page, y, label, value, bold: false)
-      page.text(58, y, label, size: bold ? 11 : 10, bold: bold, color: bold ? BLUE : TEXT)
-      page.text(380, y, value, size: bold ? 11 : 10, bold: bold, color: bold ? BLUE : TEXT)
+      page.text(58, y, label, size: bold ? 11 : 10, bold: bold, color: bold ? GREEN : TEXT)
+      page.text(380, y, value, size: bold ? 11 : 10, bold: bold, color: bold ? GREEN : TEXT)
       page.line(48, y - 10, 547, y - 10, color: BORDER, width: 0.5)
       y - 29
     end
 
     def logo_data
-      path = Rails.root.join('public', 'brand-assets', 'logo-jrc.png')
+      path = Rails.root.join('public', 'brand-assets', 'gopure-brand-header.png')
       return nil unless File.exist?(path)
 
       image = MiniMagick::Image.open(path.to_s)
@@ -199,6 +235,39 @@ module JrcCrm
 
     def valid_until_text
       (@proposal.valid_until || 15.days.from_now.to_date).strftime('%d/%m/%Y')
+    end
+
+    def payment_condition_label
+      { 'cash' => 'À vista', 'down_payment_installments' => 'Entrada + parcelas', 'installments' => 'Parcelado sem entrada' }.fetch(@proposal.payment_condition, @proposal.payment_condition.presence || 'A definir')
+    end
+
+    def payment_flow_text
+      case @proposal.payment_condition
+      when 'cash' then 'Pagamento integral conforme a forma de pagamento definida na proposta.'
+      when 'down_payment_installments' then "Pagamento da entrada e do saldo em #{@proposal.installments_count} parcela(s), conforme as condições desta proposta."
+      else "Pagamento em #{@proposal.installments_count} parcela(s), conforme as condições desta proposta."
+      end
+    end
+
+    def proposal_owner_name
+      @proposal.owner&.name.presence || @deal.owner&.name.presence || 'Equipe GoPure'
+    end
+
+    def payment_method_label
+      { 'boleto' => 'Boleto', 'pix' => 'PIX', 'transferencia' => 'Transferência', 'cartao' => 'Cartão' }.fetch(@proposal.payment_method.to_s, @proposal.payment_method.presence || 'A definir')
+    end
+
+    def payment_balance_cents
+      [@proposal.payable_base_cents - @proposal.down_payment_cents.to_i, 0].max
+    end
+
+    def installment_plan_label
+      values = @proposal.installment_plan_cents
+      return 'Não se aplica' if values.empty?
+      groups = values.tally
+      return "#{values.size} x #{money(values.first)}" if groups.size == 1
+
+      groups.map { |value, quantity| "#{quantity} x #{money(value)}" }.join(' + ')
     end
 
     def billing_label(value)

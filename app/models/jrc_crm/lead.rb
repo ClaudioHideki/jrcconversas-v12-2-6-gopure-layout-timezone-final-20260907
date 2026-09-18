@@ -19,6 +19,7 @@
 #  created_at        :datetime         not null
 #  updated_at        :datetime         not null
 #  account_id        :integer          not null
+#  business_unit_id  :bigint
 #  contact_id        :integer
 #  conversation_id   :integer
 #  owner_id          :integer          not null
@@ -26,19 +27,21 @@
 #
 # Indexes
 #
-#  idx_jrc_crm_leads_account_idempotency   (account_id,idempotency_key) UNIQUE WHERE (idempotency_key IS NOT NULL)
-#  index_jrc_crm_leads_on_account_id       (account_id)
-#  index_jrc_crm_leads_on_contact_id       (contact_id)
-#  index_jrc_crm_leads_on_conversation_id  (conversation_id)
-#  index_jrc_crm_leads_on_email            (email)
-#  index_jrc_crm_leads_on_owner_id         (owner_id)
-#  index_jrc_crm_leads_on_phone            (phone)
-#  index_jrc_crm_leads_on_status           (status)
-#  index_jrc_crm_leads_on_team_id          (team_id)
+#  idx_jrc_crm_leads_account_idempotency    (account_id,idempotency_key) UNIQUE WHERE (idempotency_key IS NOT NULL)
+#  index_jrc_crm_leads_on_account_id        (account_id)
+#  index_jrc_crm_leads_on_business_unit_id  (business_unit_id)
+#  index_jrc_crm_leads_on_contact_id        (contact_id)
+#  index_jrc_crm_leads_on_conversation_id   (conversation_id)
+#  index_jrc_crm_leads_on_email             (email)
+#  index_jrc_crm_leads_on_owner_id          (owner_id)
+#  index_jrc_crm_leads_on_phone             (phone)
+#  index_jrc_crm_leads_on_status            (status)
+#  index_jrc_crm_leads_on_team_id           (team_id)
 #
 # Foreign Keys
 #
 #  fk_rails_...  (account_id => accounts.id)
+#  fk_rails_...  (business_unit_id => jrc_crm_business_units.id)
 #  fk_rails_...  (contact_id => contacts.id)
 #  fk_rails_...  (conversation_id => conversations.id)
 #  fk_rails_...  (owner_id => users.id)

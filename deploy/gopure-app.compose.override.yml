@@ -1,0 +1,15 @@
+# Fragmento para MESCLAR no compose existente: preserve DB, Redis, volumes,
+# domínios, labels e demais variáveis. Ajuste rails/sidekiq aos nomes atuais.
+services:
+  rails:
+    image: ghcr.io/claudiohideki/jrcconversas-v12-2-6-gopure-layout-timezone-final-20260907:4.16.2-gopure-nico-20260918-r1
+    environment:
+      NICO_MODE: provider
+      NICO_RUNTIME_URL: http://gopure-nico-runtime:3108
+      NICO_SERVICE_TOKEN: ${NICO_SERVICE_TOKEN:?Use o mesmo token novo do runtime GoPure}
+  sidekiq:
+    image: ghcr.io/claudiohideki/jrcconversas-v12-2-6-gopure-layout-timezone-final-20260907:4.16.2-gopure-nico-20260918-r1
+    environment:
+      NICO_MODE: provider
+      NICO_RUNTIME_URL: http://gopure-nico-runtime:3108
+      NICO_SERVICE_TOKEN: ${NICO_SERVICE_TOKEN:?Use o mesmo token novo do runtime GoPure}

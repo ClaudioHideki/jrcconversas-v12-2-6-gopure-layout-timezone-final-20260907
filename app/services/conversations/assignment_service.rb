@@ -14,6 +14,8 @@ class Conversations::AssignmentService
   attr_reader :conversation, :assignee_id, :assignee_type
 
   def assign_agent
+    JrcNico::DelegationService.stop(conversation, reason: 'assignment_changed')
+    conversation.reload
     conversation.assignee = assignee
     conversation.assignee_agent_bot = nil
     conversation.save!

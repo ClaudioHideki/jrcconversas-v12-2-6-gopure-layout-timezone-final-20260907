@@ -51,17 +51,20 @@
 #  created_at                   :datetime         not null
 #  updated_at                   :datetime         not null
 #  account_id                   :integer          not null
+#  business_unit_id             :bigint
 #
 # Indexes
 #
-#  idx_jrc_crm_products_account_billing  (account_id,billing_model)
-#  idx_jrc_crm_products_account_sku      (account_id,sku)
-#  idx_jrc_crm_products_account_type     (account_id,product_type)
-#  index_jrc_crm_products_on_account_id  (account_id)
+#  idx_jrc_crm_products_account_billing        (account_id,billing_model)
+#  idx_jrc_crm_products_account_sku            (account_id,sku)
+#  idx_jrc_crm_products_account_type           (account_id,product_type)
+#  index_jrc_crm_products_on_account_id        (account_id)
+#  index_jrc_crm_products_on_business_unit_id  (business_unit_id)
 #
 # Foreign Keys
 #
 #  fk_rails_...  (account_id => accounts.id)
+#  fk_rails_...  (business_unit_id => jrc_crm_business_units.id)
 #
 module JrcCrm
   class Product < ApplicationRecord

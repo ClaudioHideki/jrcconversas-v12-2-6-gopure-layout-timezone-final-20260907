@@ -1,0 +1,57 @@
+# == Schema Information
+#
+# Table name: jrc_crm_sales_commissions
+#
+#  id                    :bigint           not null, primary key
+#  base_cents            :bigint           default(0), not null
+#  commission_cents      :bigint           default(0), not null
+#  notes                 :text
+#  paid_at               :datetime
+#  rate_percent          :decimal(7, 3)    default(0.0), not null
+#  released_at           :datetime
+#  status                :string           default("forecast"), not null
+#  created_at            :datetime         not null
+#  updated_at            :datetime         not null
+#  account_id            :bigint           not null
+#  business_unit_id      :bigint
+#  commission_program_id :bigint
+#  sales_order_id        :bigint           not null
+#  user_id               :bigint           not null
+#
+# Indexes
+#
+#  idx_jrc_crm_commission_unique                             (account_id,sales_order_id,user_id) UNIQUE
+#  index_jrc_crm_sales_commissions_on_account_id             (account_id)
+#  index_jrc_crm_sales_commissions_on_business_unit_id       (business_unit_id)
+#  index_jrc_crm_sales_commissions_on_commission_program_id  (commission_program_id)
+#  index_jrc_crm_sales_commissions_on_sales_order_id         (sales_order_id)
+#  index_jrc_crm_sales_commissions_on_user_id                (user_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (account_id => accounts.id)
+#  fk_rails_...  (business_unit_id => jrc_crm_business_units.id)
+#  fk_rails_...  (commission_program_id => jrc_crm_commission_programs.id)
+#  fk_rails_...  (sales_order_id => jrc_crm_sales_orders.id)
+#  fk_rails_...  (user_id => users.id)
+#
+module JrcCrm
+  class SalesCommission < ApplicationRecord
+    self.table_name = 'jrc_crm_sales_commissions'
+    belongs_to :account
+    belongs_to :sales_order, class_name: 'JrcCrm::SalesOrder'
+    belongs_to :user
+    enum status: { forecast: 'forecast', released: 'released', paid: 'paid', reversed: 'reversed' }
+    before_validation :calculate_amount
+    validates :rate_percent, numericality: { greater_than_or_equal_to: 0 }
+    validate :associations_belong_to_account
+    def calculate_amount
+      self.commission_cents = (base_cents.to_i * rate_percent.to_d / 100).round
+    end
+
+    def associations_belong_to_account
+      errors.add(:sales_order, 'must belong to account') if sales_order && sales_order.account_id != account_id
+      errors.add(:user, 'must belong to account') if user && !account.users.exists?(user.id)
+    end
+  end
+end

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
+ActiveRecord::Schema[7.1].define(version: 2026_09_18_130000) do
   # These extensions should be enabled to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -1147,6 +1147,20 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.index ["created_by_id"], name: "index_jrc_campaign_blacklists_on_created_by_id"
   end
 
+  create_table "jrc_campaign_consents", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "recorded_by_id", null: false
+    t.string "phone_number", null: false
+    t.text "evidence", null: false
+    t.datetime "granted_at", null: false
+    t.datetime "revoked_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "phone_number"], name: "index_jrc_campaign_consents_active_phone", unique: true, where: "(revoked_at IS NULL)"
+    t.index ["account_id"], name: "index_jrc_campaign_consents_on_account_id"
+    t.index ["recorded_by_id"], name: "index_jrc_campaign_consents_on_recorded_by_id"
+  end
+
   create_table "jrc_campaign_deliveries", force: :cascade do |t|
     t.bigint "recipient_id", null: false
     t.bigint "step_id", null: false
@@ -1233,8 +1247,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.integer "conversation_id"
     t.string "name"
     t.string "phone_number"
-    t.string "email"
-    t.string "destination", null: false
     t.string "source", default: "contact", null: false
     t.string "status", default: "queued", null: false
     t.datetime "scheduled_at"
@@ -1247,8 +1259,10 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.jsonb "metadata", default: {}, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["campaign_id", "phone_number"], name: "index_jrc_campaign_recipients_on_campaign_id_and_phone_number"
+    t.string "email"
+    t.string "destination", null: false
     t.index ["campaign_id", "email"], name: "index_jrc_campaign_recipients_on_campaign_id_and_email"
+    t.index ["campaign_id", "phone_number"], name: "index_jrc_campaign_recipients_on_campaign_id_and_phone_number"
     t.index ["campaign_id"], name: "index_jrc_campaign_recipients_on_campaign_id"
     t.index ["contact_id"], name: "index_jrc_campaign_recipients_on_contact_id"
     t.index ["conversation_id"], name: "index_jrc_campaign_recipients_on_conversation_id"
@@ -1264,15 +1278,15 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.string "name"
     t.string "phone_number"
     t.string "normalized_phone"
-    t.string "email"
-    t.string "normalized_email"
     t.string "status", default: "valid", null: false
     t.string "reason"
     t.jsonb "metadata", default: {}, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["sanitized_list_id", "normalized_phone"], name: "idx_on_sanitized_list_id_normalized_phone_b94ac446e9"
+    t.string "email"
+    t.string "normalized_email"
     t.index ["sanitized_list_id", "normalized_email"], name: "idx_jrc_sanitized_entries_list_email"
+    t.index ["sanitized_list_id", "normalized_phone"], name: "idx_on_sanitized_list_id_normalized_phone_b94ac446e9"
     t.index ["sanitized_list_id", "status"], name: "idx_on_sanitized_list_id_status_b19511a848"
     t.index ["sanitized_list_id"], name: "index_jrc_campaign_sanitized_entries_on_sanitized_list_id"
   end
@@ -1295,8 +1309,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.text "body", default: "", null: false
     t.string "media_url"
     t.string "file_name"
-    t.string "subject"
-    t.bigint "media_asset_id"
     t.string "template_name"
     t.string "template_namespace"
     t.string "template_language"
@@ -1307,6 +1319,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.integer "follow_up_after_hours"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "subject"
+    t.bigint "media_asset_id"
     t.index ["campaign_id", "position"], name: "index_jrc_campaign_steps_on_campaign_id_and_position"
     t.index ["campaign_id"], name: "index_jrc_campaign_steps_on_campaign_id"
     t.index ["media_asset_id"], name: "index_jrc_campaign_steps_on_media_asset_id"
@@ -1321,7 +1335,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.string "trigger_type", default: "manual", null: false
     t.datetime "scheduled_at"
     t.string "audience_type", default: "all_contacts", null: false
-    t.string "delivery_channel", default: "whatsapp", null: false
     t.jsonb "audience_config", default: {}, null: false
     t.text "message_body", default: "", null: false
     t.jsonb "metadata", default: {}, null: false
@@ -1346,10 +1359,18 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.integer "clicked_count", default: 0, null: false
     t.datetime "last_execution_at"
     t.text "last_error"
-    t.index ["account_id", "scheduled_at"], name: "index_jrc_campaigns_on_account_id_and_scheduled_at"
+    t.string "delivery_channel", default: "whatsapp", null: false
+    t.jsonb "review_snapshot"
+    t.string "review_digest"
+    t.string "approved_digest"
+    t.datetime "approved_at"
+    t.datetime "approval_expires_at"
+    t.bigint "approved_by_id"
     t.index ["account_id", "delivery_channel"], name: "index_jrc_campaigns_on_account_id_and_delivery_channel"
+    t.index ["account_id", "scheduled_at"], name: "index_jrc_campaigns_on_account_id_and_scheduled_at"
     t.index ["account_id", "status"], name: "index_jrc_campaigns_on_account_id_and_status"
     t.index ["account_id"], name: "index_jrc_campaigns_on_account_id"
+    t.index ["approved_by_id"], name: "index_jrc_campaigns_on_approved_by_id"
     t.index ["created_by_id"], name: "index_jrc_campaigns_on_created_by_id"
     t.index ["inbox_id"], name: "index_jrc_campaigns_on_inbox_id"
   end
@@ -1373,9 +1394,11 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.datetime "updated_at", null: false
     t.bigint "legacy_sales_activity_id"
     t.string "status", default: "scheduled", null: false
+    t.bigint "business_unit_id"
     t.index ["account_id", "legacy_sales_activity_id"], name: "idx_jrc_crm_activities_legacy_sales", unique: true, where: "(legacy_sales_activity_id IS NOT NULL)"
     t.index ["account_id"], name: "index_jrc_crm_activities_on_account_id"
     t.index ["activity_type"], name: "index_jrc_crm_activities_on_activity_type"
+    t.index ["business_unit_id"], name: "index_jrc_crm_activities_on_business_unit_id"
     t.index ["deal_id"], name: "index_jrc_crm_activities_on_deal_id"
     t.index ["due_at"], name: "index_jrc_crm_activities_on_due_at"
     t.index ["organization_id"], name: "index_jrc_crm_activities_on_organization_id"
@@ -1441,6 +1464,19 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.index ["trigger_type"], name: "index_jrc_crm_automation_rules_on_trigger_type"
   end
 
+  create_table "jrc_crm_business_units", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.string "name", null: false
+    t.string "code", null: false
+    t.string "segment"
+    t.boolean "active", default: true, null: false
+    t.jsonb "settings", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "code"], name: "idx_jrc_crm_bu_account_code", unique: true
+    t.index ["account_id"], name: "index_jrc_crm_business_units_on_account_id"
+  end
+
   create_table "jrc_crm_campaigns", force: :cascade do |t|
     t.integer "account_id", null: false
     t.string "name"
@@ -1452,6 +1488,73 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.datetime "updated_at", null: false
     t.index ["account_id"], name: "index_jrc_crm_campaigns_on_account_id"
     t.index ["status"], name: "index_jrc_crm_campaigns_on_status"
+  end
+
+  create_table "jrc_crm_commission_programs", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "business_unit_id"
+    t.string "name", null: false
+    t.string "release_condition", default: "order_approved", null: false
+    t.date "starts_on"
+    t.date "ends_on"
+    t.boolean "active", default: true, null: false
+    t.jsonb "rules", default: [], null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "index_jrc_crm_commission_programs_on_account_id"
+    t.index ["business_unit_id"], name: "index_jrc_crm_commission_programs_on_business_unit_id"
+  end
+
+  create_table "jrc_crm_contract_items", force: :cascade do |t|
+    t.bigint "contract_id", null: false
+    t.bigint "product_id"
+    t.string "name", null: false
+    t.decimal "quantity", precision: 14, scale: 3, default: "1.0", null: false
+    t.bigint "one_time_cents", default: 0, null: false
+    t.bigint "monthly_cents", default: 0, null: false
+    t.date "starts_on"
+    t.string "status", default: "pending", null: false
+    t.string "operational_identifier"
+    t.jsonb "snapshot", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["contract_id"], name: "index_jrc_crm_contract_items_on_contract_id"
+    t.index ["product_id"], name: "index_jrc_crm_contract_items_on_product_id"
+  end
+
+  create_table "jrc_crm_contracts", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "sales_order_id", null: false
+    t.bigint "deal_id", null: false
+    t.bigint "contact_id"
+    t.bigint "owner_id", null: false
+    t.string "contract_number", null: false
+    t.string "status", default: "draft", null: false
+    t.date "starts_on"
+    t.date "ends_on"
+    t.integer "term_months"
+    t.string "renewal_type", default: "automatic"
+    t.string "adjustment_index", default: "IPCA"
+    t.bigint "monthly_cents", default: 0, null: false
+    t.bigint "one_time_cents", default: 0, null: false
+    t.date "next_adjustment_on"
+    t.text "notes"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "business_unit_id"
+    t.string "contract_type"
+    t.string "payment_condition"
+    t.integer "due_day"
+    t.boolean "auto_renew", default: false, null: false
+    t.integer "renewal_notice_days", default: 30, null: false
+    t.integer "renewal_term_months"
+    t.index ["account_id", "contract_number"], name: "idx_jrc_crm_contracts_account_number", unique: true
+    t.index ["account_id"], name: "index_jrc_crm_contracts_on_account_id"
+    t.index ["business_unit_id"], name: "index_jrc_crm_contracts_on_business_unit_id"
+    t.index ["contact_id"], name: "index_jrc_crm_contracts_on_contact_id"
+    t.index ["deal_id"], name: "index_jrc_crm_contracts_on_deal_id"
+    t.index ["owner_id"], name: "index_jrc_crm_contracts_on_owner_id"
+    t.index ["sales_order_id"], name: "index_jrc_crm_contracts_on_sales_order_id"
   end
 
   create_table "jrc_crm_custom_attribute_definitions", force: :cascade do |t|
@@ -1538,9 +1641,11 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.string "product_name"
     t.string "temperature", default: "warm", null: false
     t.string "conversion_key"
+    t.bigint "business_unit_id"
     t.index ["account_id", "conversion_key"], name: "idx_jrc_crm_deals_account_conversion", unique: true, where: "(conversion_key IS NOT NULL)"
     t.index ["account_id", "legacy_sales_opportunity_id"], name: "idx_jrc_crm_deals_legacy_sales", unique: true, where: "(legacy_sales_opportunity_id IS NOT NULL)"
     t.index ["account_id"], name: "index_jrc_crm_deals_on_account_id"
+    t.index ["business_unit_id"], name: "index_jrc_crm_deals_on_business_unit_id"
     t.index ["company_id"], name: "index_jrc_crm_deals_on_company_id"
     t.index ["expected_close_at"], name: "index_jrc_crm_deals_on_expected_close_at"
     t.index ["lead_id"], name: "index_jrc_crm_deals_on_lead_id"
@@ -1595,6 +1700,34 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.index ["batch_id"], name: "index_jrc_crm_import_row_errors_on_batch_id"
   end
 
+  create_table "jrc_crm_invoices", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "business_unit_id"
+    t.bigint "contact_id"
+    t.bigint "sales_order_id"
+    t.bigint "contract_id"
+    t.string "invoice_number", null: false
+    t.string "status", default: "draft", null: false
+    t.date "competence_on"
+    t.date "issued_on"
+    t.date "due_on", null: false
+    t.bigint "subtotal_cents", default: 0, null: false
+    t.bigint "discount_cents", default: 0, null: false
+    t.bigint "tax_cents", default: 0, null: false
+    t.bigint "total_cents", default: 0, null: false
+    t.bigint "balance_cents", default: 0, null: false
+    t.string "payment_method"
+    t.jsonb "snapshot", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "invoice_number"], name: "idx_jrc_crm_invoice_number", unique: true
+    t.index ["account_id"], name: "index_jrc_crm_invoices_on_account_id"
+    t.index ["business_unit_id"], name: "index_jrc_crm_invoices_on_business_unit_id"
+    t.index ["contact_id"], name: "index_jrc_crm_invoices_on_contact_id"
+    t.index ["contract_id"], name: "index_jrc_crm_invoices_on_contract_id"
+    t.index ["sales_order_id"], name: "index_jrc_crm_invoices_on_sales_order_id"
+  end
+
   create_table "jrc_crm_leads", force: :cascade do |t|
     t.integer "account_id", null: false
     t.integer "owner_id", null: false
@@ -1616,8 +1749,10 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.datetime "updated_at", null: false
     t.string "idempotency_key"
     t.datetime "classified_at"
+    t.bigint "business_unit_id"
     t.index ["account_id", "idempotency_key"], name: "idx_jrc_crm_leads_account_idempotency", unique: true, where: "(idempotency_key IS NOT NULL)"
     t.index ["account_id"], name: "index_jrc_crm_leads_on_account_id"
+    t.index ["business_unit_id"], name: "index_jrc_crm_leads_on_business_unit_id"
     t.index ["contact_id"], name: "index_jrc_crm_leads_on_contact_id"
     t.index ["conversation_id"], name: "index_jrc_crm_leads_on_conversation_id"
     t.index ["email"], name: "index_jrc_crm_leads_on_email"
@@ -1638,6 +1773,22 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.index ["account_id", "name"], name: "index_jrc_crm_lost_reasons_on_account_id_and_name", unique: true
   end
 
+  create_table "jrc_crm_order_items", force: :cascade do |t|
+    t.bigint "sales_order_id", null: false
+    t.bigint "product_id"
+    t.string "name", null: false
+    t.decimal "quantity", precision: 14, scale: 3, default: "1.0", null: false
+    t.bigint "unit_cents", default: 0, null: false
+    t.bigint "discount_cents", default: 0, null: false
+    t.bigint "one_time_cents", default: 0, null: false
+    t.bigint "recurring_cents", default: 0, null: false
+    t.jsonb "snapshot", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["product_id"], name: "index_jrc_crm_order_items_on_product_id"
+    t.index ["sales_order_id"], name: "index_jrc_crm_order_items_on_sales_order_id"
+  end
+
   create_table "jrc_crm_organizations", force: :cascade do |t|
     t.integer "account_id", null: false
     t.integer "owner_id"
@@ -1654,6 +1805,27 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.index ["active"], name: "index_jrc_crm_organizations_on_active"
     t.index ["name"], name: "index_jrc_crm_organizations_on_name"
     t.index ["owner_id"], name: "index_jrc_crm_organizations_on_owner_id"
+  end
+
+  create_table "jrc_crm_payments", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "business_unit_id"
+    t.bigint "invoice_id", null: false
+    t.bigint "amount_cents", null: false
+    t.datetime "paid_at", null: false
+    t.string "method"
+    t.string "external_id"
+    t.string "reconciliation_status", default: "pending", null: false
+    t.bigint "interest_cents", default: 0, null: false
+    t.bigint "penalty_cents", default: 0, null: false
+    t.bigint "discount_cents", default: 0, null: false
+    t.jsonb "metadata", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "external_id"], name: "idx_jrc_crm_payment_external", unique: true, where: "(external_id IS NOT NULL)"
+    t.index ["account_id"], name: "index_jrc_crm_payments_on_account_id"
+    t.index ["business_unit_id"], name: "index_jrc_crm_payments_on_business_unit_id"
+    t.index ["invoice_id"], name: "index_jrc_crm_payments_on_invoice_id"
   end
 
   create_table "jrc_crm_pipelines", force: :cascade do |t|
@@ -1719,10 +1891,12 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.text "technical_requirements"
     t.text "scope_included"
     t.text "scope_excluded"
+    t.bigint "business_unit_id"
     t.index ["account_id", "billing_model"], name: "idx_jrc_crm_products_account_billing"
     t.index ["account_id", "product_type"], name: "idx_jrc_crm_products_account_type"
     t.index ["account_id", "sku"], name: "idx_jrc_crm_products_account_sku"
     t.index ["account_id"], name: "index_jrc_crm_products_on_account_id"
+    t.index ["business_unit_id"], name: "index_jrc_crm_products_on_business_unit_id"
   end
 
   create_table "jrc_crm_proposal_events", force: :cascade do |t|
@@ -1773,16 +1947,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.bigint "subtotal_cents", default: 0, null: false
     t.bigint "discount_cents", default: 0, null: false
     t.bigint "total_cents", default: 0, null: false
-    t.text "solution_description"
-    t.bigint "implementation_cents", default: 0, null: false
-    t.bigint "monthly_cents", default: 0, null: false
-    t.date "valid_until"
-    t.integer "term_months", default: 12, null: false
-    t.text "commercial_notes"
-    t.text "next_steps"
-    t.string "last_sent_channel"
-    t.bigint "last_sent_message_id"
-    t.integer "last_sent_conversation_id"
     t.string "public_token_digest", null: false
     t.datetime "public_token_expires_at"
     t.datetime "public_token_revoked_at"
@@ -1796,6 +1960,16 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.integer "lock_version", default: 0, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.text "solution_description"
+    t.bigint "implementation_cents", default: 0, null: false
+    t.bigint "monthly_cents", default: 0, null: false
+    t.date "valid_until"
+    t.integer "term_months", default: 12, null: false
+    t.text "commercial_notes"
+    t.text "next_steps"
+    t.string "last_sent_channel"
+    t.bigint "last_sent_message_id"
+    t.integer "last_sent_conversation_id"
     t.string "proposal_number", null: false
     t.integer "version_number", default: 1, null: false
     t.string "issuer_company_name", default: "Grupo JRC", null: false
@@ -1821,13 +1995,99 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.datetime "locked_at"
     t.boolean "follow_up_enabled", default: true, null: false
     t.integer "follow_up_days", default: 3, null: false
+    t.bigint "shipping_cents", default: 0, null: false
+    t.string "shipping_mode", default: "not_applicable", null: false
+    t.string "payment_condition", default: "cash", null: false
+    t.bigint "down_payment_cents", default: 0, null: false
+    t.integer "installments_count", default: 1, null: false
+    t.boolean "has_monthly_fee", default: true, null: false
+    t.boolean "shipping_in_installments", default: true, null: false
+    t.bigint "business_unit_id"
     t.index ["account_id", "proposal_number"], name: "idx_jrc_crm_proposals_account_number", unique: true
     t.index ["account_id"], name: "index_jrc_crm_proposals_on_account_id"
+    t.index ["business_unit_id"], name: "index_jrc_crm_proposals_on_business_unit_id"
     t.index ["deal_id"], name: "index_jrc_crm_proposals_on_deal_id"
     t.index ["last_sent_conversation_id"], name: "index_jrc_crm_proposals_on_last_sent_conversation_id"
     t.index ["last_sent_message_id"], name: "index_jrc_crm_proposals_on_last_sent_message_id"
     t.index ["public_token_digest"], name: "index_jrc_crm_proposals_on_public_token_digest", unique: true
     t.index ["status"], name: "index_jrc_crm_proposals_on_status"
+  end
+
+  create_table "jrc_crm_sales_commissions", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "sales_order_id", null: false
+    t.bigint "user_id", null: false
+    t.bigint "base_cents", default: 0, null: false
+    t.decimal "rate_percent", precision: 7, scale: 3, default: "0.0", null: false
+    t.bigint "commission_cents", default: 0, null: false
+    t.string "status", default: "forecast", null: false
+    t.datetime "released_at"
+    t.datetime "paid_at"
+    t.text "notes"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "business_unit_id"
+    t.bigint "commission_program_id"
+    t.index ["account_id", "sales_order_id", "user_id"], name: "idx_jrc_crm_commission_unique", unique: true
+    t.index ["account_id"], name: "index_jrc_crm_sales_commissions_on_account_id"
+    t.index ["business_unit_id"], name: "index_jrc_crm_sales_commissions_on_business_unit_id"
+    t.index ["commission_program_id"], name: "index_jrc_crm_sales_commissions_on_commission_program_id"
+    t.index ["sales_order_id"], name: "index_jrc_crm_sales_commissions_on_sales_order_id"
+    t.index ["user_id"], name: "index_jrc_crm_sales_commissions_on_user_id"
+  end
+
+  create_table "jrc_crm_sales_goals", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "user_id"
+    t.date "period_start", null: false
+    t.date "period_end", null: false
+    t.bigint "target_cents", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "business_unit_id"
+    t.string "scope_kind", default: "user", null: false
+    t.bigint "product_id"
+    t.string "metric", default: "revenue", null: false
+    t.bigint "target_quantity"
+    t.index ["account_id", "user_id", "period_start", "period_end"], name: "idx_jrc_crm_goals_period", unique: true
+    t.index ["account_id"], name: "index_jrc_crm_sales_goals_on_account_id"
+    t.index ["business_unit_id"], name: "index_jrc_crm_sales_goals_on_business_unit_id"
+    t.index ["product_id"], name: "index_jrc_crm_sales_goals_on_product_id"
+    t.index ["user_id"], name: "index_jrc_crm_sales_goals_on_user_id"
+  end
+
+  create_table "jrc_crm_sales_orders", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "deal_id"
+    t.bigint "proposal_id"
+    t.bigint "contact_id"
+    t.bigint "owner_id", null: false
+    t.string "order_number", null: false
+    t.string "status", default: "pending", null: false
+    t.bigint "products_cents", default: 0, null: false
+    t.bigint "shipping_cents", default: 0, null: false
+    t.bigint "discount_cents", default: 0, null: false
+    t.bigint "total_cents", default: 0, null: false
+    t.bigint "monthly_cents", default: 0, null: false
+    t.string "payment_condition"
+    t.string "payment_method"
+    t.bigint "down_payment_cents", default: 0, null: false
+    t.integer "installments_count", default: 1, null: false
+    t.datetime "sold_at"
+    t.datetime "closed_at"
+    t.text "notes"
+    t.jsonb "snapshot", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "business_unit_id"
+    t.string "source_type", default: "proposal", null: false
+    t.index ["account_id", "order_number"], name: "idx_jrc_crm_orders_account_number", unique: true
+    t.index ["account_id"], name: "index_jrc_crm_sales_orders_on_account_id"
+    t.index ["business_unit_id"], name: "index_jrc_crm_sales_orders_on_business_unit_id"
+    t.index ["contact_id"], name: "index_jrc_crm_sales_orders_on_contact_id"
+    t.index ["deal_id"], name: "index_jrc_crm_sales_orders_on_deal_id"
+    t.index ["owner_id"], name: "index_jrc_crm_sales_orders_on_owner_id"
+    t.index ["proposal_id"], name: "index_jrc_crm_sales_orders_on_proposal_id"
   end
 
   create_table "jrc_crm_stages", force: :cascade do |t|
@@ -1850,6 +2110,209 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
     t.index ["account_id", "legacy_sales_stage_id"], name: "idx_jrc_crm_stages_legacy_sales", unique: true, where: "(legacy_sales_stage_id IS NOT NULL)"
     t.index ["account_id"], name: "index_jrc_crm_stages_on_account_id"
     t.index ["pipeline_id", "key"], name: "index_jrc_crm_stages_on_pipeline_id_and_key", unique: true
+  end
+
+  create_table "jrc_crm_user_business_units", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "business_unit_id", null: false
+    t.bigint "user_id", null: false
+    t.string "scope", default: "OWN", null: false
+    t.jsonb "permissions", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "index_jrc_crm_user_business_units_on_account_id"
+    t.index ["business_unit_id", "user_id"], name: "idx_jrc_crm_user_bu_unique", unique: true
+    t.index ["business_unit_id"], name: "index_jrc_crm_user_business_units_on_business_unit_id"
+    t.index ["user_id"], name: "index_jrc_crm_user_business_units_on_user_id"
+  end
+
+  create_table "jrc_nico_commands", force: :cascade do |t|
+    t.bigint "session_id", null: false
+    t.uuid "request_id", null: false
+    t.text "message", null: false
+    t.string "status", default: "planning", null: false
+    t.string "tool"
+    t.jsonb "arguments", default: {}, null: false
+    t.jsonb "result", default: {}, null: false
+    t.text "reply"
+    t.datetime "approved_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "source_notice_id"
+    t.jsonb "execution_context", default: {}, null: false
+    t.index ["session_id", "request_id"], name: "index_jrc_nico_commands_on_session_id_and_request_id", unique: true
+    t.index ["session_id"], name: "index_jrc_nico_commands_on_session_id"
+    t.index ["source_notice_id"], name: "index_jrc_nico_commands_on_source_notice_id"
+  end
+
+  create_table "jrc_nico_delegations", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "user_id", null: false
+    t.bigint "conversation_id", null: false
+    t.bigint "agent_bot_id", null: false
+    t.string "status", default: "active", null: false
+    t.text "objective", null: false
+    t.text "summary"
+    t.string "reason"
+    t.integer "version", default: 1, null: false
+    t.boolean "allow_crm", default: false, null: false
+    t.datetime "expires_at", null: false
+    t.bigint "last_message_id", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.jsonb "allowed_actions", default: [], null: false
+    t.index ["account_id"], name: "index_jrc_nico_delegations_on_account_id"
+    t.index ["agent_bot_id"], name: "index_jrc_nico_delegations_on_agent_bot_id"
+    t.index ["conversation_id"], name: "index_jrc_nico_delegations_on_conversation_id", unique: true
+    t.index ["user_id"], name: "index_jrc_nico_delegations_on_user_id"
+  end
+
+  create_table "jrc_nico_erp_bindings", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "contact_id", null: false
+    t.string "cnpj", null: false
+    t.string "customer_name", null: false
+    t.string "bemtevi_customer_id", null: false
+    t.string "helpdesk_company_id", null: false
+    t.string "mode", null: false
+    t.string "version", null: false
+    t.boolean "enabled", default: true, null: false
+    t.bigint "verified_by_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "contact_id"], name: "nico_erp_contact_unique", unique: true
+    t.index ["account_id"], name: "index_jrc_nico_erp_bindings_on_account_id"
+    t.index ["contact_id"], name: "index_jrc_nico_erp_bindings_on_contact_id"
+    t.index ["verified_by_id"], name: "index_jrc_nico_erp_bindings_on_verified_by_id"
+  end
+
+  create_table "jrc_nico_erp_settings", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.string "mode", default: "off", null: false
+    t.string "operator_company_id"
+    t.string "requester_user_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "index_jrc_nico_erp_settings_on_account_id", unique: true
+  end
+
+  create_table "jrc_nico_inferences", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "user_id", null: false
+    t.string "status", default: "running", null: false
+    t.integer "reserved_tokens", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "created_at"], name: "index_jrc_nico_inferences_on_account_id_and_created_at"
+    t.index ["account_id"], name: "index_jrc_nico_inferences_on_account_id"
+    t.index ["user_id"], name: "index_jrc_nico_inferences_on_user_id"
+  end
+
+  create_table "jrc_nico_knowledge_documents", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "author_id", null: false
+    t.bigint "approved_by_id"
+    t.string "title", null: false
+    t.text "body", null: false
+    t.datetime "approved_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.boolean "customer_visible", default: false, null: false
+    t.index ["account_id", "approved_at"], name: "idx_nico_approved_knowledge"
+    t.index ["account_id"], name: "index_jrc_nico_knowledge_documents_on_account_id"
+    t.index ["approved_by_id"], name: "index_jrc_nico_knowledge_documents_on_approved_by_id"
+    t.index ["author_id"], name: "index_jrc_nico_knowledge_documents_on_author_id"
+  end
+
+  create_table "jrc_nico_notices", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "user_id", null: false
+    t.bigint "conversation_id"
+    t.string "event_key", null: false
+    t.string "kind", null: false
+    t.string "status", default: "new", null: false
+    t.text "body", null: false
+    t.text "request"
+    t.jsonb "metadata", default: {}, null: false
+    t.datetime "read_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "user_id", "event_key"], name: "nico_notice_event_once", unique: true
+    t.index ["account_id"], name: "index_jrc_nico_notices_on_account_id"
+    t.index ["conversation_id"], name: "index_jrc_nico_notices_on_conversation_id"
+    t.index ["user_id"], name: "index_jrc_nico_notices_on_user_id"
+  end
+
+  create_table "jrc_nico_proposals", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "user_id", null: false
+    t.bigint "run_id", null: false
+    t.bigint "activity_id"
+    t.uuid "request_id", null: false
+    t.jsonb "payload", default: {}, null: false
+    t.string "digest", null: false
+    t.string "status", default: "pending", null: false
+    t.datetime "expires_at", null: false
+    t.datetime "approved_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "user_id", "request_id"], name: "nico_proposal_idempotency", unique: true
+    t.index ["account_id"], name: "index_jrc_nico_proposals_on_account_id"
+    t.index ["activity_id"], name: "index_jrc_nico_proposals_on_activity_id"
+    t.index ["run_id"], name: "index_jrc_nico_proposals_on_run_id"
+    t.index ["user_id"], name: "index_jrc_nico_proposals_on_user_id"
+    t.check_constraint "status::text = ANY (ARRAY['pending'::character varying, 'executed'::character varying]::text[])", name: "nico_proposal_status"
+  end
+
+  create_table "jrc_nico_runs", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "user_id", null: false
+    t.bigint "conversation_id", null: false
+    t.uuid "request_id", null: false
+    t.string "status", default: "queued", null: false
+    t.text "message", null: false
+    t.string "fingerprint", null: false
+    t.jsonb "result", default: {}, null: false
+    t.string "error_code"
+    t.datetime "started_at"
+    t.datetime "finished_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.integer "reserved_tokens", default: 0, null: false
+    t.jsonb "source_manifest"
+    t.string "agent_key", default: "nico", null: false
+    t.index ["account_id", "agent_key", "created_at"], name: "nico_agent_history"
+    t.index ["account_id", "created_at"], name: "index_jrc_nico_runs_on_account_id_and_created_at"
+    t.index ["account_id", "user_id", "request_id"], name: "idx_nico_run_request", unique: true
+    t.index ["account_id"], name: "index_jrc_nico_runs_on_account_id"
+    t.index ["conversation_id"], name: "index_jrc_nico_runs_on_conversation_id"
+    t.index ["user_id"], name: "index_jrc_nico_runs_on_user_id"
+    t.check_constraint "reserved_tokens >= 0", name: "nico_nonnegative_reservation"
+    t.check_constraint "status::text = ANY (ARRAY['queued'::character varying, 'running'::character varying, 'completed'::character varying, 'failed'::character varying, 'cancelled'::character varying]::text[])", name: "nico_run_status"
+  end
+
+  create_table "jrc_nico_sessions", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "user_id", null: false
+    t.jsonb "messages", default: [], null: false
+    t.jsonb "context", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "user_id"], name: "index_jrc_nico_sessions_on_account_id_and_user_id", unique: true
+    t.index ["account_id"], name: "index_jrc_nico_sessions_on_account_id"
+    t.index ["user_id"], name: "index_jrc_nico_sessions_on_user_id"
+  end
+
+  create_table "jrc_nico_turns", force: :cascade do |t|
+    t.bigint "delegation_id", null: false
+    t.bigint "message_id", null: false
+    t.integer "version", null: false
+    t.string "status", default: "running", null: false
+    t.bigint "outgoing_message_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["delegation_id", "version", "message_id"], name: "nico_turn_once", unique: true
+    t.index ["delegation_id"], name: "index_jrc_nico_turns_on_delegation_id"
   end
 
   create_table "labels", force: :cascade do |t|
@@ -2447,6 +2910,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
   add_foreign_key "jrc_ai_usage_events", "users"
   add_foreign_key "jrc_campaign_blacklists", "accounts"
   add_foreign_key "jrc_campaign_blacklists", "users", column: "created_by_id"
+  add_foreign_key "jrc_campaign_consents", "accounts"
+  add_foreign_key "jrc_campaign_consents", "users", column: "recorded_by_id"
   add_foreign_key "jrc_campaign_deliveries", "inboxes"
   add_foreign_key "jrc_campaign_deliveries", "jrc_campaign_recipients", column: "recipient_id"
   add_foreign_key "jrc_campaign_deliveries", "jrc_campaign_steps", column: "step_id"
@@ -2466,19 +2931,32 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
   add_foreign_key "jrc_campaign_sanitized_entries", "jrc_campaign_sanitized_lists", column: "sanitized_list_id"
   add_foreign_key "jrc_campaign_sanitized_lists", "accounts"
   add_foreign_key "jrc_campaign_sanitized_lists", "users", column: "created_by_id"
-  add_foreign_key "jrc_campaign_steps", "jrc_campaigns", column: "campaign_id"
   add_foreign_key "jrc_campaign_steps", "jrc_campaign_media_assets", column: "media_asset_id", on_delete: :nullify
+  add_foreign_key "jrc_campaign_steps", "jrc_campaigns", column: "campaign_id"
   add_foreign_key "jrc_campaigns", "accounts"
   add_foreign_key "jrc_campaigns", "inboxes"
+  add_foreign_key "jrc_campaigns", "users", column: "approved_by_id"
   add_foreign_key "jrc_campaigns", "users", column: "created_by_id"
   add_foreign_key "jrc_crm_activities", "accounts"
   add_foreign_key "jrc_crm_activities", "contacts"
   add_foreign_key "jrc_crm_activities", "conversations"
+  add_foreign_key "jrc_crm_activities", "jrc_crm_business_units", column: "business_unit_id"
   add_foreign_key "jrc_crm_activities", "jrc_crm_deals", column: "deal_id"
   add_foreign_key "jrc_crm_activities", "jrc_crm_leads", column: "lead_id"
   add_foreign_key "jrc_crm_activities", "jrc_crm_organizations", column: "organization_id"
   add_foreign_key "jrc_crm_activities", "users"
   add_foreign_key "jrc_crm_audit_events", "accounts"
+  add_foreign_key "jrc_crm_business_units", "accounts"
+  add_foreign_key "jrc_crm_commission_programs", "accounts"
+  add_foreign_key "jrc_crm_commission_programs", "jrc_crm_business_units", column: "business_unit_id"
+  add_foreign_key "jrc_crm_contract_items", "jrc_crm_contracts", column: "contract_id"
+  add_foreign_key "jrc_crm_contract_items", "jrc_crm_products", column: "product_id"
+  add_foreign_key "jrc_crm_contracts", "accounts"
+  add_foreign_key "jrc_crm_contracts", "contacts"
+  add_foreign_key "jrc_crm_contracts", "jrc_crm_business_units", column: "business_unit_id"
+  add_foreign_key "jrc_crm_contracts", "jrc_crm_deals", column: "deal_id"
+  add_foreign_key "jrc_crm_contracts", "jrc_crm_sales_orders", column: "sales_order_id"
+  add_foreign_key "jrc_crm_contracts", "users", column: "owner_id"
   add_foreign_key "jrc_crm_deal_contacts", "contacts"
   add_foreign_key "jrc_crm_deal_contacts", "jrc_crm_deals", column: "deal_id"
   add_foreign_key "jrc_crm_deal_conversations", "accounts"
@@ -2489,6 +2967,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
   add_foreign_key "jrc_crm_deal_products", "jrc_crm_products", column: "product_id"
   add_foreign_key "jrc_crm_deals", "accounts"
   add_foreign_key "jrc_crm_deals", "contacts"
+  add_foreign_key "jrc_crm_deals", "jrc_crm_business_units", column: "business_unit_id"
   add_foreign_key "jrc_crm_deals", "jrc_crm_leads", column: "lead_id"
   add_foreign_key "jrc_crm_deals", "jrc_crm_lost_reasons", column: "lost_reason_id"
   add_foreign_key "jrc_crm_deals", "jrc_crm_organizations", column: "organization_id"
@@ -2500,26 +2979,85 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_04_150000) do
   add_foreign_key "jrc_crm_follow_ups", "jrc_crm_deals", column: "deal_id"
   add_foreign_key "jrc_crm_follow_ups", "jrc_crm_leads", column: "lead_id"
   add_foreign_key "jrc_crm_follow_ups", "users"
+  add_foreign_key "jrc_crm_invoices", "accounts"
+  add_foreign_key "jrc_crm_invoices", "contacts"
+  add_foreign_key "jrc_crm_invoices", "jrc_crm_business_units", column: "business_unit_id"
+  add_foreign_key "jrc_crm_invoices", "jrc_crm_contracts", column: "contract_id"
+  add_foreign_key "jrc_crm_invoices", "jrc_crm_sales_orders", column: "sales_order_id"
   add_foreign_key "jrc_crm_leads", "accounts"
   add_foreign_key "jrc_crm_leads", "contacts"
   add_foreign_key "jrc_crm_leads", "conversations"
+  add_foreign_key "jrc_crm_leads", "jrc_crm_business_units", column: "business_unit_id"
   add_foreign_key "jrc_crm_leads", "teams"
   add_foreign_key "jrc_crm_leads", "users", column: "owner_id"
   add_foreign_key "jrc_crm_lost_reasons", "accounts"
+  add_foreign_key "jrc_crm_order_items", "jrc_crm_products", column: "product_id"
+  add_foreign_key "jrc_crm_order_items", "jrc_crm_sales_orders", column: "sales_order_id"
   add_foreign_key "jrc_crm_organizations", "accounts"
   add_foreign_key "jrc_crm_organizations", "users", column: "owner_id"
+  add_foreign_key "jrc_crm_payments", "accounts"
+  add_foreign_key "jrc_crm_payments", "jrc_crm_business_units", column: "business_unit_id"
+  add_foreign_key "jrc_crm_payments", "jrc_crm_invoices", column: "invoice_id"
   add_foreign_key "jrc_crm_pipelines", "accounts"
   add_foreign_key "jrc_crm_products", "accounts"
+  add_foreign_key "jrc_crm_products", "jrc_crm_business_units", column: "business_unit_id"
   add_foreign_key "jrc_crm_proposal_events", "accounts"
   add_foreign_key "jrc_crm_proposal_events", "jrc_crm_proposals", column: "proposal_id"
   add_foreign_key "jrc_crm_proposal_events", "users"
   add_foreign_key "jrc_crm_proposal_items", "jrc_crm_products", column: "product_id"
   add_foreign_key "jrc_crm_proposal_items", "jrc_crm_proposals", column: "proposal_id"
   add_foreign_key "jrc_crm_proposals", "accounts"
+  add_foreign_key "jrc_crm_proposals", "jrc_crm_business_units", column: "business_unit_id"
   add_foreign_key "jrc_crm_proposals", "jrc_crm_deals", column: "deal_id"
   add_foreign_key "jrc_crm_proposals", "users", column: "owner_id"
+  add_foreign_key "jrc_crm_sales_commissions", "accounts"
+  add_foreign_key "jrc_crm_sales_commissions", "jrc_crm_business_units", column: "business_unit_id"
+  add_foreign_key "jrc_crm_sales_commissions", "jrc_crm_commission_programs", column: "commission_program_id"
+  add_foreign_key "jrc_crm_sales_commissions", "jrc_crm_sales_orders", column: "sales_order_id"
+  add_foreign_key "jrc_crm_sales_commissions", "users"
+  add_foreign_key "jrc_crm_sales_goals", "accounts"
+  add_foreign_key "jrc_crm_sales_goals", "jrc_crm_business_units", column: "business_unit_id"
+  add_foreign_key "jrc_crm_sales_goals", "jrc_crm_products", column: "product_id"
+  add_foreign_key "jrc_crm_sales_goals", "users"
+  add_foreign_key "jrc_crm_sales_orders", "accounts"
+  add_foreign_key "jrc_crm_sales_orders", "contacts"
+  add_foreign_key "jrc_crm_sales_orders", "jrc_crm_business_units", column: "business_unit_id"
+  add_foreign_key "jrc_crm_sales_orders", "jrc_crm_deals", column: "deal_id"
+  add_foreign_key "jrc_crm_sales_orders", "jrc_crm_proposals", column: "proposal_id"
+  add_foreign_key "jrc_crm_sales_orders", "users", column: "owner_id"
   add_foreign_key "jrc_crm_stages", "accounts"
   add_foreign_key "jrc_crm_stages", "jrc_crm_pipelines", column: "pipeline_id"
+  add_foreign_key "jrc_crm_user_business_units", "accounts"
+  add_foreign_key "jrc_crm_user_business_units", "jrc_crm_business_units", column: "business_unit_id"
+  add_foreign_key "jrc_crm_user_business_units", "users"
+  add_foreign_key "jrc_nico_commands", "jrc_nico_notices", column: "source_notice_id", on_delete: :nullify
+  add_foreign_key "jrc_nico_commands", "jrc_nico_sessions", column: "session_id", on_delete: :cascade
+  add_foreign_key "jrc_nico_delegations", "accounts", on_delete: :cascade
+  add_foreign_key "jrc_nico_delegations", "agent_bots"
+  add_foreign_key "jrc_nico_delegations", "conversations", on_delete: :cascade
+  add_foreign_key "jrc_nico_delegations", "users", on_delete: :cascade
+  add_foreign_key "jrc_nico_erp_bindings", "accounts"
+  add_foreign_key "jrc_nico_erp_bindings", "contacts"
+  add_foreign_key "jrc_nico_erp_bindings", "users", column: "verified_by_id"
+  add_foreign_key "jrc_nico_erp_settings", "accounts"
+  add_foreign_key "jrc_nico_inferences", "accounts", on_delete: :cascade
+  add_foreign_key "jrc_nico_inferences", "users", on_delete: :cascade
+  add_foreign_key "jrc_nico_knowledge_documents", "accounts", on_delete: :cascade
+  add_foreign_key "jrc_nico_knowledge_documents", "users", column: "approved_by_id", on_delete: :cascade
+  add_foreign_key "jrc_nico_knowledge_documents", "users", column: "author_id", on_delete: :cascade
+  add_foreign_key "jrc_nico_notices", "accounts", on_delete: :cascade
+  add_foreign_key "jrc_nico_notices", "conversations", on_delete: :cascade
+  add_foreign_key "jrc_nico_notices", "users", on_delete: :cascade
+  add_foreign_key "jrc_nico_proposals", "accounts", on_delete: :cascade
+  add_foreign_key "jrc_nico_proposals", "jrc_crm_activities", column: "activity_id", on_delete: :nullify
+  add_foreign_key "jrc_nico_proposals", "jrc_nico_runs", column: "run_id", on_delete: :cascade
+  add_foreign_key "jrc_nico_proposals", "users", on_delete: :cascade
+  add_foreign_key "jrc_nico_runs", "accounts", on_delete: :cascade
+  add_foreign_key "jrc_nico_runs", "conversations", on_delete: :cascade
+  add_foreign_key "jrc_nico_runs", "users", on_delete: :cascade
+  add_foreign_key "jrc_nico_sessions", "accounts", on_delete: :cascade
+  add_foreign_key "jrc_nico_sessions", "users", on_delete: :cascade
+  add_foreign_key "jrc_nico_turns", "jrc_nico_delegations", column: "delegation_id", on_delete: :cascade
   add_foreign_key "sales_activities", "accounts"
   add_foreign_key "sales_activities", "contacts"
   add_foreign_key "sales_activities", "sales_opportunities"

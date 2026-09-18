@@ -173,6 +173,22 @@ export function useConversationFilterContext() {
       attributeModel: 'standard',
     },
     {
+      attributeKey: CONVERSATION_ATTRIBUTES.CHANNEL_TYPE,
+      value: CONVERSATION_ATTRIBUTES.CHANNEL_TYPE,
+      attributeName: 'Canal',
+      label: 'Canal',
+      inputType: 'multiSelect',
+      options: [
+        { id: 'Channel::Whatsapp', name: 'WhatsApp' },
+        { id: 'Channel::Email', name: 'E-mail' },
+        { id: 'Channel::FacebookPage', name: 'Facebook' },
+        { id: 'Channel::Instagram', name: 'Instagram' },
+      ],
+      dataType: 'text',
+      filterOperators: equalityOperators.value,
+      attributeModel: 'standard',
+    },
+    {
       attributeKey: CONVERSATION_ATTRIBUTES.TEAM_ID,
       value: CONVERSATION_ATTRIBUTES.TEAM_ID,
       attributeName: t('FILTER.ATTRIBUTES.TEAM_NAME'),

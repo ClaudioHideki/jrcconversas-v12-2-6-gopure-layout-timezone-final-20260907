@@ -52,7 +52,7 @@ const providerLabel = type => providerOptions.find(item => item.value === type)?
 const statusLabel = status => ({ not_validated: 'Nao validado', configured: 'Configurado', error: 'Erro', disabled: 'Desativado' }[status] || status);
 const statusClass = status => ({ configured: 'bg-emerald-100 text-emerald-700', error: 'bg-rose-100 text-rose-700', disabled: 'bg-slate-100 text-slate-600', not_validated: 'bg-amber-100 text-amber-700' }[status] || 'bg-slate-100 text-slate-600');
 const formatNumber = value => new Intl.NumberFormat('pt-BR').format(Number(value || 0));
-const formatMoney = cents => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(cents || 0) / 100);
+const formatMoney = cents => cents == null ? 'Indisponível' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(cents) / 100);
 const formatDate = value => value ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : '--';
 const currentProviderType = computed(() => providerOptions.find(item => item.value === form.value.provider_type));
 

@@ -77,6 +77,9 @@ class AgentBotListener < BaseListener
   end
 
   def process_message_event(method_name, agent_bot, message, _event)
+    # One responder owns a delegated conversation; an inbox bot must not send a second reply.
+    return if message.content_attributes.to_h['nico_delegation'] || JrcNico::Delegation.active.exists?(conversation_id: message.conversation_id)
+
     # Only webhook bots are supported
     payload = message.webhook_data.merge(event: method_name)
     process_webhook_bot_event(agent_bot, payload)

@@ -16,6 +16,7 @@ class Api::V1::Accounts::JrcCopilotController < Api::V1::Accounts::BaseControlle
   def context
     render json: JrcCopilot::TaskCatalog.context(params[:route_name]).merge(
       ai_configured: ai_configured?,
+      nico_enabled: Current.account.custom_attributes['nico_enabled'] == true,
       can_manage_ai: Current.account_user&.administrator?
     )
   end

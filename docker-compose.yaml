@@ -17,6 +17,7 @@ services:
 
   rails:
     <<: *base
+    working_dir: /app
     build:
       context: .
       dockerfile: ./docker/dockerfiles/rails.Dockerfile
@@ -30,10 +31,9 @@ services:
     depends_on:
       - postgres
       - redis
-      - vite
       - mailhog
     ports:
-      - "3011:3000"
+      - "3026:3000"
     env_file: .env
     environment:
       - VITE_RUBY_HOST=vite
@@ -46,6 +46,7 @@ services:
 
   sidekiq:
     <<: *base
+    working_dir: /app
     image: chatwoot-rails:development
     volumes:
       - ./:/app:delegated
@@ -64,6 +65,7 @@ services:
 
   vite:
     <<: *base
+    working_dir: /app
     build:
       context: .
       dockerfile: ./docker/dockerfiles/vite.Dockerfile
@@ -75,7 +77,7 @@ services:
       - cache:/app/tmp/cache
       - bundle:/usr/local/bundle
     ports:
-      - "3047:3036" # Vite dev server
+      - "3056:3036" # Vite dev server
     environment:
       - VITE_RUBY_HOST=0.0.0.0
       - VITE_RUBY_PORT=3036
@@ -86,8 +88,6 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     restart: 'no'
-    ports:
-      - '55453:5432'
     volumes:
       - postgres:/var/lib/postgresql/data
     environment:
@@ -102,14 +102,12 @@ services:
     env_file: .env
     volumes:
       - redis:/data/redis
-    ports:
-      - '56401:6379'
 
   mailhog:
     image: mailhog/mailhog
     ports:
-      - "1036:1025"
-      - "8037:8025"
+      - "1146:1025"
+      - "8146:8025"
 
 volumes:
   postgres:
@@ -118,3 +116,12 @@ volumes:
   node_modules:
   cache:
   bundle:
+
+# Reserva uma faixa exclusiva para esta instância local. Isso evita depender
+# dos pools automáticos do Docker, que já estão ocupados por outros projetos.
+networks:
+  default:
+    name: gopure_crm_20260918b_default
+    ipam:
+      config:
+        - subnet: 10.246.124.0/24

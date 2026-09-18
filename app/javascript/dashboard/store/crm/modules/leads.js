@@ -56,6 +56,10 @@ export default {
       await leadsAPI.create(data);
       dispatch('fetchLeads');
     },
+    async deleteLead({ dispatch }, { leadId, params }) {
+      await leadsAPI.delete(leadId);
+      await dispatch('fetchLeads', params);
+    },
     async convertLead({ dispatch }, { leadId, params }) {
       await leadsAPI.convert(leadId, params);
       dispatch('fetchLeads');

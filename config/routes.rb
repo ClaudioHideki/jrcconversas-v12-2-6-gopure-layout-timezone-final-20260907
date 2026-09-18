@@ -250,6 +250,7 @@ Rails.application.routes.draw do
             resources :activities, only: :update
           end
           namespace :jrc_campaigns do
+            resources :consents, only: [:index, :create, :destroy]
             resource :metadata, only: :show, controller: :metadata
             resources :blacklists, only: [:index, :create, :destroy]
             resources :sanitized_lists, only: [:index, :show, :create, :destroy]
@@ -262,6 +263,8 @@ Rails.application.routes.draw do
               end
               member do
                 post :launch
+                post :request_review
+                post :approve
                 post :pause
                 post :resume
                 post :cancel
@@ -275,7 +278,7 @@ Rails.application.routes.draw do
           namespace :crm do
               resource :dashboard, only: :show, controller: :dashboards
               resources :reports, only: :index
-              resources :leads, only: [:index, :show, :create, :update] do
+              resources :leads, only: [:index, :show, :create, :update, :destroy] do
                 get :for_contact, on: :collection
                 post :from_conversation, on: :collection
                 member do
@@ -315,8 +318,16 @@ Rails.application.routes.draw do
                 post :accept
                 post :reject
                 post :cancel
+                post :convert_to_order
               end
             end
+            resources :sales_orders, only: [:index, :show, :create, :update]
+            resources :contracts, only: [:index, :create, :update] do
+              get :pdf, on: :member
+            end
+            resources :commissions, only: [:index, :create, :update]
+            resources :goals, only: [:index, :create, :update]
+            resources :customers, only: [:show]
             resources :lost_reasons
             resource :wallet, only: :show
             resources :timeline, only: :index
@@ -326,6 +337,40 @@ Rails.application.routes.draw do
             post 'public/proposals/:token/reject', to: 'public_proposals#reject'
           end
           post 'jrc_copilot/ask', to: 'jrc_copilot#ask'
+          namespace :jrc_nico do
+            resource :operations, only: [:show], controller: :operations do
+              get :notices
+              post 'notices/:id/read', action: :read_notice
+              post 'notices/:id/retry', action: :retry_notice
+              get :conversations
+              post :ask
+              post :transcribe
+              post :prepare
+              post :takeover
+              post 'commands/:id/confirm', action: :confirm
+              post 'commands/:id/cancel', action: :cancel
+              post 'commands/:id/claim', action: :claim
+              post 'commands/:id/receipt', action: :receipt
+            end
+            resource :assistance, only: [:show], controller: :assistance do
+              post :authorize
+              post :dismiss
+            end
+            resource :erp, only: [:show, :update], controller: :erp do
+              post :bind
+              post :revoke
+            end
+            resources :agents, only: [:index]
+            resources :proposals, only: [:create] do
+              post :approve, on: :member
+            end
+            resources :knowledge_documents, only: [:index, :create, :update] do
+              post :approve, on: :member
+            end
+            resources :runs, only: [:index, :show, :create] do
+              post :cancel, on: :member
+            end
+          end
           get 'jrc_copilot/context', to: 'jrc_copilot#context'
           namespace :jrc_ai do
             resource :cockpit, only: :show, controller: :cockpit
@@ -824,6 +869,7 @@ Rails.application.routes.draw do
         post :seed, on: :member
         post :reset_cache, on: :member
         post :toggle_feature, on: :member
+        patch :update_nico, on: :member
         get :impersonate, to: 'account_impersonations#show'
         get 'settings/inboxes', to: 'account_inboxes#index'
         get 'settings/inboxes/*path', to: 'account_inboxes#index'

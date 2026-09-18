@@ -13,6 +13,7 @@
 #  created_at               :datetime         not null
 #  updated_at               :datetime         not null
 #  account_id               :integer          not null
+#  business_unit_id         :bigint
 #  company_id               :bigint
 #  contact_id               :integer
 #  conversation_id          :integer
@@ -24,17 +25,19 @@
 #
 # Indexes
 #
-#  idx_jrc_crm_activities_legacy_sales          (account_id,legacy_sales_activity_id) UNIQUE WHERE (legacy_sales_activity_id IS NOT NULL)
-#  index_jrc_crm_activities_on_account_id       (account_id)
-#  index_jrc_crm_activities_on_activity_type    (activity_type)
-#  index_jrc_crm_activities_on_deal_id          (deal_id)
-#  index_jrc_crm_activities_on_due_at           (due_at)
-#  index_jrc_crm_activities_on_organization_id  (organization_id)
-#  index_jrc_crm_activities_on_user_id          (user_id)
+#  idx_jrc_crm_activities_legacy_sales           (account_id,legacy_sales_activity_id) UNIQUE WHERE (legacy_sales_activity_id IS NOT NULL)
+#  index_jrc_crm_activities_on_account_id        (account_id)
+#  index_jrc_crm_activities_on_activity_type     (activity_type)
+#  index_jrc_crm_activities_on_business_unit_id  (business_unit_id)
+#  index_jrc_crm_activities_on_deal_id           (deal_id)
+#  index_jrc_crm_activities_on_due_at            (due_at)
+#  index_jrc_crm_activities_on_organization_id   (organization_id)
+#  index_jrc_crm_activities_on_user_id           (user_id)
 #
 # Foreign Keys
 #
 #  fk_rails_...  (account_id => accounts.id)
+#  fk_rails_...  (business_unit_id => jrc_crm_business_units.id)
 #  fk_rails_...  (contact_id => contacts.id)
 #  fk_rails_...  (conversation_id => conversations.id)
 #  fk_rails_...  (deal_id => jrc_crm_deals.id)

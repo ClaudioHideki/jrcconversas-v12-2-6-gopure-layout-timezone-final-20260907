@@ -1,21 +1,34 @@
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
-const isOpen = ref(false);
+const mode = ref('closed');
+const isOpen = computed(() => mode.value !== 'closed');
+const isFull = computed(() => mode.value === 'full');
 const pendingPrompt = ref('');
+const suggestionCount = ref(0);
+const notices = ref([]);
+const focusedNoticeId = ref(null);
 
 export const useJrcCopilot = () => {
   const open = () => {
-    isOpen.value = true;
+    mode.value = 'full';
+  };
+  const openQuick = () => {
+    mode.value = 'quick';
   };
   const close = () => {
-    isOpen.value = false;
+    mode.value = 'closed';
+  };
+  const openNotice = id => {
+    focusedNoticeId.value = id;
+    open();
   };
   const toggle = () => {
-    isOpen.value = !isOpen.value;
+    if (isOpen.value) close();
+    else openQuick();
   };
   const openWithPrompt = prompt => {
     pendingPrompt.value = String(prompt || '').trim();
-    isOpen.value = true;
+    open();
   };
   const consumePrompt = () => {
     const value = pendingPrompt.value;
@@ -24,9 +37,16 @@ export const useJrcCopilot = () => {
   };
 
   return {
+    mode,
     isOpen,
+    isFull,
     pendingPrompt,
+    suggestionCount,
+    notices,
+    focusedNoticeId,
+    openNotice,
     open,
+    openQuick,
     close,
     toggle,
     openWithPrompt,

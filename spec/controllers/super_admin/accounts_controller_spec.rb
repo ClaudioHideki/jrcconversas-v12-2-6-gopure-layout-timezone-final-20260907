@@ -6,6 +6,34 @@ RSpec.describe 'Super Admin accounts API', type: :request do
   let!(:super_admin) { create(:super_admin) }
   let!(:account) { create(:account) }
 
+  describe 'NICO account configuration' do
+    let(:nico_config) { { enabled: '1', monthly_run_limit: '1000', monthly_token_limit: '2000000', concurrency: '3' } }
+
+    it 'allows only a Super Admin to enable NICO and preserves unrelated account attributes' do
+      account.update!(custom_attributes: { 'brand' => 'GoPure' })
+      patch "/super_admin/accounts/#{account.id}/update_nico", params: { nico: nico_config }
+      expect(account.reload.custom_attributes['nico_enabled']).to be_nil
+      sign_in(super_admin, scope: :super_admin)
+      patch "/super_admin/accounts/#{account.id}/update_nico", params: { nico: nico_config }
+      expect(response).to redirect_to(edit_super_admin_account_path(account))
+      expect(account.reload.custom_attributes).to include('brand' => 'GoPure', 'nico_enabled' => true, 'nico_concurrency' => 3)
+    end
+
+    it 'rejects invalid NICO limits without partial configuration changes' do
+      sign_in(super_admin, scope: :super_admin)
+      patch "/super_admin/accounts/#{account.id}/update_nico", params: { nico: nico_config.merge(concurrency: '99') }
+      expect(account.reload.custom_attributes['nico_enabled']).to be_nil
+      expect(flash[:alert]).to be_present
+    end
+
+    it 'renders NICO controls in the existing account editor' do
+      sign_in(super_admin, scope: :super_admin)
+      get "/super_admin/accounts/#{account.id}/edit"
+      expect(response).to have_http_status(:success)
+      expect(response.body).to include('nico[enabled]', 'nico[monthly_run_limit]')
+    end
+  end
+
   describe 'GET /super_admin/accounts' do
     context 'when it is an unauthenticated user' do
       it 'returns unauthorized' do

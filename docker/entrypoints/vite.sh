@@ -10,4 +10,4 @@ fi
 
 echo "Ready to run Vite development server."
 
-exec bundle exec vite dev
+exec bin/vite dev
