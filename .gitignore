@@ -61,6 +61,7 @@ coverage
 # ignore packages
 node_modules
 package-lock.json
+!services/nico-runtime/package-lock.json
 
 *.dump
 
