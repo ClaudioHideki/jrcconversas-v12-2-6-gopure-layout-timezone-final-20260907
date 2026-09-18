@@ -111,7 +111,7 @@ class SuperAdmin::AccountsController < SuperAdmin::ApplicationController
 
     DeleteObjectJob.perform_later(account) if account.present?
     # rubocop:disable Rails/I18nLocaleTexts
-    redirect_back(fallback_location: [namespace, requested_resource], notice: 'Account deletion is in progress.')
+    redirect_back(fallback_location: super_admin_accounts_path, notice: 'Account deletion is in progress.')
     # rubocop:enable Rails/I18nLocaleTexts
   end
 
@@ -199,5 +199,4 @@ class SuperAdmin::AccountsController < SuperAdmin::ApplicationController
 end
 
 SuperAdmin::AccountsController.prepend_mod_with('SuperAdmin::AccountsController')
-
 
