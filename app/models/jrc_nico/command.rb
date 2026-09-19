@@ -48,8 +48,11 @@ class JrcNico::Command < ApplicationRecord
     return unless previous_changes.key?('status')
 
     JrcNico::Notice.command_changed!(self)
-    if source_notice_id.nil? && execution_context['workflow_id'] && status == 'succeeded' && JrcNico::ToolCatalog::TOOLS.dig(tool, 2) == true
-      JrcNico::ContinueCommandJob.perform_later(id)
-    end
+    return unless source_notice_id.nil?
+    return unless execution_context['workflow_id'].present?
+    return unless status == 'succeeded'
+    return if tool.blank?
+
+    JrcNico::ContinueCommandJob.perform_later(id)
   end
 end
