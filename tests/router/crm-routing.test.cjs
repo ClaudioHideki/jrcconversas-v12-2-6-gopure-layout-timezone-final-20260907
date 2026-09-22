@@ -159,7 +159,7 @@ async function setup() {
 }
 
 const primary = ['dashboard', 'indicators', 'leads', 'deals', 'funnel', 'wallet', 'activities',
-  'calendar', 'products', 'proposals', 'orders', 'contracts', 'goals'];
+  'calendar', 'products', 'proposals', 'orders', 'contracts', 'goals', 'management', 'settings'];
 const commissions = ['current', 'plans', 'new', 'closing', 'detail', 'approvals', 'adjustments', 'payments', 'mine', 'history'];
 const backoffice = ['overview', 'mine', 'requests', 'process', 'docs', 'contracts', 'implement', 'provision', 'finance', 'issues', 'approvals', 'changes', 'sla', 'reports'];
 const paths = [...primary, 'commissions', ...commissions.map(section => 'commissions/' + section),

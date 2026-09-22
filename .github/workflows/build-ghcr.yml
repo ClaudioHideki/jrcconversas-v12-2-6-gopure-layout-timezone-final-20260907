@@ -91,7 +91,7 @@ jobs:
         include:
           - component: app
             dockerfile: ./docker/Dockerfile
-            tag: 4.16.2-gopure-crm-homologacao-20260922-r1
+            tag: 4.16.2-gopure-crm-homologacao-20260922-r2
 
     permissions:
       contents: read
