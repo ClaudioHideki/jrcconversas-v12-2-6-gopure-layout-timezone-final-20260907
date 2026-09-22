@@ -82,6 +82,7 @@ module JrcCrm
         request.completed_at = Time.current if request.stage == 'completed'
       end
       request.save!
+      complete_after_payment!(request) if @event == 'payment_received'
     end
 
     def sync_commission!
@@ -179,6 +180,10 @@ module JrcCrm
       return 'implementation' if @order.separating? && request.stage_applicable?('implementation')
 
       'analysis'
+    end
+
+    def complete_after_payment!(request)
+      request.advance! until request.completed?
     end
   end
 end

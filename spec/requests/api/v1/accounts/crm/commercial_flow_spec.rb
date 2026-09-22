@@ -112,6 +112,10 @@ RSpec.describe 'CRM commercial flow integration', type: :request do
   end
 
   it 'persists commission plans through the API after refresh' do
+    products = [
+      create(:jrc_crm_product, account: account, sku: 'PLAN-CRM-1'),
+      create(:jrc_crm_product, account: account, sku: 'PLAN-CRM-2')
+    ]
     url = "/api/v1/accounts/#{account.id}/crm/commission_programs"
     post url,
          params: {
@@ -122,7 +126,7 @@ RSpec.describe 'CRM commercial flow integration', type: :request do
              rules: {
                base: 'monthly_cents',
                rate_percent: 7.5,
-               product_ids: [11, 12],
+               product_ids: products.map(&:id),
                user_ids: [admin.id],
                team_ids: [],
                tiers: [{ min_cents: 100_000, max_cents: nil, rate_percent: 9 }]
