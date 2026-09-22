@@ -295,20 +295,21 @@ Rails.application.routes.draw do
                 post :lose
               end
             end
-            resources :pipelines
-            resources :stages do
+            resources :management, only: [:index]
+            resources :pipelines, only: [:index, :show, :create, :update, :destroy]
+            resources :stages, only: [:index, :show, :create, :update, :destroy] do
               post :reorder, on: :collection
             end
-            resources :activities do
+            resources :activities, only: [:index, :show, :create, :update, :destroy] do
               post :complete, on: :member
             end
-            resources :follow_ups do
+            resources :follow_ups, only: [:index, :show, :create, :update, :destroy] do
               post :complete, on: :member
             end
-            resources :products do
+            resources :products, only: [:index, :show, :create, :update, :destroy] do
               patch :toggle_active, on: :member
             end
-            resources :proposals do
+            resources :proposals, only: [:index, :show, :create, :update, :destroy] do
               resources :items, controller: :proposal_items, only: [:create, :update, :destroy]
               member do
                 get :pdf
@@ -322,14 +323,56 @@ Rails.application.routes.draw do
                 post :convert_to_order
               end
             end
-            resources :sales_orders, only: [:index, :show, :create, :update]
-            resources :contracts, only: [:index, :create, :update] do
-              get :pdf, on: :member
+            resources :sales_orders, only: [:index, :show, :create, :update] do
+              post :preview, on: :collection
+              member do
+                get :pdf
+                post :attachments, action: :upload_attachments
+                get 'attachments/:attachment_id', action: :download_attachment, as: :attachment
+              end
             end
-            resources :commissions, only: [:index, :create, :update]
-            resources :goals, only: [:index, :create, :update]
+            resources :contracts, only: [:index, :show, :create, :update] do
+              member do
+                get :pdf
+                get :history
+                post :documents, action: :upload_documents
+                get 'documents/:attachment_id', action: :download_document, as: :document
+                get :signed_document, action: :download_signed_document
+                post :prepare_signature
+                post :send_for_signature
+                post :register_manual_signature
+                post :renew
+                post :addendum
+              end
+            end
+            resources :commissions, only: [:index, :create, :update] do
+              get :summary, on: :collection
+              get :history, on: :collection
+            end
+            resources :commission_programs, only: [:index, :show, :create, :update] do
+              post :simulate, on: :collection
+            end
+            resources :backoffice_requests, only: [:index, :show, :create, :update] do
+              get :summary, on: :collection
+              member do
+                post :advance
+                post :documents, action: :upload_documents
+                get 'documents/:attachment_id', action: :download_document, as: :document
+                post :document_status
+                post :issues, action: :add_issue
+                post :resolve_issue
+                post :confirm_provisioning
+                post :reopen
+              end
+            end
+            resources :invoices, only: [:index, :show, :create, :update]
+            resources :payments, only: [:index, :create]
+            resources :contract_templates, only: [:index, :show, :create, :update, :destroy]
+            resources :goals, only: [:index, :create, :update] do
+              get :dashboard, on: :collection
+            end
             resources :customers, only: [:show]
-            resources :lost_reasons
+            resources :lost_reasons, only: [:index, :show, :create, :update, :destroy]
             resource :wallet, only: :show
             resources :timeline, only: :index
             get 'public/proposals/:token', to: 'public_proposals#show'

@@ -143,7 +143,7 @@ onMounted(async () => {
                   >Abrir detalhes do negócio</span
                 >
               </span>
-              <span class="flex items-center gap-2"><span class="text-sm font-semibold text-n-blue-11">{{ formatBRL(deal.value_cents) }}</span><span class="grid size-8 place-content-center rounded-lg bg-[#087cf0] text-white"><i class="i-lucide-phone size-3.5" /></span><span class="grid size-8 place-content-center rounded-lg bg-[#16a76b] text-white"><i class="i-ri-whatsapp-fill size-3.5" /></span><span class="grid size-8 place-content-center rounded-lg bg-[#7c3aed] text-white"><i class="i-lucide-calendar-days size-3.5" /></span></span>
+              <span class="flex items-center gap-2"><span class="text-sm font-semibold text-n-blue-11">{{ formatBRL(deal.value_cents) }}</span><span class="grid size-8 place-content-center rounded-lg bg-blue-700 text-white"><i class="i-lucide-phone size-3.5" /></span><span class="grid size-8 place-content-center rounded-lg bg-emerald-700 text-white"><i class="i-ri-whatsapp-fill size-3.5" /></span><span class="grid size-8 place-content-center rounded-lg bg-[#7c3aed] text-white"><i class="i-lucide-calendar-days size-3.5" /></span></span>
             </button>
           </div>
           <p v-else class="p-5 text-sm text-n-slate-10">

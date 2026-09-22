@@ -188,7 +188,7 @@ const metricStyles = [`background:#eff6ff;border-color:#93c5fd;border-top:4px so
         <div class="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div class="flex items-center gap-2">
-              <span class="grid size-9 place-content-center rounded-xl bg-[#087cf0] text-white shadow-[0_8px_18px_rgba(8,124,240,.20)]"><i class="i-lucide-chart-no-axes-combined size-5" /></span>
+              <span class="grid size-9 place-content-center rounded-xl bg-blue-700 text-white shadow-[0_8px_18px_rgba(8,124,240,.20)]"><i class="i-lucide-chart-no-axes-combined size-5" /></span>
               <div>
                 <h2 class="text-2xl font-bold text-[#172033]">Indicadores do CRM</h2>
                 <p class="text-sm text-[#667085]">Resultados, conversões e produtividade com os dados reais da operação.</p>
@@ -220,7 +220,7 @@ const metricStyles = [`background:#eff6ff;border-color:#93c5fd;border-top:4px so
           <div class="min-w-72 flex-1">
             <span class="text-[11px] font-semibold uppercase tracking-wide text-[#667085]">Período</span>
             <div class="mt-1 flex h-10 rounded-xl border border-[#dde3ea] bg-white p-1">
-              <button v-for="option in ['30', '90', 'year']" :key="option" type="button" class="flex-1 rounded-lg px-3 text-xs font-semibold transition" :class="period === option ? 'bg-[#087cf0] text-white shadow-sm' : 'text-[#667085] hover:bg-[#f4f7fb]'" @click="period = option; load();">
+              <button v-for="option in ['30', '90', 'year']" :key="option" type="button" class="flex-1 rounded-lg px-3 text-xs font-semibold transition" :class="period === option ? 'bg-blue-700 text-white shadow-sm' : 'text-[#667085] hover:bg-[#f4f7fb]'" @click="period = option; load();">
                 {{ option === '30' ? 'Últimos 30 dias' : option === '90' ? 'Últimos 90 dias' : 'Este ano' }}
               </button>
             </div>

@@ -57,10 +57,13 @@ module JrcCrm
     belongs_to :contact, optional: true
     belongs_to :owner, class_name: 'User'
     has_many :order_items, class_name: 'JrcCrm::OrderItem', dependent: :destroy
+    has_many_attached :attachments
     has_many :contracts, class_name: 'JrcCrm::Contract', dependent: :restrict_with_error
     has_many :commissions, class_name: 'JrcCrm::SalesCommission', dependent: :destroy
+    has_many :backoffice_requests, class_name: 'JrcCrm::BackofficeRequest', dependent: :destroy
+    has_many :invoices, class_name: 'JrcCrm::Invoice', dependent: :restrict_with_error
     validates :source_type, inclusion: { in: %w[proposal deal manual] }
-    enum status: { pending: 'pending', approved: 'approved', separating: 'separating', invoiced: 'invoiced', shipped: 'shipped', completed: 'completed', canceled: 'canceled' }
+    enum status: { draft: 'draft', pending: 'pending', approved: 'approved', separating: 'separating', invoiced: 'invoiced', shipped: 'shipped', completed: 'completed', canceled: 'canceled' }
     validates :order_number, presence: true, uniqueness: { scope: :account_id }
     validate :same_account
     before_validation :assign_number, on: :create
@@ -69,6 +72,7 @@ module JrcCrm
       errors.add(:business_unit, 'must belong to account') if business_unit && business_unit.account_id != account_id
       errors.add(:proposal, 'must belong to account') if proposal && proposal.account_id != account_id
       errors.add(:contact, 'must belong to account') if contact && contact.account_id != account_id
+      errors.add(:owner, 'must belong to account') if owner && !account.users.exists?(owner.id)
     end
     def assign_number
       return if order_number.present?

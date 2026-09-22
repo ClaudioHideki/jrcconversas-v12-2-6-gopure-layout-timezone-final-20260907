@@ -106,7 +106,7 @@ module JrcCrm
         value = if item.respond_to?(:initial_total_cents)
                   item.initial_total_cents
                 else
-                  item.one_time_cents.to_i + item.recurring_cents.to_i
+                  item.one_time_cents.to_i + item.monthly_cents.to_i
                 end
         page.text(56, y - 16, name.to_s.slice(0, 48), size: 8.5, bold: true, color: TEXT)
         page.text(350, y - 16, quantity, size: 8.5, color: TEXT)
@@ -118,8 +118,12 @@ module JrcCrm
     end
 
     def clauses
+      return @contract.content_override.split(/\n{2,}/).map(&:strip).reject(&:blank?) if @contract.respond_to?(:content_override) && @contract.content_override.present?
+      return rendered_template_clauses if @contract.contract_template&.body.present?
+
+      deal_reference = @deal ? " e ao negócio #{@deal.title}" : ''
       [
-        "Este contrato formaliza a contratação vinculada ao pedido #{@order.order_number} e ao negócio #{@deal.title}.",
+        "Este contrato formaliza a contratação vinculada ao pedido #{@order.order_number}#{deal_reference}.",
         "A vigência inicia em #{@contract.starts_on || Date.current} e segue até #{@contract.ends_on || 'a data definida comercialmente'}.",
         "A mensalidade contratada é de #{money(@contract.monthly_cents)} e os reajustes seguem o índice #{@contract.adjustment_index.presence || 'IPCA'}.",
         "A renovação é #{renewal_label}. Alterações comerciais devem ser formalizadas por escrito entre as partes.",
@@ -127,12 +131,25 @@ module JrcCrm
       ]
     end
 
+    def rendered_template_clauses
+      context = {
+        'cliente' => { 'nome' => customer_name },
+        'contrato' => { 'numero' => @contract.contract_number },
+        'pedido' => { 'numero' => @order.order_number },
+        'vigencia' => validity,
+        'valor_mensal' => money(@contract.monthly_cents),
+        'valor_total' => money(@contract.one_time_cents)
+      }
+      Liquid::Template.parse(@contract.contract_template.body).render(context)
+                      .split(/\n{2,}/).map(&:strip).reject(&:blank?)
+    end
+
     def contract_title
       "Contrato #{@contract.contract_number}"
     end
 
     def customer_name
-      @contact&.name.presence || @deal.title
+      @contact&.name.presence || @deal&.title.presence || @order.snapshot['customer_name'].presence || 'Cliente'
     end
 
     def validity

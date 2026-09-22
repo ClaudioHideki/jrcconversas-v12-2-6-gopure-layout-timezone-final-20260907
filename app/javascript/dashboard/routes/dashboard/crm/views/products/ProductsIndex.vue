@@ -1181,7 +1181,7 @@ onMounted(refresh);
 
     <div
       v-if="showForm"
-      class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/50 p-2 sm:p-4"
+      class="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-2 sm:p-4"
       @click.self="closeForm"
     >
       <form

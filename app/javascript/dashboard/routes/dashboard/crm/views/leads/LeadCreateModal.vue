@@ -1,4 +1,5 @@
 <script setup>
+import { crmControlClasses } from '../../crmControlClasses';
 import { reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { leadsAPI } from 'dashboard/api/crm';
@@ -56,7 +57,7 @@ const save = async () => {
 <template>
   <Teleport to="body">
     <div
-      class="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4"
+      :class="crmControlClasses" class="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4"
       @click.self="close"
       @keydown.esc="close"
     >

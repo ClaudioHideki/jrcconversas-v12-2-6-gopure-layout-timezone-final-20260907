@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_09_18_130000) do
+ActiveRecord::Schema[7.1].define(version: 2026_09_20_173000) do
   # These extensions should be enabled to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -1464,6 +1464,38 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_18_130000) do
     t.index ["trigger_type"], name: "index_jrc_crm_automation_rules_on_trigger_type"
   end
 
+  create_table "jrc_crm_backoffice_requests", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "business_unit_id"
+    t.bigint "sales_order_id", null: false
+    t.bigint "contract_id"
+    t.bigint "contact_id"
+    t.bigint "owner_id", null: false
+    t.bigint "requested_by_id", null: false
+    t.string "request_number", null: false
+    t.string "request_kind", default: "fulfillment", null: false
+    t.string "stage", default: "analysis", null: false
+    t.string "status", default: "pending", null: false
+    t.string "priority", default: "normal", null: false
+    t.string "title", null: false
+    t.text "description"
+    t.datetime "due_at"
+    t.datetime "completed_at"
+    t.jsonb "metadata", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "request_number"], name: "idx_jrc_crm_backoffice_number", unique: true
+    t.index ["account_id", "sales_order_id", "request_kind"], name: "idx_jrc_crm_backoffice_order_kind", unique: true, where: "((request_kind)::text = 'fulfillment'::text)"
+    t.index ["account_id", "status", "stage"], name: "idx_jrc_crm_backoffice_queue"
+    t.index ["account_id"], name: "index_jrc_crm_backoffice_requests_on_account_id"
+    t.index ["business_unit_id"], name: "index_jrc_crm_backoffice_requests_on_business_unit_id"
+    t.index ["contact_id"], name: "index_jrc_crm_backoffice_requests_on_contact_id"
+    t.index ["contract_id"], name: "index_jrc_crm_backoffice_requests_on_contract_id"
+    t.index ["owner_id"], name: "index_jrc_crm_backoffice_requests_on_owner_id"
+    t.index ["requested_by_id"], name: "index_jrc_crm_backoffice_requests_on_requested_by_id"
+    t.index ["sales_order_id"], name: "index_jrc_crm_backoffice_requests_on_sales_order_id"
+  end
+
   create_table "jrc_crm_business_units", force: :cascade do |t|
     t.bigint "account_id", null: false
     t.string "name", null: false
@@ -1522,10 +1554,24 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_18_130000) do
     t.index ["product_id"], name: "index_jrc_crm_contract_items_on_product_id"
   end
 
+  create_table "jrc_crm_contract_templates", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.string "name", null: false
+    t.string "category"
+    t.text "description"
+    t.text "body", null: false
+    t.jsonb "variables", default: [], null: false
+    t.boolean "active", default: true, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "name"], name: "index_jrc_crm_contract_templates_on_account_id_and_name", unique: true
+    t.index ["account_id"], name: "index_jrc_crm_contract_templates_on_account_id"
+  end
+
   create_table "jrc_crm_contracts", force: :cascade do |t|
     t.bigint "account_id", null: false
     t.bigint "sales_order_id", null: false
-    t.bigint "deal_id", null: false
+    t.bigint "deal_id"
     t.bigint "contact_id"
     t.bigint "owner_id", null: false
     t.string "contract_number", null: false
@@ -1548,13 +1594,25 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_18_130000) do
     t.boolean "auto_renew", default: false, null: false
     t.integer "renewal_notice_days", default: 30, null: false
     t.integer "renewal_term_months"
+    t.bigint "contract_template_id"
+    t.string "signature_status", default: "not_started", null: false
+    t.string "signature_mode"
+    t.string "signature_provider"
+    t.string "signature_external_id"
+    t.string "signed_by_name"
+    t.datetime "signed_at"
+    t.jsonb "lifecycle_metadata", default: {}, null: false
+    t.text "content_override"
+    t.bigint "source_contract_id"
     t.index ["account_id", "contract_number"], name: "idx_jrc_crm_contracts_account_number", unique: true
     t.index ["account_id"], name: "index_jrc_crm_contracts_on_account_id"
     t.index ["business_unit_id"], name: "index_jrc_crm_contracts_on_business_unit_id"
     t.index ["contact_id"], name: "index_jrc_crm_contracts_on_contact_id"
+    t.index ["contract_template_id"], name: "index_jrc_crm_contracts_on_contract_template_id"
     t.index ["deal_id"], name: "index_jrc_crm_contracts_on_deal_id"
     t.index ["owner_id"], name: "index_jrc_crm_contracts_on_owner_id"
     t.index ["sales_order_id"], name: "index_jrc_crm_contracts_on_sales_order_id"
+    t.index ["source_contract_id"], name: "index_jrc_crm_contracts_on_source_contract_id"
   end
 
   create_table "jrc_crm_custom_attribute_definitions", force: :cascade do |t|
@@ -2028,10 +2086,16 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_18_130000) do
     t.datetime "updated_at", null: false
     t.bigint "business_unit_id"
     t.bigint "commission_program_id"
+    t.jsonb "calculation", default: {}, null: false
+    t.decimal "goal_attainment_percent", precision: 8, scale: 3
+    t.decimal "share_percent", precision: 8, scale: 3, default: "100.0", null: false
+    t.string "event_key"
+    t.datetime "accrued_at"
     t.index ["account_id", "sales_order_id", "user_id"], name: "idx_jrc_crm_commission_unique", unique: true
     t.index ["account_id"], name: "index_jrc_crm_sales_commissions_on_account_id"
     t.index ["business_unit_id"], name: "index_jrc_crm_sales_commissions_on_business_unit_id"
     t.index ["commission_program_id"], name: "index_jrc_crm_sales_commissions_on_commission_program_id"
+    t.index ["event_key"], name: "index_jrc_crm_sales_commissions_on_event_key"
     t.index ["sales_order_id"], name: "index_jrc_crm_sales_commissions_on_sales_order_id"
     t.index ["user_id"], name: "index_jrc_crm_sales_commissions_on_user_id"
   end
@@ -2049,10 +2113,24 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_18_130000) do
     t.bigint "product_id"
     t.string "metric", default: "revenue", null: false
     t.bigint "target_quantity"
+    t.string "name"
+    t.text "description"
+    t.string "status", default: "draft", null: false
+    t.string "period_kind", default: "monthly", null: false
+    t.string "calculation_method", default: "approved_orders", null: false
+    t.string "currency", default: "BRL", null: false
+    t.bigint "team_id"
+    t.jsonb "allocations", default: [], null: false
+    t.jsonb "product_targets", default: [], null: false
+    t.jsonb "indicators", default: [], null: false
+    t.jsonb "settings", default: {}, null: false
+    t.datetime "published_at"
+    t.index ["account_id", "status"], name: "index_jrc_crm_sales_goals_on_account_id_and_status"
     t.index ["account_id", "user_id", "period_start", "period_end"], name: "idx_jrc_crm_goals_period", unique: true
     t.index ["account_id"], name: "index_jrc_crm_sales_goals_on_account_id"
     t.index ["business_unit_id"], name: "index_jrc_crm_sales_goals_on_business_unit_id"
     t.index ["product_id"], name: "index_jrc_crm_sales_goals_on_product_id"
+    t.index ["team_id"], name: "index_jrc_crm_sales_goals_on_team_id"
     t.index ["user_id"], name: "index_jrc_crm_sales_goals_on_user_id"
   end
 
@@ -2261,7 +2339,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_18_130000) do
     t.index ["activity_id"], name: "index_jrc_nico_proposals_on_activity_id"
     t.index ["run_id"], name: "index_jrc_nico_proposals_on_run_id"
     t.index ["user_id"], name: "index_jrc_nico_proposals_on_user_id"
-    t.check_constraint "status::text = ANY (ARRAY['pending'::character varying, 'executed'::character varying]::text[])", name: "nico_proposal_status"
+    t.check_constraint "status::text = ANY (ARRAY['pending'::character varying::text, 'executed'::character varying::text])", name: "nico_proposal_status"
   end
 
   create_table "jrc_nico_runs", force: :cascade do |t|
@@ -2288,7 +2366,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_18_130000) do
     t.index ["conversation_id"], name: "index_jrc_nico_runs_on_conversation_id"
     t.index ["user_id"], name: "index_jrc_nico_runs_on_user_id"
     t.check_constraint "reserved_tokens >= 0", name: "nico_nonnegative_reservation"
-    t.check_constraint "status::text = ANY (ARRAY['queued'::character varying, 'running'::character varying, 'completed'::character varying, 'failed'::character varying, 'cancelled'::character varying]::text[])", name: "nico_run_status"
+    t.check_constraint "status::text = ANY (ARRAY['queued'::character varying::text, 'running'::character varying::text, 'completed'::character varying::text, 'failed'::character varying::text, 'cancelled'::character varying::text])", name: "nico_run_status"
   end
 
   create_table "jrc_nico_sessions", force: :cascade do |t|
@@ -2946,14 +3024,24 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_18_130000) do
   add_foreign_key "jrc_crm_activities", "jrc_crm_organizations", column: "organization_id"
   add_foreign_key "jrc_crm_activities", "users"
   add_foreign_key "jrc_crm_audit_events", "accounts"
+  add_foreign_key "jrc_crm_backoffice_requests", "accounts"
+  add_foreign_key "jrc_crm_backoffice_requests", "contacts"
+  add_foreign_key "jrc_crm_backoffice_requests", "jrc_crm_business_units", column: "business_unit_id"
+  add_foreign_key "jrc_crm_backoffice_requests", "jrc_crm_contracts", column: "contract_id"
+  add_foreign_key "jrc_crm_backoffice_requests", "jrc_crm_sales_orders", column: "sales_order_id"
+  add_foreign_key "jrc_crm_backoffice_requests", "users", column: "owner_id"
+  add_foreign_key "jrc_crm_backoffice_requests", "users", column: "requested_by_id"
   add_foreign_key "jrc_crm_business_units", "accounts"
   add_foreign_key "jrc_crm_commission_programs", "accounts"
   add_foreign_key "jrc_crm_commission_programs", "jrc_crm_business_units", column: "business_unit_id"
   add_foreign_key "jrc_crm_contract_items", "jrc_crm_contracts", column: "contract_id"
   add_foreign_key "jrc_crm_contract_items", "jrc_crm_products", column: "product_id"
+  add_foreign_key "jrc_crm_contract_templates", "accounts"
   add_foreign_key "jrc_crm_contracts", "accounts"
   add_foreign_key "jrc_crm_contracts", "contacts"
   add_foreign_key "jrc_crm_contracts", "jrc_crm_business_units", column: "business_unit_id"
+  add_foreign_key "jrc_crm_contracts", "jrc_crm_contract_templates", column: "contract_template_id"
+  add_foreign_key "jrc_crm_contracts", "jrc_crm_contracts", column: "source_contract_id"
   add_foreign_key "jrc_crm_contracts", "jrc_crm_deals", column: "deal_id"
   add_foreign_key "jrc_crm_contracts", "jrc_crm_sales_orders", column: "sales_order_id"
   add_foreign_key "jrc_crm_contracts", "users", column: "owner_id"

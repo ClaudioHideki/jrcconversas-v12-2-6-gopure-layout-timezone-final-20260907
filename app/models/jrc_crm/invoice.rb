@@ -52,5 +52,28 @@ module JrcCrm
     enum status: { draft: 'draft', issued: 'issued', sent: 'sent', paid: 'paid', overdue: 'overdue', canceled: 'canceled' }
     validates :invoice_number, :due_on, presence: true
     validates :invoice_number, uniqueness: { scope: :account_id }
+    validate :associations_belong_to_account
+    before_validation :assign_number, on: :create
+
+    def recalculate_balance!
+      paid_cents = payments.sum(:amount_cents)
+      new_balance = [total_cents.to_i - paid_cents, 0].max
+      attributes = { balance_cents: new_balance, updated_at: Time.current }
+      attributes[:status] = 'paid' if new_balance.zero? && total_cents.to_i.positive?
+      update_columns(attributes)
+    end
+
+    private
+
+    def associations_belong_to_account
+      errors.add(:sales_order, 'must belong to account') if sales_order && sales_order.account_id != account_id
+      errors.add(:contract, 'must belong to account') if contract && contract.account_id != account_id
+      errors.add(:business_unit, 'must belong to account') if business_unit && business_unit.account_id != account_id
+      errors.add(:contact, 'must belong to account') if contact && contact.account_id != account_id
+    end
+
+    def assign_number
+      self.invoice_number ||= "FAT-#{Time.zone.today.year}-#{SecureRandom.random_number(1_000_000).to_s.rjust(6, '0')}"
+    end
   end
 end

@@ -1,4 +1,5 @@
 <script setup>
+import { crmControlClasses } from '../../crmControlClasses';
 /* eslint-disable vue/no-bare-strings-in-template, @intlify/vue-i18n/no-raw-text */
 import { ref, computed, onMounted } from 'vue';
 import { useStore } from 'vuex';
@@ -175,7 +176,7 @@ const { onDragStart, onDragOver, onDrop } = useDragAndDrop({
     <Teleport to="body">
       <div
         v-if="pendingLostMove"
-        class="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4"
+        :class="crmControlClasses" class="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4"
       >
         <div class="w-full max-w-md rounded-xl bg-n-solid-2 p-6 shadow-2xl">
           <h3 class="text-lg font-semibold text-n-slate-12">

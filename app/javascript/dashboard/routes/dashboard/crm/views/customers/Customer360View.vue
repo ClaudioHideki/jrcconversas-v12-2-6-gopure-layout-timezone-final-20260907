@@ -2,6 +2,7 @@
 /* eslint-disable vue/no-bare-strings-in-template, @intlify/vue-i18n/no-raw-text */
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import CrmContactActions from '../../components/shared/CrmContactActions.vue';
 import { customersAPI } from 'dashboard/api/crm/commercialCycle';
 import { useAlert } from 'dashboard/composables';
 import { useJrcCopilot } from 'dashboard/components-next/jrcCopilot/useJrcCopilot';
@@ -46,19 +47,19 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="h-full overflow-auto bg-n-surface-1 p-4 sm:p-6">
+  <div class="h-full overflow-auto break-words bg-n-surface-1 p-4 sm:p-6">
     <div v-if="loading" class="grid min-h-96 place-content-center text-sm text-n-slate-10">Carregando Cliente 360°…</div>
     <template v-else-if="data">
       <header class="rounded-2xl border border-n-weak bg-white p-5 shadow-sm">
         <div class="flex flex-wrap items-start justify-between gap-4">
-          <div class="flex items-center gap-4">
+          <div class="flex min-w-0 items-center gap-4">
             <span class="grid size-16 place-content-center rounded-2xl bg-emerald-700 text-xl font-bold text-white">{{ initials }}</span>
             <div>
               <div class="flex flex-wrap items-center gap-2"><h1 class="text-2xl font-bold text-n-slate-12">{{ profile.name }}</h1><span class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Cliente</span></div>
               <p class="mt-1 text-sm text-n-slate-10">{{ profile.company || profile.email || profile.phone_number || 'Cadastro comercial' }}</p>
             </div>
           </div>
-          <div class="grid grid-cols-2 gap-x-8 gap-y-2 text-xs sm:grid-cols-4">
+          <div class="grid min-w-0 grid-cols-2 gap-x-4 gap-y-3 text-xs min-[1280px]:grid-cols-4 [&_strong]:break-words">
             <div><span class="block text-n-slate-9">Pipeline</span><strong class="text-sm text-n-slate-12">{{ money(metrics.pipeline_cents) }}</strong></div>
             <div><span class="block text-n-slate-9">Negócios</span><strong class="text-sm text-n-slate-12">{{ metrics.deals || 0 }}</strong></div>
             <div><span class="block text-n-slate-9">Último contato</span><strong class="text-sm text-n-slate-12">{{ dateTime(profile.last_activity_at) }}</strong></div>
@@ -66,9 +67,7 @@ onMounted(load);
           </div>
         </div>
         <div class="mt-5 flex flex-wrap gap-2 border-t border-n-weak pt-4">
-          <button class="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"><i class="i-ri-whatsapp-fill mr-1" />WhatsApp</button>
-          <button class="rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700"><i class="i-lucide-phone mr-1" />Ligar</button>
-          <button class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700"><i class="i-lucide-mail mr-1" />E-mail</button>
+          <CrmContactActions :contact="profile" />
           <button class="rounded-lg bg-n-brand px-3 py-2 text-xs font-semibold text-white" @click="newDeal"><i class="i-lucide-plus mr-1" />Novo negócio</button>
           <button class="rounded-lg border border-n-brand px-3 py-2 text-xs font-semibold text-n-brand" @click="newProposal"><i class="i-lucide-file-plus-2 mr-1" />Nova proposta</button>
           <button class="rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700" @click="openWithPrompt(`Resuma o histórico comercial de ${profile.name}, os negócios ativos, pendências e recomende o próximo follow-up.`)"><i class="i-lucide-bot mr-1" />Perguntar ao NICO</button>
@@ -82,7 +81,7 @@ onMounted(load);
       <section v-if="activeTab === 'overview'" class="mt-4 grid gap-4 xl:grid-cols-[320px_1fr]">
         <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
           <article class="rounded-2xl border border-n-weak bg-white p-4 shadow-sm"><p class="text-xs font-semibold uppercase text-n-slate-9">Resumo</p><dl class="mt-3 grid grid-cols-2 gap-3 text-sm"><div><dt class="text-xs text-n-slate-9">Negócios abertos</dt><dd class="text-xl font-bold">{{ metrics.open_deals || 0 }}</dd></div><div><dt class="text-xs text-n-slate-9">Ganhos</dt><dd class="text-xl font-bold">{{ metrics.won_deals || 0 }}</dd></div><div><dt class="text-xs text-n-slate-9">Propostas</dt><dd class="text-xl font-bold">{{ metrics.proposals || 0 }}</dd></div><div><dt class="text-xs text-n-slate-9">Pedidos</dt><dd class="text-xl font-bold">{{ metrics.orders || 0 }}</dd></div></dl></article>
-          <article class="rounded-2xl border border-n-weak bg-white p-4 shadow-sm"><p class="text-xs font-semibold uppercase text-n-slate-9">Contato</p><p class="mt-3 text-sm"><strong>E-mail</strong><br>{{ profile.email || '—' }}</p><p class="mt-3 text-sm"><strong>Telefone</strong><br>{{ profile.phone_number || '—' }}</p></article>
+          <article class="rounded-2xl border border-n-weak bg-white p-4 shadow-sm"><p class="text-xs font-semibold uppercase text-n-slate-9">Contato</p><p class="mt-3 break-words text-sm"><strong>E-mail</strong><br>{{ profile.email || '—' }}</p><p class="mt-3 break-words text-sm"><strong>Telefone</strong><br>{{ profile.phone_number || '—' }}</p></article>
         </div>
         <article class="rounded-2xl border border-n-weak bg-white p-4 shadow-sm"><div class="flex items-center justify-between"><h2 class="font-semibold text-n-slate-12">Negócios do cliente</h2><button class="text-xs font-semibold text-n-brand" @click="newDeal">+ Novo Negócio</button></div><div class="mt-3 grid gap-3 md:grid-cols-2"><button v-for="deal in deals" :key="deal.id" class="rounded-xl border border-n-weak p-3 text-left transition hover:border-n-brand/50 hover:bg-n-alpha-2" @click="openDeal(deal.id)"><div class="flex items-start justify-between gap-2"><strong class="truncate">{{ deal.title }}</strong><span class="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">{{ deal.stage || deal.status }}</span></div><p class="mt-2 text-lg font-bold">{{ money(deal.value_cents) }}</p><p class="mt-1 text-xs text-n-slate-9">Responsável: {{ deal.owner || '—' }}</p></button><p v-if="!deals.length" class="text-sm text-n-slate-9">Nenhum negócio vinculado.</p></div></article>
       </section>

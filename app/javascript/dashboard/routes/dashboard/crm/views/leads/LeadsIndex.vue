@@ -185,7 +185,7 @@ onMounted(async () => {
       </article>
     </section>
 
-    <div class="mb-3 flex justify-end"><div class="flex rounded-xl border border-[#e4e9f1] bg-white p-1 shadow-sm"><button type="button" class="rounded-lg px-3 py-2 text-xs font-semibold" :class="viewMode === 'list' ? 'bg-[#087cf0] text-white' : 'text-[#667085]'" @click="viewMode = 'list'"><i class="i-lucide-list mr-1 size-4" />Lista</button><button type="button" class="rounded-lg px-3 py-2 text-xs font-semibold" :class="viewMode === 'kanban' ? 'bg-[#7c3aed] text-white' : 'text-[#667085]'" @click="viewMode = 'kanban'"><i class="i-lucide-columns-3 mr-1 size-4" />Kanban</button></div></div>
+    <div class="mb-3 flex justify-end"><div class="flex rounded-xl border border-[#e4e9f1] bg-white p-1 shadow-sm"><button type="button" class="rounded-lg px-3 py-2 text-xs font-semibold" :class="viewMode === 'list' ? 'bg-blue-700 text-white' : 'text-[#667085]'" @click="viewMode = 'list'"><i class="i-lucide-list mr-1 size-4" />Lista</button><button type="button" class="rounded-lg px-3 py-2 text-xs font-semibold" :class="viewMode === 'kanban' ? 'bg-[#7c3aed] text-white' : 'text-[#667085]'" @click="viewMode = 'kanban'"><i class="i-lucide-columns-3 mr-1 size-4" />Kanban</button></div></div>
 
     <form
       class="mb-4 flex flex-wrap gap-2 rounded-2xl border border-n-weak bg-n-solid-2 p-3 shadow-sm"

@@ -4,16 +4,17 @@ module Api::V1::Accounts::Crm
       contact = crm_scope.contacts.find(params[:id])
       authorize contact, :show?
 
-      deals = crm_scope.jrc_crm_deals
+      deals = visible_to_current_user(crm_scope.jrc_crm_deals)
                        .left_outer_joins(:deal_contacts)
                        .where('jrc_crm_deals.contact_id = :contact_id OR jrc_crm_deal_contacts.contact_id = :contact_id', contact_id: contact.id)
                        .distinct
                        .includes(:owner, :stage, :proposals, :sales_orders, :contracts, :activities)
                        .order(updated_at: :desc)
 
-      activities = crm_scope.jrc_crm_activities
+      activity_scope = visible_to_current_user(crm_scope.jrc_crm_activities, owner_column: :user_id)
+      activities = activity_scope
                             .where(contact_id: contact.id)
-                            .or(crm_scope.jrc_crm_activities.where(deal_id: deals.select(:id)))
+                            .or(activity_scope.where(deal_id: deals.reorder(nil).select(:id)))
                             .includes(:user, :deal)
                             .order(created_at: :desc)
                             .limit(30)

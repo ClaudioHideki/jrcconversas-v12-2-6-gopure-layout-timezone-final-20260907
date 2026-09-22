@@ -39,5 +39,13 @@ module JrcCrm
     belongs_to :invoice, class_name: 'JrcCrm::Invoice'
     validates :amount_cents, numericality: { greater_than: 0 }
     validates :paid_at, presence: true
+    validate :associations_belong_to_account
+
+    private
+
+    def associations_belong_to_account
+      errors.add(:invoice, 'must belong to account') if invoice && invoice.account_id != account_id
+      errors.add(:business_unit, 'must belong to account') if business_unit && business_unit.account_id != account_id
+    end
   end
 end

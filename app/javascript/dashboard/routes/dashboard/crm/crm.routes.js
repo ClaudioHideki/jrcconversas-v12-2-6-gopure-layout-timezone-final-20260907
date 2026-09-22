@@ -1,6 +1,5 @@
 import { frontendURL } from 'dashboard/helper/URLHelper';
 import { FEATURE_FLAGS } from 'dashboard/featureFlags';
-import store from 'dashboard/store';
 
 const CrmLayout = () => import('./CrmLayout.vue');
 const CrmDashboardView = () => import('./views/dashboard/CrmDashboardView.vue');
@@ -15,27 +14,21 @@ const CalendarView = () => import('./views/calendar/CalendarView.vue');
 const ProductsIndex = () => import('./views/products/ProductsIndex.vue');
 const ProposalsIndex = () => import('./views/proposals/ProposalsIndex.vue');
 const SalesOrdersView = () => import('./views/orders/SalesOrdersView.vue');
+const SalesOrderWizard = () => import('./views/orders/SalesOrderWizard.vue');
 const ContractsView = () => import('./views/contracts/ContractsView.vue');
+const ContractWizard = () => import('./views/contracts/ContractWizard.vue');
+const ContractTemplates = () =>
+  import('./views/contracts/ContractTemplates.vue');
 const GoalsView = () => import('./views/goals/GoalsView.vue');
 const CommissionsView = () => import('./views/commissions/CommissionsView.vue');
 const Customer360View = () => import('./views/customers/Customer360View.vue');
+const BackofficeView = () => import('./views/backoffice/BackofficeView.vue');
+const ManagementView = () => import('./views/management/ManagementView.vue');
+const CrmSettingsView = () => import('./views/settings/CrmSettingsView.vue');
 
 const meta = {
   featureFlag: FEATURE_FLAGS.JRC_CRM,
   permissions: ['administrator', 'agent', 'custom_role'],
-};
-
-const ensureCrmEnabled = async to => {
-  await store.dispatch('accounts/get', { silent: true });
-  const enabled = store.getters['accounts/isFeatureEnabledonAccount'](
-    Number(to.params.accountId),
-    FEATURE_FLAGS.JRC_CRM
-  );
-  const currentAccount = store.getters.getCurrentAccount || {};
-  const hasUserAccess = currentAccount.permissions?.includes('jrc_crm');
-  return enabled && hasUserAccess
-    ? true
-    : frontendURL(`accounts/${to.params.accountId}/dashboard`);
 };
 
 export default {
@@ -44,7 +37,6 @@ export default {
       path: frontendURL('accounts/:accountId/crm'),
       component: CrmLayout,
       meta,
-      beforeEnter: ensureCrmEnabled,
       children: [
         { path: '', redirect: { name: 'crm_dashboard' } },
         {
@@ -92,11 +84,57 @@ export default {
           component: ProposalsIndex,
           meta,
         },
-        { path: 'orders', name: 'crm_orders', component: SalesOrdersView, meta },
-        { path: 'contracts', name: 'crm_contracts', component: ContractsView, meta },
+        {
+          path: 'orders',
+          name: 'crm_orders',
+          component: SalesOrdersView,
+          meta,
+        },
+        {
+          path: 'orders/new',
+          name: 'crm_order_new',
+          component: SalesOrderWizard,
+          meta,
+        },
+        {
+          path: 'contracts',
+          name: 'crm_contracts',
+          component: ContractsView,
+          meta,
+        },
+        {
+          path: 'contracts/new',
+          name: 'crm_contract_new',
+          component: ContractWizard,
+          meta,
+        },
+        {
+          path: 'contracts/templates',
+          name: 'crm_contract_templates',
+          component: ContractTemplates,
+          meta,
+        },
+        { path: 'management', name: 'crm_management', component: ManagementView, meta },
+        { path: 'settings', name: 'crm_settings', component: CrmSettingsView, meta },
         { path: 'goals', name: 'crm_goals', component: GoalsView, meta },
-        { path: 'commissions', name: 'crm_commissions', component: CommissionsView, meta },
-        { path: 'customers/:customerId', name: 'crm_customer_360', component: Customer360View, meta },
+        {
+          path: 'commissions/:section?',
+          name: 'crm_commissions',
+          component: CommissionsView,
+          meta,
+        },
+        {
+          path: 'backoffice/:section?',
+          name: 'crm_backoffice',
+          component: BackofficeView,
+          meta,
+        },
+        {
+          path: 'customers/:customerId',
+          name: 'crm_customer_360',
+          component: Customer360View,
+          meta,
+        },
       ],
     },
   ],

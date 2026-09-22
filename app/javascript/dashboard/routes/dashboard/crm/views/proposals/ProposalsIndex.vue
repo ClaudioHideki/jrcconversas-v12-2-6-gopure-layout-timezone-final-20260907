@@ -2,6 +2,8 @@
 /* eslint-disable vue/no-bare-strings-in-template, @intlify/vue-i18n/no-raw-text */
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useStore } from 'vuex';
+import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { useAlert } from 'dashboard/composables';
 import { dealsAPI, productsAPI, proposalsAPI } from 'dashboard/api/crm';
 import CrmStatusBadge from '../../components/shared/CrmStatusBadge.vue';
@@ -11,6 +13,10 @@ import CrmStatCard from '../../components/shared/CrmStatCard.vue';
 import { formatCrmDate } from '../../utils/dateTime';
 
 const store = useStore();
+const route = useRoute();
+const router = useRouter();
+const { t } = useI18n();
+const pdfLoading = ref(false);
 const proposals = computed(
   () => store.getters['jrcCrm/proposals/allProposals'] || []
 );
@@ -399,13 +405,29 @@ const previewProposal = () => {
     );
 };
 
-const previewPdf = (download = false) => {
-  if (!selectedProposal.value) return;
-  const url = proposalsAPI.pdfUrl(selectedProposal.value.id, download);
-  if (download) {
-    window.location.assign(url);
-  } else {
-    window.open(url, '_blank', 'noopener');
+const previewPdf = async (download = false) => {
+  if (!selectedProposal.value || pdfLoading.value) return;
+  const proposal = selectedProposal.value;
+  const preview = download ? null : window.open('', '_blank');
+  if (preview) preview.opener = null;
+  pdfLoading.value = true;
+  try {
+    const { data } = await proposalsAPI.pdf(proposal.id);
+    const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
+    if (preview) {
+      preview.location.replace(url);
+    } else {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${proposal.proposal_number || `proposta-${proposal.id}`}.pdf`;
+      link.click();
+    }
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch {
+    preview?.close();
+    useAlert(t('CRM.HOMOLOGATION.PDF_ERROR'));
+  } finally {
+    pdfLoading.value = false;
   }
 };
 
@@ -704,11 +726,11 @@ onMounted(async () => {
 
     <div
       v-if="showForm"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       @click.self="showForm = false"
     >
       <form
-        class="w-full max-w-lg rounded-xl bg-n-solid-2 p-6 shadow-xl"
+        class="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-xl bg-n-solid-2 p-6 shadow-xl"
         @submit.prevent="createProposal"
       >
         <h3 class="text-lg font-bold text-n-slate-12">Criar proposta</h3>
@@ -788,6 +810,7 @@ onMounted(async () => {
                 type="button"
                 class="rounded-xl bg-n-ruby-9 px-3 py-2 text-sm font-semibold text-white shadow-sm"
                 @click="previewPdf(false)"
+                :disabled="pdfLoading"
               >
                 <i class="i-lucide-file-text mr-1" /> Gerar PDF
               </button>
@@ -795,6 +818,7 @@ onMounted(async () => {
                 type="button"
                 class="rounded-xl bg-n-iris-9 px-3 py-2 text-sm font-semibold text-white shadow-sm"
                 @click="previewPdf(true)"
+                :disabled="pdfLoading"
               >
                 <i class="i-lucide-download mr-1" /> Baixar
               </button>
@@ -827,7 +851,7 @@ onMounted(async () => {
               </button>
               <button
                 type="button"
-                class="rounded-xl bg-[#16a765] px-3 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-50"
+                class="rounded-xl bg-emerald-700 px-3 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-50"
                 :disabled="
                   Boolean(sendingChannel) ||
                   selectedProposal.status === 'accepted' ||

@@ -9,6 +9,7 @@ const { formatBRL } = useCrmMetrics();
 
 const metrics = computed(() => store.getters['jrcCrm/dashboard/metrics'] || {});
 const isLoading = computed(() => store.getters['jrcCrm/dashboard/isLoading']);
+const error = computed(() => store.getters['jrcCrm/dashboard/error']);
 const stages = computed(() => metrics.value.funnel_stages || []);
 const pipelineValue = computed(() =>
   Number(metrics.value.pipeline_value_cents || 0) ||
@@ -95,7 +96,7 @@ onMounted(() => store.dispatch('jrcCrm/dashboard/fetchMetrics'));
       <section class="flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-white/70 bg-white/80 p-5 shadow-sm backdrop-blur">
         <div>
           <div class="mb-2 flex items-center gap-2">
-            <span class="grid size-9 place-content-center rounded-xl bg-[#087cf0] text-white shadow-[0_8px_20px_rgba(8,124,240,.20)]">
+            <span class="grid size-9 place-content-center rounded-xl bg-blue-700 text-white shadow-[0_8px_20px_rgba(8,124,240,.20)]">
               <i class="i-lucide-chart-no-axes-combined size-5" />
             </span>
             <div>
@@ -112,7 +113,7 @@ onMounted(() => store.dispatch('jrcCrm/dashboard/fetchMetrics'));
           <RouterLink :to="{ name: 'crm_wallet' }" class="rounded-xl bg-[#17345f] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_18px_rgba(23,52,95,.20)]">
             <i class="i-lucide-briefcase-business mr-1 size-4" /> Minha carteira
           </RouterLink>
-          <RouterLink :to="{ name: 'crm_funnel' }" class="rounded-xl bg-[#087cf0] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(8,124,240,.24)]">
+          <RouterLink :to="{ name: 'crm_funnel' }" class="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(8,124,240,.24)]">
             <i class="i-lucide-filter mr-1 size-4" /> Abrir funil
           </RouterLink>
         </div>
@@ -120,6 +121,21 @@ onMounted(() => store.dispatch('jrcCrm/dashboard/fetchMetrics'));
 
       <div v-if="isLoading" class="grid min-h-72 place-content-center rounded-2xl border border-[#e4e9f1] bg-white text-sm text-[#667085]">
         <span class="i-lucide-loader-circle mr-2 inline-block size-5 animate-spin" /> Carregando visão geral…
+      </div>
+
+      <div v-else-if="error" class="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-700">
+        <div class="flex items-start gap-3">
+          <span class="grid size-9 shrink-0 place-content-center rounded-xl bg-white text-rose-600">
+            <i class="i-lucide-triangle-alert size-4" />
+          </span>
+          <div>
+            <strong class="block text-base text-rose-800">Não foi possível carregar os indicadores</strong>
+            <p class="mt-1">{{ error }}</p>
+            <button class="mt-3 rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white" @click="store.dispatch('jrcCrm/dashboard/fetchMetrics')">
+              Tentar novamente
+            </button>
+          </div>
+        </div>
       </div>
 
       <template v-else>
@@ -184,7 +200,7 @@ onMounted(() => store.dispatch('jrcCrm/dashboard/fetchMetrics'));
                 <div><strong class="text-sm text-[#344054]">Atividades vencidas</strong><p class="text-xs text-[#98a2b3]">Exigem atenção imediata</p></div>
                 <b class="text-[#e11d48]">{{ metrics.overdue_activities_count || 0 }}</b>
                 <div class="flex gap-1">
-                  <RouterLink :to="{ name: 'crm_activities' }" class="grid size-9 place-content-center rounded-lg bg-[#087cf0] text-white" title="Abrir atividades"><i class="i-lucide-list-checks size-4" /></RouterLink>
+                  <RouterLink :to="{ name: 'crm_activities' }" class="grid size-9 place-content-center rounded-lg bg-blue-700 text-white" title="Abrir atividades"><i class="i-lucide-list-checks size-4" /></RouterLink>
                   <RouterLink :to="{ name: 'crm_calendar' }" class="grid size-9 place-content-center rounded-lg bg-[#7c3aed] text-white" title="Abrir agenda"><i class="i-lucide-calendar-days size-4" /></RouterLink>
                 </div>
               </div>
@@ -193,7 +209,7 @@ onMounted(() => store.dispatch('jrcCrm/dashboard/fetchMetrics'));
                 <div><strong class="text-sm text-[#344054]">Negócios estagnados</strong><p class="text-xs text-[#98a2b3]">Sem atualização há mais de 7 dias</p></div>
                 <b class="text-[#f97316]">{{ metrics.stalled_deals_count || 0 }}</b>
                 <div class="flex gap-1">
-                  <RouterLink :to="{ name: 'crm_deals' }" class="grid size-9 place-content-center rounded-lg bg-[#16a76b] text-white" title="Abrir negócios"><i class="i-lucide-handshake size-4" /></RouterLink>
+                  <RouterLink :to="{ name: 'crm_deals' }" class="grid size-9 place-content-center rounded-lg bg-emerald-700 text-white" title="Abrir negócios"><i class="i-lucide-handshake size-4" /></RouterLink>
                   <RouterLink :to="{ name: 'crm_calendar' }" class="grid size-9 place-content-center rounded-lg bg-[#7c3aed] text-white" title="Agendar retorno"><i class="i-lucide-calendar-days size-4" /></RouterLink>
                 </div>
               </div>
