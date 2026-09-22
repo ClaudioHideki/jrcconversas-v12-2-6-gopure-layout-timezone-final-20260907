@@ -1,5 +1,6 @@
 json.meta do
   json.count @contacts_count
+  json.relationship_statistics @relationship_statistics if @relationship_statistics
   json.current_page @current_page
 end
 

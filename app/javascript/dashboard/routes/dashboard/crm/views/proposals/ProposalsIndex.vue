@@ -167,6 +167,7 @@ const openForm = async () => {
       ? data.filter(deal => String(deal.contact?.id || deal.contact_id) === String(contactId))
       : data;
     if (deals.value.length === 1) dealId.value = deals.value[0].id;
+    if (route.query.dealId && deals.value.some(deal => String(deal.id) === String(route.query.dealId))) dealId.value = Number(route.query.dealId);
     showForm.value = true;
   } catch {
     useAlert('Não foi possível carregar os negócios.');

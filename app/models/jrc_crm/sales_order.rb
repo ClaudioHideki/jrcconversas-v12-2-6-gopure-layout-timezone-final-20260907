@@ -57,6 +57,7 @@ module JrcCrm
     belongs_to :contact, optional: true
     belongs_to :owner, class_name: 'User'
     has_many :order_items, class_name: 'JrcCrm::OrderItem', dependent: :destroy
+    has_many :activities, class_name: 'JrcCrm::Activity', dependent: :restrict_with_error
     has_many_attached :attachments
     has_many :contracts, class_name: 'JrcCrm::Contract', dependent: :restrict_with_error
     has_many :commissions, class_name: 'JrcCrm::SalesCommission', dependent: :destroy
@@ -73,6 +74,22 @@ module JrcCrm
       errors.add(:proposal, 'must belong to account') if proposal && proposal.account_id != account_id
       errors.add(:contact, 'must belong to account') if contact && contact.account_id != account_id
       errors.add(:owner, 'must belong to account') if owner && !account.users.exists?(owner.id)
+      errors.add(:contact, 'deve corresponder ao cliente do negócio') if deal&.contact_id && contact_id != deal.contact_id
+      errors.add(:proposal, 'deve corresponder ao negócio do pedido') if proposal && proposal.deal_id != deal_id
+    end
+
+    def implementation_items
+      order_items.select { |item| ActiveModel::Type::Boolean.new.cast(item.snapshot['requires_implementation']) }
+    end
+
+    def validate_implementation!
+      implementation_items.each do |item|
+        snap = item.snapshot
+        next if snap['implementation_owner'].present? && snap['implementation_date'].present?
+
+        errors.add(:base, "Informe responsável e data de implantação para #{item.name}.")
+      end
+      raise ActiveRecord::RecordInvalid, self if errors.any?
     end
     def assign_number
       return if order_number.present?

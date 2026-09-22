@@ -1,8 +1,9 @@
 <script setup>
-import { crmControlClasses } from '../../crmControlClasses';
+import { useCrmTheme } from '../../useCrmTheme';
 /* eslint-disable vue/no-bare-strings-in-template, @intlify/vue-i18n/no-raw-text */
 import { computed, reactive, watch } from 'vue';
 
+const { crmControlClasses } = useCrmTheme();
 const props = defineProps({
   lead: { type: Object, required: true },
   pipelines: { type: Array, default: () => [] },

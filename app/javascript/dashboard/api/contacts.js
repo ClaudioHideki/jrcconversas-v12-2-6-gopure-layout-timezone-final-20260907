@@ -17,14 +17,14 @@ class ContactAPI extends ApiClient {
     super('contacts', { accountScoped: true });
   }
 
-  get(page, sortAttr = 'name', label = '') {
+  get(page, sortAttr = 'name', label = '', filters = {}) {
     let requestURL = `${this.url}?${buildContactParams(
       page,
       sortAttr,
       label,
       ''
     )}`;
-    return axios.get(requestURL);
+    return axios.get(requestURL, { params: filters });
   }
 
   show(id) {
@@ -72,18 +72,18 @@ class ContactAPI extends ApiClient {
       label,
       search
     )}`;
-    return axios.get(requestURL, { signal: options.signal });
+    return axios.get(requestURL, { signal: options.signal, params: options.filters || {} });
   }
 
-  active(page = 1, sortAttr = 'name') {
+  active(page = 1, sortAttr = 'name', filters = {}) {
     let requestURL = `${this.url}/active?${buildContactParams(page, sortAttr)}`;
-    return axios.get(requestURL);
+    return axios.get(requestURL, { params: filters });
   }
 
   // eslint-disable-next-line default-param-last
-  filter(page = 1, sortAttr = 'name', queryPayload) {
+  filter(page = 1, sortAttr = 'name', queryPayload, filters = {}) {
     let requestURL = `${this.url}/filter?${buildContactParams(page, sortAttr)}`;
-    return axios.post(requestURL, queryPayload);
+    return axios.post(requestURL, queryPayload, { params: filters });
   }
 
   importContacts(file) {

@@ -23,6 +23,7 @@ jobs:
     env:
       RAILS_ENV: test
       NODE_ENV: test
+      NODE_OPTIONS: --max-old-space-size=4096
       POSTGRES_HOST: 127.0.0.1
       POSTGRES_USERNAME: postgres
       POSTGRES_PASSWORD: qa-only
@@ -66,8 +67,8 @@ jobs:
           spec/services/jrc_nico spec/services/jrc_ai/nico_readiness_spec.rb
           spec/services/jrc_campaigns/governance_spec.rb
           spec/requests/api/v1/accounts/jrc_campaigns/governance_spec.rb
-          spec/requests/api/v1/accounts/crm/contact_leads_spec.rb
-          spec/requests/api/v1/accounts/crm/commercial_flow_spec.rb
+          spec/requests/api/v1/accounts/crm
+          spec/models/jrc_crm spec/services/jrc_crm spec/policies/jrc_crm
           spec/requests/api/v1/accounts/contacts_pagination_spec.rb
           spec/controllers/super_admin/accounts_controller_spec.rb
       - name: Testar janela WhatsApp de 24 horas e templates
@@ -76,8 +77,8 @@ jobs:
           node --test scripts/qa/whatsapp24h/frontend_test.mjs
       - name: Testar rotas e permissões do CRM
         run: node --experimental-vm-modules --test tests/router/crm-routing.test.cjs
-      - name: Testar interface NICO
-        run: pnpm exec vitest run --config vitest.nico.config.ts
+      - name: Testar interfaces CRM e NICO
+        run: pnpm exec vitest run --config vitest.commercial.config.ts
       - name: Compilar e testar runtime
         working-directory: services/nico-runtime
         run: npm ci --include=dev && npm run build && npm test
@@ -91,7 +92,7 @@ jobs:
         include:
           - component: app
             dockerfile: ./docker/Dockerfile
-            tag: 4.16.2-gopure-crm-homologacao-20260922-r3
+            tag: 4.16.2-gopure-crm-comercial-20260922-r1
 
     permissions:
       contents: read

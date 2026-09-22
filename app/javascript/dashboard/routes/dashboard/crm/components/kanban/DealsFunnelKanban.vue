@@ -1,5 +1,5 @@
 <script setup>
-import { crmControlClasses } from '../../crmControlClasses';
+import { useCrmTheme } from '../../useCrmTheme';
 /* eslint-disable vue/no-bare-strings-in-template, @intlify/vue-i18n/no-raw-text */
 import { ref, computed, onMounted } from 'vue';
 import { useStore } from 'vuex';
@@ -11,6 +11,7 @@ import { useDragAndDrop } from '../../composables/useDragAndDrop';
 import CrmPageHeader from '../shared/CrmPageHeader.vue';
 import CrmValueDisplay from '../shared/CrmValueDisplay.vue';
 
+const { crmControlClasses } = useCrmTheme();
 const store = useStore();
 const { t } = useI18n();
 const lostReasons = ref([]);
@@ -132,7 +133,7 @@ const { onDragStart, onDragOver, onDrop } = useDragAndDrop({
             <CrmValueDisplay :cents="pipelineValue" /> no pipeline
           </span>
         </template>
-        <template #actions>
+        <template #actions><RouterLink v-if="store.getters.getCurrentRole === 'administrator'" :to="{ name: 'crm_settings' }" class="rounded-lg border border-n-weak bg-n-solid-2 px-3 py-2 text-sm">{{ t('CRM.COMMERCIAL.MANAGE_FUNNEL') }}</RouterLink>
           <RouterLink
             :to="{ name: 'crm_deals', query: { new: '1' } }"
             class="rounded-xl bg-n-teal-9 px-4 py-2.5 text-sm font-semibold text-white shadow-md"

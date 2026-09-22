@@ -54,6 +54,7 @@ module JrcCrm
     belongs_to :deal, class_name: 'JrcCrm::Deal', optional: true
     belongs_to :lead, class_name: 'JrcCrm::Lead', optional: true
     belongs_to :contact, optional: true
+    belongs_to :sales_order, class_name: 'JrcCrm::SalesOrder', optional: true
     belongs_to :company, optional: true
     belongs_to :conversation, optional: true
     
@@ -76,14 +77,14 @@ module JrcCrm
     end
 
     def related_record
-      deal || lead
+      deal || lead || sales_order
     end
     
     private
     
     def must_have_resource
-      if deal_id.blank? && lead_id.blank?
-        errors.add(:base, 'Activity must belong to a deal or a lead')
+      if deal_id.blank? && lead_id.blank? && sales_order_id.blank?
+        errors.add(:base, 'Activity must belong to a deal, lead or order')
       end
     end
 
@@ -91,6 +92,7 @@ module JrcCrm
       errors.add(:user, 'must belong to account') if user && !account.users.exists?(user.id)
       errors.add(:deal, 'must belong to account') if deal && deal.account_id != account_id
       errors.add(:lead, 'must belong to account') if lead && lead.account_id != account_id
+      errors.add(:sales_order, 'must belong to account') if sales_order && sales_order.account_id != account_id
       errors.add(:contact, 'must belong to account') if contact && contact.account_id != account_id
       errors.add(:conversation, 'must belong to account') if conversation && conversation.account_id != account_id
     end

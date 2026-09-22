@@ -2,6 +2,7 @@ json.settings resource.settings
 json.created_at resource.created_at
 if resource.custom_attributes.present?
   json.custom_attributes do
+    json.crm_theme resource.custom_attributes['crm_theme'] if resource.custom_attributes['crm_theme'].present?
     json.plan_name resource.custom_attributes['plan_name']
     json.subscribed_quantity resource.custom_attributes['subscribed_quantity']
     json.subscription_status resource.custom_attributes['subscription_status']

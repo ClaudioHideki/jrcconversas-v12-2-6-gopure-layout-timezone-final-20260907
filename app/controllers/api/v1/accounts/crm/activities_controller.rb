@@ -14,9 +14,10 @@ module Api
             activities = activities.where(user_id: params[:user_id]) if params[:user_id].present?
             activities = activities.where(deal_id: params[:deal_id]) if params[:deal_id].present?
             activities = activities.where(lead_id: params[:lead_id]) if params[:lead_id].present?
+            activities = activities.where(sales_order_id: params[:sales_order_id]) if params[:sales_order_id].present?
 
             activities = activities
-                         .includes(:user, :deal, :lead)
+                         .includes(:user, :deal, :lead, :sales_order)
                          .order(due_at: :asc)
 
             serialized_activities = activities.map do |activity|
@@ -87,19 +88,29 @@ module Api
               :due_at,
               :user_id,
               :deal_id,
-              :lead_id
+              :lead_id,
+              :sales_order_id
             )
 
             attributes[:due_at] = parse_crm_time(attributes[:due_at]) if attributes[:due_at].present?
 
             if attributes.key?(:deal_id)
               deal_id = attributes.delete(:deal_id)
-              attributes[:deal] = deal_id.present? ? crm_scope.jrc_crm_deals.find(deal_id) : nil
+              attributes[:deal] = deal_id.present? ? visible_to_current_user(crm_scope.jrc_crm_deals).find(deal_id) : nil
             end
 
             if attributes.key?(:lead_id)
               lead_id = attributes.delete(:lead_id)
-              attributes[:lead] = lead_id.present? ? crm_scope.jrc_crm_leads.find(lead_id) : nil
+              attributes[:lead] = lead_id.present? ? visible_to_current_user(crm_scope.jrc_crm_leads).find(lead_id) : nil
+            end
+
+            if attributes.key?(:sales_order_id)
+              id = attributes.delete(:sales_order_id)
+              attributes[:sales_order] = id.present? ? visible_to_current_user(crm_scope.jrc_crm_sales_orders).find(id) : nil
+            end
+            if attributes[:user_id].present?
+              crm_scope.users.find(attributes[:user_id])
+              raise Pundit::NotAuthorizedError if !crm_admin? && attributes[:user_id].to_i != Current.user.id
             end
 
             attributes

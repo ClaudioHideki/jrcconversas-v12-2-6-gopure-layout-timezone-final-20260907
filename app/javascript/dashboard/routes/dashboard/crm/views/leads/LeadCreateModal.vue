@@ -1,10 +1,11 @@
 <script setup>
-import { crmControlClasses } from '../../crmControlClasses';
+import { useCrmTheme } from '../../useCrmTheme';
 import { reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { leadsAPI } from 'dashboard/api/crm';
 import { useAlert } from 'dashboard/composables';
 
+const { crmControlClasses } = useCrmTheme();
 const props = defineProps({ contact: { type: Object, default: null } });
 const emit = defineEmits(['close', 'created']);
 const { t } = useI18n();

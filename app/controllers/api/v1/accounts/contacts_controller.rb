@@ -19,6 +19,7 @@ class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
   def index
     @contacts = fetch_contacts(resolved_contacts)
     @contacts_count = @contacts.total_count
+    prepare_relationship_context
   end
 
   def search
@@ -26,9 +27,13 @@ class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
 
     search_value = params[:q].strip
     contacts = Current.account.contacts.where(
-      'name ILIKE :search OR email ILIKE :search OR phone_number ILIKE :search OR contacts.identifier LIKE :search',
-      search: "%#{search_value}%"
+      "name ILIKE :search OR email ILIKE :search OR phone_number ILIKE :search OR contacts.identifier ILIKE :search OR additional_attributes->>'company_name' ILIKE :search",
+      search: "%#{Contact.sanitize_sql_like(search_value)}%"
     )
+    if Current.account.respond_to?(:companies)
+      companies = Current.account.companies.where('name ILIKE ?', "%#{Contact.sanitize_sql_like(search_value)}%")
+      contacts = contacts.or(Current.account.contacts.where(company_id: companies.select(:id)))
+    end
     phone_candidates = normalized_phone_candidates(search_value)
     if phone_candidates.any?
       normalized_phone_scope = Current.account.contacts.where(
@@ -38,6 +43,7 @@ class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
       contacts = contacts.or(normalized_phone_scope)
     end
     @contacts = fetch_contacts_with_has_more(contacts)
+    prepare_relationship_context
   end
 
   def import
@@ -64,6 +70,7 @@ class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
                   .get_available_contact_ids(Current.account.id))
     @contacts = fetch_contacts(contacts)
     @contacts_count = @contacts.total_count
+    prepare_relationship_context
   end
 
   def show; end
@@ -73,6 +80,8 @@ class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
     contacts = result[:contacts]
     @contacts_count = result[:count]
     @contacts = fetch_contacts(contacts)
+    @contacts_count = @contacts.total_count
+    prepare_relationship_context
   rescue CustomExceptions::CustomFilter::InvalidAttribute,
          CustomExceptions::CustomFilter::InvalidOperator,
          CustomExceptions::CustomFilter::InvalidQueryOperator,
@@ -125,6 +134,28 @@ class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
 
   private
 
+  def prepare_relationship_context
+    return unless params[:include_relationship_summary] == 'true'
+
+    base = resolved_contacts
+    timezone = Time.find_zone(Current.account.reporting_timezone) || Time.zone
+    month_start = timezone.now.beginning_of_month
+    @relationship_statistics = {
+      total: base.count, new_this_month: base.where(created_at: month_start..).count,
+      without_interaction: base.where(last_activity_at: nil).count, customers: base.where(contact_type: 'customer').count
+    }
+    @relationship_owners = Hash.new { |hash, key| hash[key] = [] }
+    return unless Current.account.feature_enabled?('jrc_crm')
+
+    ids = @contacts.map(&:id)
+    [Current.account.jrc_crm_leads, Current.account.jrc_crm_deals].each do |scope|
+      scope.where(contact_id: ids).joins(:owner).pluck(:contact_id, 'users.id', 'users.name').each do |contact_id, id, name|
+        @relationship_owners[contact_id] << { id: id, name: name }
+      end
+    end
+    @relationship_owners.transform_values!(&:uniq)
+  end
+
   # TODO: Move this to a finder class
   def resolved_contacts
     return @resolved_contacts if @resolved_contacts
@@ -150,6 +181,7 @@ class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
   end
 
   def fetch_contacts(contacts)
+    contacts = ::Contacts::RelationshipFilter.new(contacts, Current.account, params).call
     # Build includes hash to avoid separate query when contact_inboxes are needed
     includes_hash = { avatar_attachment: [:blob] }
     includes_hash[:contact_inboxes] = { inbox: :channel } if @include_contact_inboxes
@@ -162,6 +194,7 @@ class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
   end
 
   def fetch_contacts_with_has_more(contacts)
+    contacts = ::Contacts::RelationshipFilter.new(contacts, Current.account, params).call
     includes_hash = { avatar_attachment: [:blob] }
     includes_hash[:contact_inboxes] = { inbox: :channel } if @include_contact_inboxes
 
@@ -176,7 +209,7 @@ class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
 
     @has_more = results.size > RESULTS_PER_PAGE
     results = results.first(RESULTS_PER_PAGE) if @has_more
-    @contacts_count = results.size
+    @contacts_count = contacts.count
     results
   end
 

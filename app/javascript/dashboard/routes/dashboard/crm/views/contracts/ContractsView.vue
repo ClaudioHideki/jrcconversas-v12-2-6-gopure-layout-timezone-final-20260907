@@ -4,8 +4,9 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { contractsAPI } from 'dashboard/api/crm/commercialCycle';
 import { useAlert } from 'dashboard/composables';
-import { crmControlClasses } from '../../crmControlClasses';
+import { useCrmTheme } from '../../useCrmTheme';
 
+const { crmControlClasses } = useCrmTheme();
 const router = useRouter();
 const route = useRoute();
 

@@ -11,7 +11,8 @@ import CrmStatCard from '../../components/shared/CrmStatCard.vue';
 
 import { useI18n } from 'vue-i18n';
 import CrmContactActions from '../../components/shared/CrmContactActions.vue';
-import { crmControlClasses } from '../../crmControlClasses';
+import { useCrmTheme } from '../../useCrmTheme';
+const { crmControlClasses } = useCrmTheme();
 const { t } = useI18n();
 const editingId = ref(null);
 const executing = ref(null);
@@ -25,6 +26,7 @@ const deals = ref([]);
 const form = reactive({
   deal_id: route.query.dealId || '',
   lead_id: null,
+  sales_order_id: null,
   description: '',
   activity_type: 'follow_up',
   title: '',
@@ -104,7 +106,7 @@ const localInput = value => {
 };
 const openForm = activity => {
   editingId.value = activity?.id || null;
-  Object.assign(form, { deal_id: activity?.deal_id || route.query.dealId || '', lead_id: activity?.lead_id || null, activity_type: activity?.activity_type || 'follow_up', title: activity?.title || '', description: activity?.description || '', due_at: localInput(activity?.due_at) });
+  Object.assign(form, { sales_order_id: activity?.sales_order_id || null, deal_id: activity?.deal_id || route.query.dealId || '', lead_id: activity?.lead_id || null, activity_type: activity?.activity_type || 'follow_up', title: activity?.title || '', description: activity?.description || '', due_at: localInput(activity?.due_at) });
   executing.value = null;
   showForm.value = true;
 };
@@ -324,7 +326,7 @@ onMounted(async () => {
           <h3 class="text-lg font-semibold text-n-slate-12">{{ t(editingId ? 'CRM.HOMOLOGATION.EDIT_ACTIVITY' : 'CRM.HOMOLOGATION.NEW_ACTIVITY') }}</h3>
           <select
             v-model="form.deal_id"
-            :required="!form.lead_id"
+            :required="!form.lead_id && !form.sales_order_id"
             class="w-full rounded-lg border border-n-weak bg-n-solid-2 px-3 py-2"
           >
             <option disabled value="">Selecione o negócio</option>

@@ -45,14 +45,19 @@ module Api
 
           def reorder
             ensure_crm_admin!
+            entries = params.require(:stages)
+            ids = entries.map { |row| row[:id].to_i }
+            positions = entries.map { |row| row[:position].to_i }
+            raise ArgumentError, 'Informe etapas e posições únicas.' if ids.empty? || ids.uniq.length != ids.length || positions.uniq.length != positions.length
+
+            stages = ids.map { |id| crm_scope.jrc_crm_stages.find(id) }
+            raise ArgumentError, 'Ordene apenas etapas do mesmo funil.' unless stages.map(&:pipeline_id).uniq.one?
+
             ActiveRecord::Base.transaction do
-              params[:stages].each do |stage_data|
-                stage = crm_scope.jrc_crm_stages.find(stage_data[:id])
-                stage.update!(position: stage_data[:position])
-              end
+              stages.zip(positions).each { |stage, position| stage.update!(position: position) }
             end
             render json: { message: 'Stages reordered successfully' }
-          rescue StandardError => e
+          rescue ActiveRecord::RecordInvalid, ArgumentError => e
             render json: { errors: [e.message] }, status: :unprocessable_entity
           end
 

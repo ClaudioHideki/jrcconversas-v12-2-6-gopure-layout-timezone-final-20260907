@@ -6,6 +6,8 @@ class StagesAPI extends ApiClient {
     super('crm/stages', { accountScoped: true });
   }
 
+  reorder(stages) { return axios.post(`${this.url}/reorder`, { stages }); }
+
   list(params = {}) {
     return axios.get(this.url, { params });
   }

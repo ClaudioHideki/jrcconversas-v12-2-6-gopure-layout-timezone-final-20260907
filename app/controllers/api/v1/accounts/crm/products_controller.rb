@@ -82,7 +82,7 @@ module Api
               :validation_period_days, :rollover_allowance, :contract_term_months,
               :maximum_discount_percent, :discount_approval_percent, :renewal_type,
               :adjustment_index, :adjustment_period_months, :cancellation_penalty_percent,
-              :allow_standalone_sale, :requires_contract, :fiscal_service_code,
+              :allow_standalone_sale, :requires_contract, :requires_implementation, :fiscal_service_code,
               :proposal_template_name, :contract_template_name, :sales_notes,
               :technical_requirements, :scope_included, :scope_excluded,
               :currency, :active, tags: [], available_for: [], integrations: []

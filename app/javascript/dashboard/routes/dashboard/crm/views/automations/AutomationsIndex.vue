@@ -1,5 +1,5 @@
 <template>
-  <div class="automations-index p-6 h-full bg-n-solid-2">
+  <div class="automations-index p-6 h-full overflow-y-auto bg-n-solid-2">
     <div class="flex items-center justify-between mb-6">
       <h2 class="text-2xl font-bold text-n-slate-12">Automações CRM</h2>
       <button

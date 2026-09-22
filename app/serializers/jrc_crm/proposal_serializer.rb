@@ -24,7 +24,7 @@ module JrcCrm
       @base_url = base_url.to_s.sub(%r{/$}, '')
     end
 
-    def as_json(options = {})
+    def as_json(_options = {})
       contact = @proposal.customer_contact
       conversation = @proposal.linked_conversation
       last_sent_event = @proposal.events.where(event_type: 'sent').order(created_at: :desc).includes(:user).first
@@ -118,7 +118,9 @@ module JrcCrm
           id: item.product_id,
           name: item.product.name,
           sku: item.product.sku,
-          product_type: item.product.product_type
+          product_type: item.product.product_type,
+          requires_implementation: item.product.requires_implementation,
+          contract_term_months: item.product.contract_term_months
         },
         name_snapshot: item.name_snapshot,
         description_snapshot: item.description_snapshot,
