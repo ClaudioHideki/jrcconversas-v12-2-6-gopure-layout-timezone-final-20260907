@@ -21,11 +21,16 @@ class Whatsapp::TemplateProcessorService
   end
 
   def find_template
-    Array(channel.message_templates).find do |t|
+    template = Array(channel.message_templates).find do |t|
       t['name'] == template_params['name'] &&
         t['language']&.downcase == template_params['language']&.downcase &&
-        t['status']&.downcase == 'approved' && template_catalog.allowed?(t)
+        t['status']&.downcase == 'approved'
     end
+    # Campaigns keep their existing approved-template flow. Conversation sends
+    # are additionally restricted by the inbox rules and the agent's team.
+    return template unless message&.try(:conversation)
+
+    template if template && template_catalog.allowed?(template)
   end
 
   def processed_templates_params

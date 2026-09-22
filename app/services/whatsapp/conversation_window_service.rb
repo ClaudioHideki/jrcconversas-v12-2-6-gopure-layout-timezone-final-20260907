@@ -51,9 +51,12 @@ class Whatsapp::ConversationWindowService
   private
 
   def customer_messages
-    Message.where(account_id: @conversation.account_id, inbox_id: @conversation.inbox_id,
+    # A contact may have multiple phone/BSUID links in the same inbox. Only the
+    # link used by this conversation can open its WhatsApp service window.
+    Message.joins(:conversation).where(account_id: @conversation.account_id, inbox_id: @conversation.inbox_id,
                   sender_type: 'Contact', sender_id: @conversation.contact_id,
                   message_type: :incoming, private: false)
+           .where(conversations: { contact_inbox_id: @conversation.contact_inbox_id })
            .where.not(content_type: :voice_call)
            .where("COALESCE(content_attributes->>'whatsapp_window_timestamp_untrusted', 'false') <> 'true'")
   end
