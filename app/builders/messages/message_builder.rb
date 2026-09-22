@@ -7,7 +7,7 @@ class Messages::MessageBuilder
 
   def initialize(user, conversation, params)
     @params = params
-    @private = params[:private] || false
+    @private = ActiveModel::Type::Boolean.new.cast(params[:private]) || false
     @conversation = conversation
     @user = user
     @account = conversation.account
@@ -22,10 +22,20 @@ class Messages::MessageBuilder
   end
 
   def perform
+    whatsapp_template = Whatsapp::OutgoingMessageGuard.new(@conversation, user: @user).call(
+      template_params: @params[:template_params], private_note: @private, message_type: @message_type
+    )
     if @user.is_a?(User) && !@private && @message_type == 'outgoing'
       JrcNico::DelegationService.stop(@conversation, reason: 'human_message', user: @user)
     end
     @message = @conversation.messages.build(message_params)
+    if whatsapp_template
+      @message.content = whatsapp_template[:content]
+      @message.additional_attributes = (@message.additional_attributes || {}).merge(
+        'template_params' => whatsapp_template[:template_params],
+        'whatsapp_template_audit' => whatsapp_template[:audit]
+      )
+    end
     process_attachments
     process_emails
     # When the message has no quoted content, it will just be rendered as a regular message

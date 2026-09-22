@@ -329,10 +329,11 @@ export const mutations = {
     _state.currentInbox = inboxId ? parseInt(inboxId, 10) : null;
   },
 
-  [types.SET_CONVERSATION_CAN_REPLY](_state, { conversationId, canReply }) {
+  [types.SET_CONVERSATION_CAN_REPLY](_state, { conversationId, canReply, whatsappWindow }) {
     const [chat] = _state.allConversations.filter(c => c.id === conversationId);
     if (chat) {
       chat.can_reply = canReply;
+      if (whatsappWindow) chat.whatsapp_window = whatsappWindow;
     }
   },
 

@@ -3,6 +3,7 @@ class Conversations::EventDataPresenter < SimpleDelegator
     {
       additional_attributes: additional_attributes,
       can_reply: can_reply?,
+      whatsapp_window: whatsapp_window,
       channel: inbox.try(:channel_type),
       contact_inbox: contact_inbox,
       id: display_id,

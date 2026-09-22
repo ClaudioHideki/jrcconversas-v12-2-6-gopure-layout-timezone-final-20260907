@@ -11,6 +11,8 @@ export default {
       type: Boolean,
       default: false,
     },
+    conversationId: { type: Number, default: undefined },
+    sending: { type: Boolean, default: false },
     inboxId: {
       type: Number,
       default: undefined,
@@ -39,6 +41,11 @@ export default {
         : this.$t('WHATSAPP_TEMPLATES.MODAL.SUBTITLE');
     },
   },
+  watch: {
+    show(value) { if (!value) this.selectedWaTemplate = null; },
+    conversationId() { this.selectedWaTemplate = null; },
+    inboxId() { this.selectedWaTemplate = null; },
+  },
   methods: {
     pickTemplate(template) {
       this.selectedWaTemplate = template;
@@ -47,7 +54,7 @@ export default {
       this.selectedWaTemplate = null;
     },
     onSendMessage(message) {
-      this.$emit('onSend', message);
+      if (!this.sending) this.$emit('onSend', message);
     },
     onClose() {
       this.$emit('cancel');
@@ -64,13 +71,15 @@ export default {
     />
     <div class="row modal-content">
       <TemplatesPicker
-        v-if="!selectedWaTemplate"
+        v-if="show && !selectedWaTemplate"
         :inbox-id="inboxId"
+        :conversation-id="conversationId"
         @on-select="pickTemplate"
       />
       <WhatsAppTemplateReply
-        v-else
+        v-else-if="selectedWaTemplate"
         :template="selectedWaTemplate"
+        :sending="sending"
         @reset-template="onResetTemplate"
         @send-message="onSendMessage"
       />

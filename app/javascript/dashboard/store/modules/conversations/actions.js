@@ -292,7 +292,7 @@ const actions = {
 
   createPendingMessageAndSend: async ({ dispatch }, data) => {
     const pendingMessage = createPendingMessage(data);
-    dispatch('sendMessageWithData', pendingMessage);
+    return dispatch('sendMessageWithData', pendingMessage);
   },
 
   sendMessageWithData: async ({ commit }, pendingMessage) => {
@@ -330,10 +330,11 @@ const actions = {
 
   addMessage({ commit, rootGetters }, message) {
     commit(types.ADD_MESSAGE, message);
-    if (message.message_type === MESSAGE_TYPE.INCOMING) {
+    if (message.message_type === MESSAGE_TYPE.INCOMING || message.conversation?.whatsapp_window) {
       commit(types.SET_CONVERSATION_CAN_REPLY, {
         conversationId: message.conversation_id,
-        canReply: true,
+        canReply: message.conversation?.can_reply ?? true,
+        whatsappWindow: message.conversation?.whatsapp_window,
       });
       commit(types.ADD_CONVERSATION_ATTACHMENTS, message);
     }
@@ -346,6 +347,13 @@ const actions = {
 
   updateMessage({ commit, rootGetters }, message) {
     commit(types.ADD_MESSAGE, message);
+    if (message.conversation?.whatsapp_window) {
+      commit(types.SET_CONVERSATION_CAN_REPLY, {
+        conversationId: message.conversation_id,
+        canReply: message.conversation.can_reply,
+        whatsappWindow: message.conversation.whatsapp_window,
+      });
+    }
     handleVoiceCallUpdated(
       commit,
       message,

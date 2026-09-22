@@ -7,6 +7,9 @@ class Conversations::MessageWindowService
   end
 
   def can_reply?
+    whatsapp_window = Whatsapp::ConversationWindowService.new(@conversation)
+    return whatsapp_window.can_send_free_message? if whatsapp_window.applicable?
+
     return true if messaging_window.blank?
 
     last_message_in_messaging_window?(messaging_window)

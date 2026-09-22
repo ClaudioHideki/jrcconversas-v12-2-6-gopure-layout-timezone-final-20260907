@@ -43,6 +43,7 @@ import FormBubble from './bubbles/Form.vue';
 import VoiceCallBubble from './bubbles/VoiceCall.vue';
 
 import MessageError from './MessageError.vue';
+import { friendlyWhatsappError } from 'dashboard/helper/whatsappTemplateFlow.mjs';
 import ContextMenu from 'dashboard/modules/conversations/components/MessageContextMenu.vue';
 import { useBranding } from 'shared/composables/useBranding';
 
@@ -147,6 +148,12 @@ const { t } = useI18n();
 const route = useRoute();
 const inboxGetter = useMapGetter('inboxes/getInbox');
 const inbox = computed(() => inboxGetter.value(props.inboxId) || {});
+const whatsappTemplate = computed(() => {
+  if (props.private || inbox.value.channel_type !== 'Channel::Whatsapp') return null;
+  return props.additionalAttributes.templateParams || props.additionalAttributes.template_params || null;
+});
+const displayError = computed(() => inbox.value.channel_type === 'Channel::Whatsapp'
+  ? friendlyWhatsappError(props.contentAttributes.externalError) : props.contentAttributes.externalError);
 const isOnChatwootCloud = useMapGetter('globalConfig/isOnChatwootCloud');
 const { replaceInstallationName } = useBranding();
 
@@ -570,18 +577,22 @@ provideMessageContext({
       <div
         class="[grid-area:bubble] flex min-w-0"
         :class="{
+          'flex-col': !!whatsappTemplate,
           'ltr:ml-8 rtl:mr-8 justify-end': orientation === ORIENTATION.RIGHT,
           'ltr:mr-8 rtl:ml-8': orientation === ORIENTATION.LEFT,
         }"
         @contextmenu="openContextMenu($event)"
       >
+        <div v-if="whatsappTemplate" class="text-xs text-n-slate-11 mb-1 px-2" data-testid="whatsapp-template-label">
+          Modelo WhatsApp · <strong>{{ whatsappTemplate.name }}</strong> · {{ whatsappTemplate.language }}
+        </div>
         <Component :is="componentToRender" />
       </div>
       <MessageError
         v-if="contentAttributes.externalError"
         class="[grid-area:meta]"
         :class="flexOrientationClass"
-        :error="contentAttributes.externalError"
+        :error="displayError"
         @retry="emit('retry')"
       />
     </div>

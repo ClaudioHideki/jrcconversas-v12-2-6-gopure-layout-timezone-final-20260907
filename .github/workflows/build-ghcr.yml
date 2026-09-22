@@ -1,4 +1,4 @@
-name: Build GoPure e NICO Runtime
+name: Build GoPure — WhatsApp 24h e Templates
 
 concurrency:
   group: gopure-nico-${{ github.ref }}
@@ -69,6 +69,10 @@ jobs:
           spec/requests/api/v1/accounts/crm/contact_leads_spec.rb
           spec/requests/api/v1/accounts/contacts_pagination_spec.rb
           spec/controllers/super_admin/accounts_controller_spec.rb
+      - name: Testar janela WhatsApp de 24 horas e templates
+        run: |
+          ruby scripts/qa/whatsapp24h/services_test.rb
+          node --test scripts/qa/whatsapp24h/frontend_test.mjs
       - name: Testar interface NICO
         run: pnpm exec vitest run --config vitest.nico.config.ts
       - name: Compilar e testar runtime
@@ -84,10 +88,7 @@ jobs:
         include:
           - component: app
             dockerfile: ./docker/Dockerfile
-            tag: 4.16.2-gopure-nico-20260918-r1
-          - component: runtime
-            dockerfile: ./docker/nico-runtime.Dockerfile
-            tag: nico-runtime-gopure-20260918-r1
+            tag: 4.16.2-gopure-whatsapp-24h-20260922-r1
 
     permissions:
       contents: read

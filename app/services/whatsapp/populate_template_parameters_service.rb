@@ -33,7 +33,7 @@ class Whatsapp::PopulateTemplateParametersService
   def build_media_parameter(url, media_type, media_name = nil)
     return nil if url.blank?
 
-    sanitized_url = sanitize_parameter(url)
+    sanitized_url = url.to_s.strip
     normalized_url = normalize_url(sanitized_url)
     validate_url(normalized_url)
     build_media_type_parameter(normalized_url, media_type.downcase, media_name)
@@ -133,10 +133,9 @@ class Whatsapp::PopulateTemplateParametersService
   end
 
   def sanitize_parameter(value)
-    # Basic sanitization - remove dangerous characters and limit length
-    sanitized = value.to_s.strip
-    sanitized = sanitized.gsub(/[<>\"']/, '') # Remove potential HTML/JS chars
-    sanitized[0...1000] # Limit length to prevent DoS
+    # This is a JSON text parameter, not HTML. Do not silently change names
+    # such as D'Avila, quoted text or signed URLs. Vue escapes the preview.
+    value.to_s.strip[0...1000]
   end
 
   def normalize_url(url)

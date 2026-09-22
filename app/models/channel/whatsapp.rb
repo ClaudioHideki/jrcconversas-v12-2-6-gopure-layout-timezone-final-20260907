@@ -36,7 +36,7 @@ class Channel::Whatsapp < ApplicationRecord
   validates :phone_number, presence: true, uniqueness: true
   validate :validate_provider_config
 
-  after_create :sync_templates
+  after_create :sync_templates_after_create
   after_update_commit :log_credentials_transfer, if: :saved_change_to_provider_config?
   before_destroy :teardown_webhooks
   after_commit :setup_webhooks, on: :create, if: :should_auto_setup_webhooks?
@@ -142,6 +142,13 @@ class Channel::Whatsapp < ApplicationRecord
   end
 
   private
+
+  def sync_templates_after_create
+    sync_templates
+  rescue Whatsapp::TemplateSyncService::Error
+    # The connection is persisted; the administrator can retry synchronization.
+    nil
+  end
 
   def ensure_webhook_verify_token
     provider_config['webhook_verify_token'] ||= SecureRandom.hex(16) if provider == 'whatsapp_cloud'

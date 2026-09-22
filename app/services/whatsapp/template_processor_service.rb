@@ -10,6 +10,8 @@ class Whatsapp::TemplateProcessorService
   private
 
   def process_template_with_params
+    return [nil, nil, nil, nil] unless find_template
+
     [
       template_params['name'],
       template_params['namespace'],
@@ -19,10 +21,10 @@ class Whatsapp::TemplateProcessorService
   end
 
   def find_template
-    channel.message_templates.find do |t|
+    Array(channel.message_templates).find do |t|
       t['name'] == template_params['name'] &&
         t['language']&.downcase == template_params['language']&.downcase &&
-        t['status']&.downcase == 'approved'
+        t['status']&.downcase == 'approved' && template_catalog.allowed?(t)
     end
   end
 
@@ -66,7 +68,11 @@ class Whatsapp::TemplateProcessorService
         media_param = parameter_builder.build_media_parameter(value, header_data['media_type'], media_name)
         header_params << media_param if media_param
       elsif key != 'media_type' && key != 'media_name'
-        header_params << parameter_builder.build_parameter(value)
+        if find_template['parameter_format'] == 'NAMED'
+          header_params << parameter_builder.build_named_parameter(key, value)
+        else
+          header_params << parameter_builder.build_parameter(value)
+        end
       end
     end
     header_params
@@ -111,7 +117,7 @@ class Whatsapp::TemplateProcessorService
     button_params = processed_params['buttons'].filter_map.with_index do |button, index|
       next if button.blank?
 
-      if button['type'] == 'url' || button['parameter'].present?
+      if button['parameter'].present?
         {
           type: 'button',
           sub_type: button['type'] || 'url',
@@ -122,6 +128,12 @@ class Whatsapp::TemplateProcessorService
     end
 
     button_params.compact
+  end
+
+  def template_catalog
+    @template_catalog ||= Whatsapp::TemplateCatalogService.new(
+      inbox: channel.inbox, conversation: message&.try(:conversation), user: message&.try(:sender)
+    )
   end
 
   def parameter_builder

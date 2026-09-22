@@ -58,6 +58,17 @@ class InboxPolicy < ApplicationPolicy
     @account_user.administrator?
   end
 
+  def whatsapp_templates?
+    show?
+  end
+
+  def refresh_whatsapp_templates?
+    @account_user.administrator?
+  end
+
+  alias update_whatsapp_template_rule? refresh_whatsapp_templates?
+  alias whatsapp_template_logs? refresh_whatsapp_templates?
+
   def sync_templates?
     @account_user.administrator?
   end

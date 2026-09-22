@@ -6,6 +6,7 @@ class Api::V1::Accounts::InboxesController < Api::V1::Accounts::BaseController
   before_action :check_authorization, except: [:show]
 
   include Api::V1::Accounts::Concerns::WhatsappHealthManagement
+  include Api::V1::Accounts::Concerns::WhatsappTemplateManagement
 
   def index
     @inboxes = policy_scope(Current.account.inboxes)

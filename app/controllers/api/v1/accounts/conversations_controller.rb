@@ -36,6 +36,10 @@ class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseContro
 
   def show; end
 
+  def whatsapp_window
+    render json: @conversation.whatsapp_window || { has_service_window: false, supports_templates: false }
+  end
+
   def create
     ActiveRecord::Base.transaction do
       @conversation = ConversationBuilder.new(params: params, contact_inbox: @contact_inbox).perform

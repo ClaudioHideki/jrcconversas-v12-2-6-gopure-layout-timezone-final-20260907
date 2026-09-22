@@ -33,25 +33,31 @@ class Whatsapp::Providers::WhatsappCloudService < Whatsapp::Providers::BaseServi
   end
 
   def sync_templates
-    # ensuring that channels with wrong provider config wouldn't keep trying to sync templates
-    whatsapp_channel.mark_message_templates_updated
-    templates = fetch_whatsapp_templates("#{business_account_path}/message_templates?access_token=#{whatsapp_channel.provider_config['api_key']}")
-    whatsapp_channel.update(message_templates: templates, message_templates_last_updated: Time.now.utc) if templates.present?
+    Whatsapp::TemplateSyncService.new(whatsapp_channel).call
   end
 
-  def fetch_whatsapp_templates(url)
-    response = HTTParty.get(url)
-    unless response.success?
-      Rails.logger.warn "[WHATSAPP] Template sync failed for account #{whatsapp_channel.account_id} " \
-                        "inbox #{whatsapp_channel.inbox&.id}: #{response.code} #{error_message(response)}"
-      return []
+  def load_templates!
+    templates = []
+    cursor = nil
+    seen_cursors = []
+    100.times do
+      query = { limit: 100 }
+      query[:after] = cursor if cursor.present?
+      response = HTTParty.get("#{business_account_path}/message_templates", headers: api_headers, query: query, timeout: 20)
+      data = response.parsed_response
+      unless response.success? && data.is_a?(Hash) && data['data'].is_a?(Array)
+        raise Whatsapp::TemplateSyncService::Error, 'Provider template request failed'
+      end
+      templates.concat(data['data'])
+      return templates unless data.dig('paging', 'next').present?
+
+      cursor = data.dig('paging', 'cursors', 'after')
+      if cursor.blank? || seen_cursors.include?(cursor)
+        raise Whatsapp::TemplateSyncService::Error, 'Invalid pagination cursor'
+      end
+      seen_cursors << cursor
     end
-
-    next_url = next_url(response)
-
-    return response['data'] + fetch_whatsapp_templates(next_url) if next_url.present?
-
-    response['data']
+    raise Whatsapp::TemplateSyncService::Error, 'Template catalog exceeded pagination limit'
   end
 
   def next_url(response)

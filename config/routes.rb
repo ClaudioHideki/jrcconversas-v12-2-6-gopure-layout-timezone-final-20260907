@@ -172,6 +172,7 @@ Rails.application.routes.draw do
               resource :draft_messages, only: [:show, :update, :destroy]
             end
             member do
+              get :whatsapp_window
               post :mute
               post :unmute
               post :transcript
@@ -439,6 +440,10 @@ Rails.application.routes.draw do
             post :set_agent_bot, on: :member
             delete :avatar, on: :member
             post :sync_templates, on: :member
+            get :whatsapp_templates, on: :member
+            post :refresh_whatsapp_templates, on: :member
+            patch :update_whatsapp_template_rule, on: :member
+            get :whatsapp_template_logs, on: :member
             get :health, on: :member
             post :register_webhook, on: :member
             post :reset_secret, on: :member
@@ -893,6 +898,10 @@ Rails.application.routes.draw do
             post :set_agent_bot, on: :member
             delete :avatar, on: :member
             post :sync_templates, on: :member
+            get :whatsapp_templates, on: :member
+            post :refresh_whatsapp_templates, on: :member
+            patch :update_whatsapp_template_rule, on: :member
+            get :whatsapp_template_logs, on: :member
             get :health, on: :member
             post :register_webhook, on: :member
             post :reset_secret, on: :member

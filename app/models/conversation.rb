@@ -144,6 +144,10 @@ class Conversation < ApplicationRecord
     Conversations::MessageWindowService.new(self).can_reply?
   end
 
+  def whatsapp_window
+    Whatsapp::ConversationWindowService.new(self).payload
+  end
+
   def language
     additional_attributes&.dig('conversation_language')
   end

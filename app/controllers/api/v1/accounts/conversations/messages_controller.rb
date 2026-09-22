@@ -9,6 +9,8 @@ class Api::V1::Accounts::Conversations::MessagesController < Api::V1::Accounts::
     user = Current.user || @resource
     mb = Messages::MessageBuilder.new(user, @conversation, params)
     @message = mb.perform
+  rescue Whatsapp::OutgoingMessageGuard::Error => e
+    render json: { error: e.message, code: e.code, whatsapp_window: @conversation.whatsapp_window }, status: :unprocessable_entity
   rescue StandardError => e
     render_could_not_create_error(e.message)
   end
@@ -28,10 +30,16 @@ class Api::V1::Accounts::Conversations::MessagesController < Api::V1::Accounts::
   def retry
     return if message.blank?
 
+    Whatsapp::OutgoingMessageGuard.new(@conversation, user: Current.user || @resource).call(
+      template_params: message.additional_attributes&.dig('template_params'),
+      private_note: message.private?, message_type: message.message_type
+    )
     service = Messages::StatusUpdateService.new(message, 'sent')
     service.perform
     message.update!(content_attributes: {})
     ::SendReplyJob.perform_later(message.id)
+  rescue Whatsapp::OutgoingMessageGuard::Error => e
+    render json: { error: e.message, code: e.code, whatsapp_window: @conversation.whatsapp_window }, status: :unprocessable_entity
   rescue StandardError => e
     render_could_not_create_error(e.message)
   end

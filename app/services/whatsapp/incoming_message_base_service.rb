@@ -65,6 +65,12 @@ class Whatsapp::IncomingMessageBaseService
   end
 
   def update_message_with_status(message, status)
+    ranks = { 'sent' => 0, 'delivered' => 1, 'read' => 2 }
+    next_status = status[:status].to_s
+    return unless %w[sent delivered read failed].include?(next_status)
+    return if (message.read? || message.delivered?) && next_status == 'failed'
+    return if ranks.key?(next_status) && ranks.key?(message.status) && ranks[next_status] < ranks[message.status]
+
     message.status = status[:status]
     if status[:status] == 'failed' && status[:errors].present?
       error = status[:errors]&.first
@@ -171,6 +177,7 @@ class Whatsapp::IncomingMessageBaseService
   def create_message(message, source_id: nil, content_attributes_source: message)
     @message = @conversation.messages.build(
       content: message_content(message),
+      created_at: provider_message_time(content_attributes_source) || Time.current,
       account_id: @inbox.account_id,
       inbox_id: @inbox.id,
       message_type: outgoing_echo ? :outgoing : :incoming,
@@ -182,8 +189,19 @@ class Whatsapp::IncomingMessageBaseService
     )
   end
 
+  def provider_message_time(message)
+    raw = message[:timestamp] || message['timestamp']
+    return unless raw.to_s.match?(/\A[0-9]{9,11}\z/)
+
+    timestamp = Time.at(raw.to_i).utc
+    timestamp if timestamp > Time.utc(2009, 1, 1) && timestamp <= Time.current + 60
+  rescue ArgumentError, RangeError
+    nil
+  end
+
   def message_content_attributes(message)
     content_attrs = outgoing_echo ? { external_echo: true } : {}
+    content_attrs[:whatsapp_window_timestamp_untrusted] = true if !outgoing_echo && provider_message_time(message).nil?
     content_attrs[:in_reply_to_external_id] = @in_reply_to_external_id if @in_reply_to_external_id.present?
     referral_content_attrs = referral_attributes(message)
     content_attrs[:referral] = referral_content_attrs if referral_content_attrs.present?

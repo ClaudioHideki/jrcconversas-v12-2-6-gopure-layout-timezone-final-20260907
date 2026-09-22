@@ -6,6 +6,10 @@ class ConversationApi extends ApiClient {
     super('conversations', { accountScoped: true });
   }
 
+  whatsappWindow(conversationID) {
+    return axios.get(`${this.url}/${conversationID}/whatsapp_window`);
+  }
+
   getLabels(conversationID) {
     return axios.get(`${this.url}/${conversationID}/labels`);
   }

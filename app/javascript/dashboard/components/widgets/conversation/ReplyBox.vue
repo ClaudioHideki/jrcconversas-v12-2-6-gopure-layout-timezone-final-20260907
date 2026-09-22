@@ -28,6 +28,8 @@ import {
   getUndefinedVariablesInMessage,
 } from '@chatwoot/utils';
 import WhatsappTemplates from './WhatsappTemplates/Modal.vue';
+import WhatsappWindowBanner from './WhatsappTemplates/WindowBanner.vue';
+import { useWhatsappWindow } from 'dashboard/composables/useWhatsappWindow';
 import ContentTemplates from './ContentTemplates/ContentTemplatesModal.vue';
 import { MESSAGE_MAX_LENGTH } from 'shared/helpers/MessageTypeHelper';
 import inboxMixin, { INBOX_FEATURES } from 'shared/mixins/inboxMixin';
@@ -77,6 +79,7 @@ export default {
     ReplyTopPanel,
     ContentTemplates,
     WhatsappTemplates,
+    WhatsappWindowBanner,
     WootMessageEditor,
     QuotedEmailPreview,
     CopilotEditorSection,
@@ -96,6 +99,7 @@ export default {
     const replyEditor = useTemplateRef('replyEditor');
     const messageEditor = useTemplateRef('messageEditor');
     const copilot = useCopilotReply();
+    const whatsappWindow = useWhatsappWindow();
     const shortcutKey = useKbd(['$mod', '+', 'enter']);
 
     return {
@@ -107,6 +111,7 @@ export default {
       replyEditor,
       messageEditor,
       copilot,
+      whatsappWindow,
       shortcutKey,
     };
   },
@@ -126,6 +131,7 @@ export default {
       toEmails: '',
       doAutoSaveDraft: () => {},
       showWhatsAppTemplatesModal: false,
+      isSendingWhatsappTemplate: false,
       showContentTemplatesModal: false,
       updateEditorSelectionWith: '',
       undefinedVariableMessage: '',
@@ -167,7 +173,7 @@ export default {
       const templates = this.$store.getters['inboxes/getWhatsAppTemplates'](
         this.inboxId
       );
-      return !!(templates && templates.length) && !this.isPrivate;
+      return (this.whatsappWindow.isOfficial.value || !!(templates && templates.length)) && !this.isPrivate;
     },
     showContentTemplates() {
       return this.isATwilioWhatsAppChannel && !this.isPrivate;
@@ -447,6 +453,9 @@ export default {
       return !this.showAudioRecorderEditor && !this.copilot.isActive.value;
     },
     isEditorDisabled() {
+      if (this.whatsappWindow.isOfficial.value) {
+        return !this.isOnPrivateNote && !this.whatsappWindow.state.value.can_send_free_message;
+      }
       return (
         (this.isAWhatsAppChannel || this.isAPIInbox) &&
         !this.isOnPrivateNote &&
@@ -908,18 +917,29 @@ export default {
           editorMessage,
           copilotAcceptedMessage,
         });
+        return true;
       } catch (error) {
         const errorMessage =
           error?.response?.data?.error || this.$t('CONVERSATION.MESSAGE_ERROR');
         useAlert(errorMessage);
+        if (error?.response?.data?.code === 'WHATSAPP_WINDOW_CLOSED') this.whatsappWindow.refresh();
+        return false;
       }
     },
     async onSendWhatsAppReply(messagePayload) {
-      this.sendMessage({
-        conversationId: this.currentChat.id,
-        ...messagePayload,
-      });
-      this.hideWhatsappTemplatesModal();
+      if (this.isSendingWhatsappTemplate) return;
+      this.isSendingWhatsappTemplate = true;
+      try {
+        const sent = await this.sendMessage({
+          conversationId: this.currentChat.id,
+          ...messagePayload,
+          private: false,
+        });
+        if (sent) this.hideWhatsappTemplatesModal();
+        await this.whatsappWindow.refresh();
+      } finally {
+        this.isSendingWhatsappTemplate = false;
+      }
     },
     async onSendContentTemplateReply(messagePayload) {
       this.sendMessage({
@@ -1253,6 +1273,15 @@ export default {
 
 <template>
   <ReplyBoxBanner :message="message" :is-on-private-note="isOnPrivateNote" />
+  <WhatsappWindowBanner
+    v-if="whatsappWindow.isOfficial.value && !isOnPrivateNote"
+    :window="whatsappWindow.state.value"
+    :timezone="inbox.timezone || 'America/Sao_Paulo'"
+    :refreshing="whatsappWindow.refreshing.value"
+    :refresh-error="whatsappWindow.refreshError.value"
+    @choose-template="openWhatsappTemplateModal"
+    @refresh="whatsappWindow.refresh"
+  />
   <div ref="replyEditor" class="reply-box" :class="replyBoxClass">
     <ReplyTopPanel
       :mode="replyType"
@@ -1447,6 +1476,8 @@ export default {
     <WhatsappTemplates
       :inbox-id="inbox.id"
       :show="showWhatsAppTemplatesModal"
+      :conversation-id="currentChat.id"
+      :sending="isSendingWhatsappTemplate"
       @close="hideWhatsappTemplatesModal"
       @on-send="onSendWhatsAppReply"
       @cancel="hideWhatsappTemplatesModal"

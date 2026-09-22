@@ -13,11 +13,9 @@ import { useVuelidate } from '@vuelidate/core';
 import { requiredIf } from '@vuelidate/validators';
 import { useI18n } from 'vue-i18n';
 
-import { isWhatsAppComplete } from '@chatwoot/utils';
+import { buildJrcTemplateParameters, templateValidationErrors, renderTemplatePart, component } from 'dashboard/helper/whatsappTemplateFlow.mjs';
 import Input from 'dashboard/components-next/input/Input.vue';
 import {
-  buildTemplateParameters,
-  allKeysRequired,
   replaceTemplateVariables,
   DEFAULT_LANGUAGE,
   DEFAULT_CATEGORY,
@@ -27,6 +25,8 @@ import {
 } from 'dashboard/helper/templateHelper';
 
 const props = defineProps({
+  initialValues: { type: Object, default: () => ({}) },
+  sending: { type: Boolean, default: false },
   template: {
     type: Object,
     default: () => ({}),
@@ -85,26 +85,23 @@ const renderedTemplate = computed(() => {
   return replaceTemplateVariables(bodyText.value, processedParams.value);
 });
 
-// Completeness validation is shared with the mobile app via @chatwoot/utils.
+// Validate body, text/media header and dynamic buttons with the JRC helper.
 const isFormInvalid = computed(
-  () => !isWhatsAppComplete(props.template, processedParams.value)
+  () => templateValidationErrors(props.template, processedParams.value).length > 0
 );
 
 const v$ = useVuelidate(
   {
     processedParams: {
       requiredIfKeysPresent: requiredIf(hasVariables),
-      allKeysRequired,
+      allKeysRequired: value => templateValidationErrors(props.template, value).length === 0,
     },
   },
   { processedParams }
 );
 
 const initializeTemplateParameters = () => {
-  processedParams.value = buildTemplateParameters(
-    props.template,
-    hasMediaHeader.value
-  );
+  processedParams.value = buildJrcTemplateParameters(props.template, props.initialValues);
 };
 
 const updateMediaUrl = value => {
@@ -117,9 +114,15 @@ const updateMediaName = value => {
   processedParams.value.header.media_name = value;
 };
 
+const renderedHeader = computed(() => renderTemplatePart(headerComponent.value?.text, processedParams.value.header));
+const footerText = computed(() => component(props.template, 'FOOTER')?.text || '');
+const previewButtons = computed(() => component(props.template, 'BUTTONS')?.buttons || []);
+const headerVariables = computed(() => hasMediaHeader.value ? [] : Object.keys(processedParams.value.header || {}));
+const validationErrors = computed(() => templateValidationErrors(props.template, processedParams.value));
+
 const sendMessage = () => {
   v$.value.$touch();
-  if (v$.value.$invalid) return;
+  if (v$.value.$invalid || isFormInvalid.value || props.sending) return;
 
   const { name, category, language, namespace } = props.template;
 
@@ -183,6 +186,8 @@ defineExpose({
         </span>
       </div>
 
+      <div v-if="renderedHeader" class="font-semibold text-sm whitespace-pre-wrap">{{ renderedHeader }}</div>
+      <div v-if="hasMediaHeader" class="text-xs text-n-slate-11">{{ formatType }}: {{ processedParams.header?.media_url || 'Informe a URL da mídia abaixo' }}</div>
       <div class="flex flex-col gap-2">
         <div class="rounded-md">
           <div class="text-sm whitespace-pre-wrap text-n-slate-12">
@@ -191,12 +196,23 @@ defineExpose({
         </div>
       </div>
 
+      <p v-if="footerText" class="text-xs text-n-slate-11 mb-0 whitespace-pre-wrap">{{ footerText }}</p>
+      <div v-if="previewButtons.length" class="flex gap-2 flex-wrap">
+        <span v-for="(button, index) in previewButtons" :key="index" class="rounded border border-n-weak px-2 py-1 text-xs">{{ button.text }}</span>
+      </div>
       <div class="text-xs text-n-slate-11">
         {{ categoryLabel }}
       </div>
     </div>
 
-    <div v-if="hasVariables || hasMediaHeader">
+    <div v-if="hasVariables || hasMediaHeader || headerVariables.length || processedParams.buttons">
+      <div v-if="headerVariables.length" class="mb-4">
+        <p class="text-sm font-semibold">Variáveis do cabeçalho</p>
+        <label v-for="key in headerVariables" :key="`header-${key}`" class="block mb-3 text-sm">
+          {{ key }}
+          <Input v-model="processedParams.header[key]" type="text" :placeholder="key" :disabled="sending" />
+        </label>
+      </div>
       <div v-if="hasMediaHeader" class="mb-4">
         <p class="mb-2.5 text-sm font-semibold">
           {{
@@ -208,6 +224,7 @@ defineExpose({
         <div class="flex items-center mb-2.5">
           <Input
             :model-value="processedParams.header?.media_url || ''"
+            :disabled="sending"
             type="url"
             class="flex-1"
             :placeholder="
@@ -221,6 +238,7 @@ defineExpose({
         <div v-if="isDocumentTemplate" class="flex items-center mb-2.5">
           <Input
             :model-value="processedParams.header?.media_name || ''"
+            :disabled="sending"
             type="text"
             class="flex-1"
             :placeholder="
@@ -243,6 +261,7 @@ defineExpose({
         >
           <Input
             v-model="processedParams.body[key]"
+            :disabled="sending"
             type="text"
             class="flex-1"
             :placeholder="
@@ -265,7 +284,9 @@ defineExpose({
           class="flex items-center mb-2.5"
         >
           <Input
+            v-if="Object.hasOwn(button, 'parameter')"
             v-model="processedParams.buttons[index].parameter"
+            :disabled="sending"
             type="text"
             class="flex-1"
             :placeholder="t('WHATSAPP_TEMPLATES.PARSER.BUTTON_PARAMETER')"
@@ -276,7 +297,7 @@ defineExpose({
         v-if="v$.$dirty && v$.$invalid"
         class="p-2.5 text-center rounded-md bg-n-ruby-9/20 text-n-ruby-9"
       >
-        {{ $t('WHATSAPP_TEMPLATES.PARSER.FORM_ERROR_MESSAGE') }}
+        {{ validationErrors[0] || $t('WHATSAPP_TEMPLATES.PARSER.FORM_ERROR_MESSAGE') }}
       </p>
     </div>
 
@@ -286,7 +307,7 @@ defineExpose({
       :reset-template="resetTemplate"
       :go-back="goBack"
       :is-valid="!v$.$invalid"
-      :disabled="isFormInvalid"
+      :disabled="isFormInvalid || sending"
     />
   </div>
 </template>

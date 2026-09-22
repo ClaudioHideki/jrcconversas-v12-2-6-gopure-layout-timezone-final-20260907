@@ -1,71 +1,74 @@
 <script setup>
-import { ref, computed, toRef } from 'vue';
+import { ref, computed, toRef, watch } from 'vue';
 import { useAlert } from 'dashboard/composables';
 import { useFunctionGetter, useStore } from 'dashboard/composables/store';
-import {
-  COMPONENT_TYPES,
-  MEDIA_FORMATS,
-  findComponentByType,
-} from 'dashboard/helper/templateHelper';
+import { COMPONENT_TYPES, MEDIA_FORMATS, findComponentByType } from 'dashboard/helper/templateHelper';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import { useI18n } from 'vue-i18n';
+import TemplatesAPI from 'dashboard/api/whatsappTemplates';
 
-const props = defineProps({
-  inboxId: {
-    type: Number,
-    default: undefined,
-  },
-});
-
+const props = defineProps({ inboxId: { type: Number, default: undefined }, conversationId: { type: Number, default: undefined } });
 const emit = defineEmits(['onSelect']);
-
 const { t } = useI18n();
 const store = useStore();
 const query = ref('');
+const category = ref('');
+const language = ref('');
+const favoritesOnly = ref(false);
 const isRefreshing = ref(false);
-
-const whatsAppTemplateMessages = useFunctionGetter(
-  'inboxes/getFilteredWhatsAppTemplates',
-  toRef(props, 'inboxId')
-);
-
-const filteredTemplateMessages = computed(() =>
-  whatsAppTemplateMessages.value.filter(template =>
-    template.name.toLowerCase().includes(query.value.toLowerCase())
-  )
-);
-
-const getTemplateBody = template => {
-  return findComponentByType(template, COMPONENT_TYPES.BODY)?.text || '';
+const loading = ref(false);
+const loadError = ref('');
+const canManage = ref(false);
+const remoteTemplates = ref([]);
+let generation = 0;
+const official = computed(() => store.getters['inboxes/getInbox'](props.inboxId)?.channel_type === 'Channel::Whatsapp');
+const legacyTemplates = useFunctionGetter('inboxes/getFilteredWhatsAppTemplates', toRef(props, 'inboxId'));
+const whatsAppTemplateMessages = computed(() => official.value ? remoteTemplates.value : legacyTemplates.value);
+const categories = computed(() => [...new Set(whatsAppTemplateMessages.value.map(item => item.category))].filter(Boolean).sort());
+const languages = computed(() => [...new Set(whatsAppTemplateMessages.value.map(item => item.language))].filter(Boolean).sort());
+const filteredTemplateMessages = computed(() => whatsAppTemplateMessages.value.filter(template =>
+  `${template.name} ${getTemplateBody(template)}`.toLowerCase().includes(query.value.toLowerCase()) &&
+  (!category.value || template.category === category.value) &&
+  (!language.value || template.language === language.value) &&
+  (!favoritesOnly.value || template.jrc?.favorite)
+).sort((a, b) => Number(!!b.jrc?.favorite) - Number(!!a.jrc?.favorite) || a.name.localeCompare(b.name)));
+const getTemplateBody = template => findComponentByType(template, COMPONENT_TYPES.BODY)?.text || '';
+const getTemplateHeader = template => findComponentByType(template, COMPONENT_TYPES.HEADER);
+const getTemplateFooter = template => findComponentByType(template, COMPONENT_TYPES.FOOTER);
+const getTemplateButtons = template => findComponentByType(template, COMPONENT_TYPES.BUTTONS);
+const hasMediaContent = template => MEDIA_FORMATS.includes(getTemplateHeader(template)?.format);
+const load = async () => {
+  if (!official.value || !props.conversationId) return;
+  const request = ++generation;
+  loading.value = true;
+  loadError.value = '';
+  try {
+    const { data } = await TemplatesAPI.catalog(props.inboxId, { conversation_id: props.conversationId });
+    if (request !== generation) return;
+    remoteTemplates.value = data.templates;
+    canManage.value = data.can_manage;
+    if (data.sync_error) loadError.value = data.sync_error;
+  } catch (error) {
+    if (request === generation) loadError.value = error.response?.data?.error || 'Não foi possível carregar os modelos desta caixa.';
+  } finally { if (request === generation) loading.value = false; }
 };
-
-const getTemplateHeader = template => {
-  return findComponentByType(template, COMPONENT_TYPES.HEADER);
-};
-
-const getTemplateFooter = template => {
-  return findComponentByType(template, COMPONENT_TYPES.FOOTER);
-};
-
-const getTemplateButtons = template => {
-  return findComponentByType(template, COMPONENT_TYPES.BUTTONS);
-};
-
-const hasMediaContent = template => {
-  const header = getTemplateHeader(template);
-  return header && MEDIA_FORMATS.includes(header.format);
-};
-
+watch(() => [props.inboxId, props.conversationId], () => {
+  generation += 1;
+  remoteTemplates.value = [];
+  canManage.value = false;
+  load();
+}, { immediate: true });
 const refreshTemplates = async () => {
   isRefreshing.value = true;
   try {
-    await store.dispatch('inboxes/syncTemplates', props.inboxId);
+    if (official.value) {
+      await TemplatesAPI.refresh(props.inboxId);
+      await load();
+    } else { await store.dispatch('inboxes/syncTemplates', props.inboxId); }
     useAlert(t('WHATSAPP_TEMPLATES.PICKER.REFRESH_SUCCESS'));
   } catch (error) {
-    useAlert(t('WHATSAPP_TEMPLATES.PICKER.REFRESH_ERROR'));
-  } finally {
-    isRefreshing.value = false;
-  }
+    useAlert(error.response?.data?.error || t('WHATSAPP_TEMPLATES.PICKER.REFRESH_ERROR'));
+  } finally { isRefreshing.value = false; }
 };
 </script>
 
@@ -84,6 +87,7 @@ const refreshTemplates = async () => {
         />
       </div>
       <button
+        v-if="!official || canManage"
         :disabled="isRefreshing"
         class="flex justify-center items-center w-9 h-9 rounded-lg bg-n-alpha-black2 outline outline-1 outline-n-weak hover:outline-n-slate-6 dark:hover:outline-n-slate-6 hover:bg-n-alpha-2 dark:hover:bg-n-solid-2 disabled:opacity-50 disabled:cursor-not-allowed"
         :title="t('WHATSAPP_TEMPLATES.PICKER.REFRESH_BUTTON')"
@@ -96,6 +100,22 @@ const refreshTemplates = async () => {
         />
       </button>
     </div>
+    <div class="flex gap-2 flex-wrap mb-3 items-center">
+      <select v-model="category" aria-label="Categoria" class="!mb-0 !w-auto !text-sm">
+        <option value="">Todas as categorias</option>
+        <option v-for="item in categories" :key="item" :value="item">{{ item }}</option>
+      </select>
+      <select v-model="language" aria-label="Idioma" class="!mb-0 !w-auto !text-sm">
+        <option value="">Todos os idiomas</option>
+        <option v-for="item in languages" :key="item" :value="item">{{ item }}</option>
+      </select>
+      <label v-if="official" class="flex gap-2 items-center text-sm mb-0"><input v-model="favoritesOnly" type="checkbox" class="!mb-0" /> Favoritos da equipe</label>
+      <span class="text-xs text-n-teal-11">Somente aprovados</span>
+    </div>
+    <p v-if="loading" role="status" class="text-sm">Carregando modelos desta caixa...</p>
+    <div v-if="loadError" role="alert" class="text-sm p-3 mb-3 rounded-lg bg-n-amber-2 text-n-amber-11">
+      {{ loadError }} <button type="button" class="underline" @click="load">Tentar novamente</button>
+    </div>
     <div
       class="bg-n-background outline-n-container outline outline-1 rounded-lg max-h-[18.75rem] overflow-y-auto p-2.5"
     >
@@ -107,7 +127,7 @@ const refreshTemplates = async () => {
           <div>
             <div class="flex justify-between items-center mb-2.5">
               <p class="text-sm">
-                {{ template.name }}
+                {{ template.jrc?.favorite ? "★ " : "" }}{{ template.name }}
               </p>
               <span
                 class="inline-block px-2 py-1 text-xs leading-none rounded-lg cursor-default bg-n-slate-3 text-n-slate-12"
@@ -188,8 +208,8 @@ const refreshTemplates = async () => {
           class="border-b border-solid border-n-weak my-2.5 mx-auto max-w-[95%]"
         />
       </div>
-      <div v-if="!filteredTemplateMessages.length" class="py-8 text-center">
-        <div v-if="query && whatsAppTemplateMessages.length">
+      <div v-if="!loading && !filteredTemplateMessages.length" class="py-8 text-center">
+        <div v-if="whatsAppTemplateMessages.length">
           <p>
             {{ t('WHATSAPP_TEMPLATES.PICKER.NO_TEMPLATES_FOUND') }}
             <strong>{{ query }}</strong>
@@ -197,7 +217,7 @@ const refreshTemplates = async () => {
         </div>
         <div v-else-if="!whatsAppTemplateMessages.length" class="space-y-4">
           <p class="text-n-slate-11">
-            {{ t('WHATSAPP_TEMPLATES.PICKER.NO_TEMPLATES_AVAILABLE') }}
+            Nenhum modelo aprovado e autorizado para esta caixa/equipe. Peça ao administrador para sincronizar e conferir as permissões.
           </p>
         </div>
       </div>

@@ -43,6 +43,7 @@ class Message < ApplicationRecord
   searchkick callbacks: false if ChatwootApp.advanced_search_allowed?
 
   include MessageFilterHelpers
+  include WhatsappTemplateAuditable
   include Liquidable
   NUMBER_OF_PERMITTED_ATTACHMENTS = 15
 
@@ -158,6 +159,8 @@ class Message < ApplicationRecord
 
   def conversation_push_event_data
     {
+      whatsapp_window: conversation.whatsapp_window,
+      can_reply: conversation.can_reply?,
       assignee_id: conversation.assignee_id,
       unread_count: conversation.unread_incoming_messages.count,
       last_activity_at: conversation.last_activity_at.to_i,
