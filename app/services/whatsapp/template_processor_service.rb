@@ -26,9 +26,15 @@ class Whatsapp::TemplateProcessorService
         t['language']&.downcase == template_params['language']&.downcase &&
         t['status']&.downcase == 'approved'
     end
-    # Campaigns keep their existing approved-template flow. Conversation sends
-    # are additionally restricted by the inbox rules and the agent's team.
-    return template unless message&.try(:conversation)
+    # Campaigns have no conversation/team context. They retain the existing
+    # approved-template flow only for templates without internal restrictions.
+    # Conversation sends are additionally restricted by the agent's team.
+    unless message&.try(:conversation)
+      rule = template && template_catalog.rule_for(template)
+      return nil if rule&.fetch('enabled', true) == false || Array(rule&.fetch('team_ids', [])).any?
+
+      return template
+    end
 
     template if template && template_catalog.allowed?(template)
   end
