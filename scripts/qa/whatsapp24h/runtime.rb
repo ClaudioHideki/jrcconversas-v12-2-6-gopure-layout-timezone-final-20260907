@@ -75,6 +75,9 @@ class FakeRelation
     return self unless criteria
     @queries << criteria
     rows = if criteria.is_a?(Hash)
+             # The isolated doubles do not model SQL joins. The integration
+             # suite verifies the conversation/contact-inbox predicate.
+             criteria = criteria.reject { |key, _| key == :conversations }
              @rows.select { |row| matches?(row, criteria) }
            elsif criteria.include?('whatsapp_window_timestamp_untrusted')
              @rows.reject { |row| row.content_attributes['whatsapp_window_timestamp_untrusted'].to_s == 'true' }
@@ -85,6 +88,7 @@ class FakeRelation
            end
     self.class.new(rows, @queries)
   end
+  def joins(*) = self
   def not(criteria)
     self.class.new(@rows.reject { |row| matches?(row, criteria) }, @queries)
   end
@@ -100,6 +104,7 @@ end
 class Message
   class << self
     attr_accessor :rows, :queries
+    def joins(*) = FakeRelation.new(rows || [], queries || [])
     def where(criteria) = FakeRelation.new(rows || [], queries || []).where(criteria)
   end
 end
