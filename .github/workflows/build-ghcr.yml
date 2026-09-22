@@ -101,6 +101,9 @@ jobs:
           - component: app
             dockerfile: ./docker/Dockerfile
             tag: 4.16.2-gopure-crm-comercial-20260922-r2
+          - component: nico-runtime
+            dockerfile: ./docker/nico-runtime.Dockerfile
+            tag: nico-runtime-gopure-crm-comercial-20260922-r2
 
     permissions:
       contents: read
