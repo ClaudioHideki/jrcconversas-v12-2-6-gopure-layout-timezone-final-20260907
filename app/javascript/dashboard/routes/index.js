@@ -7,6 +7,8 @@ import { validateLoggedInRoutes } from '../helper/routeHelpers';
 import { isOnOnboardingView } from 'v3/helpers/RouteHelper';
 import AnalyticsHelper from '../helper/AnalyticsHelper';
 import types from 'dashboard/store/mutation-types';
+import { FEATURE_FLAGS } from 'dashboard/featureFlags';
+import { ensureCrmEnabled } from './dashboard/crm/access';
 
 const ONBOARDING_STEPS = ['account_details', 'enrichment', 'inbox_setup'];
 const routes = [...dashboard.routes];
@@ -133,6 +135,14 @@ export const initalizeRouter = () => {
     if (isSuperAdminAccountRoute(to)) {
       setupSuperAdminAccountContext(to);
       return next();
+    }
+
+    const isCrmRoute = to.matched.some(
+      route => route.meta?.featureFlag === FEATURE_FLAGS.JRC_CRM
+    );
+    if (isCrmRoute) {
+      const crmAccess = await ensureCrmEnabled(to);
+      if (crmAccess !== true) return next(crmAccess);
     }
 
     await validateAuthenticateRoutePermission(to, next, store);

@@ -10,6 +10,10 @@ class AccountAPI extends ApiClient {
     return axios.post(`${this.apiVersion}/accounts`, data);
   }
 
+  getById(accountId) {
+    return axios.get(`${this.apiVersion}/accounts/${accountId}`);
+  }
+
   async getCacheKeys() {
     const response = await axios.get(
       `/api/v1/accounts/${this.accountIdFromRoute}/cache_keys`

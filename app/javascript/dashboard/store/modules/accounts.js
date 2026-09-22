@@ -55,14 +55,18 @@ export const getters = {
 };
 
 export const actions = {
-  get: async ({ commit }, { silent } = {}) => {
+  get: async ({ commit }, { silent, accountId } = {}) => {
     if (!silent) {
       commit(types.default.SET_ACCOUNT_UI_FLAG, { isFetchingItem: true });
     }
     try {
-      const response = await AccountAPI.get();
+      const response = await (accountId
+        ? AccountAPI.getById(accountId)
+        : AccountAPI.get());
       commit(types.default.ADD_ACCOUNT, response.data);
-    } catch {
+    } catch (error) {
+      // Access checks cannot use stale feature flags after a failed request.
+      if (accountId) throw error;
       // silent failure
     } finally {
       if (!silent) {

@@ -88,6 +88,9 @@ async function setup() {
       useRoute: () => activeRoute, useRouter: () => activeRouter,
     });
     if (specifier === 'vue') return synthetic(specifier, { ...vue, onMounted() {} });
+    if (specifier === 'vue-i18n') return synthetic(specifier, {
+      useI18n: () => ({ t: key => key }),
+    });
     if (specifier === 'dashboard/store') return synthetic(specifier, { default: store });
     if (specifier.endsWith('/dashboard.routes')) return synthetic(specifier, { default: {
       routes: [...crmRoutes.routes,
@@ -110,7 +113,7 @@ async function setup() {
     if (specifier.endsWith('/utils/api')) return synthetic(specifier, { throwErrorMessage(error) { throw error; } });
     if (specifier === 'dashboard/composables') return synthetic(specifier, { useAlert() {} });
     if (specifier === 'dashboard/api/crm/commercialCycle') return synthetic(specifier, {
-      commissionsAPI: {}, commissionProgramsAPI: {}, backofficeAPI: {}, invoicesAPI: {}, paymentsAPI: {}, salesOrdersAPI: {},
+      commissionsAPI: {}, commissionProgramsAPI: {}, goalsAPI: {}, backofficeAPI: {}, invoicesAPI: {}, paymentsAPI: {}, salesOrdersAPI: {},
     });
     if (specifier.endsWith('.vue')) return synthetic(specifier, { default: {} });
     if (['../../api/onboarding', '../../api/enterprise/account', 'dashboard/api/agents',
@@ -158,7 +161,7 @@ async function setup() {
 const primary = ['dashboard', 'indicators', 'leads', 'deals', 'funnel', 'wallet', 'activities',
   'calendar', 'products', 'proposals', 'orders', 'contracts', 'goals'];
 const commissions = ['current', 'plans', 'new', 'closing', 'detail', 'approvals', 'adjustments', 'payments', 'mine', 'history'];
-const backoffice = ['overview', 'requests', 'process', 'docs', 'implement', 'provision', 'finance', 'issues', 'approvals', 'changes', 'sla', 'reports'];
+const backoffice = ['overview', 'mine', 'requests', 'process', 'docs', 'contracts', 'implement', 'provision', 'finance', 'issues', 'approvals', 'changes', 'sla', 'reports'];
 const paths = [...primary, 'commissions', ...commissions.map(section => 'commissions/' + section),
   'backoffice', ...backoffice.map(section => 'backoffice/' + section)];
 
