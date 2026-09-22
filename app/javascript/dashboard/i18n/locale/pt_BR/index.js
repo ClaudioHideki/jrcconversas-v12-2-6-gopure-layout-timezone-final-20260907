@@ -44,6 +44,7 @@ import webhooks from './webhooks.json';
 import whatsappTemplates from './whatsappTemplates.json';
 import whatsappCalling from './whatsappCalling.json';
 import yearInReview from './yearInReview.json';
+import crm from './crm.json';
 
 export default {
   ...advancedFilters,
@@ -92,4 +93,5 @@ export default {
   ...whatsappTemplates,
   ...whatsappCalling,
   ...yearInReview,
+  ...crm,
 };
