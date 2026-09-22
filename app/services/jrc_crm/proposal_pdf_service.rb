@@ -1,6 +1,7 @@
 require 'mini_magick'
 module JrcCrm
   class ProposalPdfService
+    include CommercialDocumentBrand
     PAGE_WIDTH = 595.28
     PAGE_HEIGHT = 841.89
     GREEN = [0.055, 0.337, 0.231].freeze
@@ -33,10 +34,10 @@ module JrcCrm
       page.fill_rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, WHITE)
       page.fill_rect(0, 0, 12, PAGE_HEIGHT, GREEN)
       page.logo(390, 710, 150, 46)
-      page.text(48, 748, 'SUPLEMENTOS PREMIUM', size: 10, bold: true, color: GREEN)
+      page.text(48, 748, company_name.upcase, size: 10, bold: true, color: GREEN)
       page.text(48, 650, 'PROPOSTA COMERCIAL', size: 11, bold: true, color: GREEN_2)
-      page.multiline(48, 615, @proposal.title, size: 28, bold: true, color: GREEN, width_chars: 34, leading: 34)
-      page.multiline(48, 525, @proposal.solution_description.presence || 'Seleção de produtos e condições comerciais para formalização do pedido.', size: 12.5, color: MUTED, width_chars: 66, leading: 19)
+      page.multiline(48, 615, cover_excerpt(@proposal.title, 34, 2), size: 28, bold: true, color: GREEN, width_chars: 34, leading: 34)
+      page.multiline(48, 525, cover_excerpt(@proposal.solution_description.presence || 'Seleção de produtos e condições comerciais para formalização do pedido.', 66, 2), size: 12.5, color: MUTED, width_chars: 66, leading: 19)
       page.fill_rect(48, 478, 245, 4, GREEN)
       page.fill_rect(293, 478, 242, 4, GOLD)
 
@@ -50,31 +51,69 @@ module JrcCrm
       page.text(308, 362, 'RESPONSÁVEL COMERCIAL', size: 8, bold: true, color: MUTED)
       page.text(308, 340, proposal_owner_name, size: 11, bold: true, color: TEXT)
 
-      page.text(48, 64, 'Saúde hoje. Mais vida amanhã.', size: 8, color: MUTED)
-      page.text(432, 64, 'gopure.com.br', size: 8, bold: true, color: GREEN)
+      page.text(48, 64, document_footer, size: 8, color: MUTED)
+      page.text(432, 64, (document_gopure?(@proposal.account) ? 'gopure.com.br' : ''), size: 8, bold: true, color: GREEN)
       @pages << page
     end
 
     def build_solution_and_items
+      page = standard_page('Solução e investimento')
+      y = 724
+      if Page.new.wrapped_lines(@proposal.title, width_chars: 34).size > 2
+        page, y = flowing_text(page, y, @proposal.title, 'Título (continuação)', size: 11, width_chars: 82, leading: 16)
+        y -= 18
+      end
+      page, y = ensure_space(page, y, 60, 'Solução (continuação)')
+      page.text(48, y, 'Descrição da solução', size: 11, bold: true, color: GREEN_2)
+      page, y = flowing_text(page, y - 28, @proposal.solution_description.presence || 'Solução conforme escopo do negócio.',
+                            'Solução (continuação)', size: 11, width_chars: 82, leading: 16)
+      y -= 24
       items = @proposal.proposal_items.to_a
-      chunks = items.each_slice(10).to_a
-      chunks = [[]] if chunks.empty?
-
-      chunks.each_with_index do |chunk, index|
-        page = standard_page(index.zero? ? 'Solução e investimento' : 'Continuação dos produtos')
-        y = 744
-        if index.zero?
-          page.text(48, y, 'Descrição da solução', size: 11, bold: true, color: GREEN_2)
-          y -= 28
-          y = page.multiline(48, y, @proposal.solution_description.presence || 'Solução comercial JRC conforme escopo do negócio.', size: 11, color: TEXT, width_chars: 82, leading: 16)
-          y -= 24
-        end
-
+      loop do
+        page, y = ensure_space(page, y, 106, 'Continuação dos produtos')
         page.text(48, y, 'Produtos e serviços', size: 11, bold: true, color: GREEN_2)
         y -= 22
-        draw_items_table(page, chunk, y)
+        capacity = [(y - 28 - 70).div(50), 1].max
+        draw_items_table(page, items.shift(capacity), y)
+        break if items.empty?
+
         @pages << page
+        page = standard_page('Continuação dos produtos')
+        y = 724
       end
+      @pages << page
+    end
+
+    # Reserve the footer before drawing. Long paragraphs flow without truncation.
+    def ensure_space(page, y, height, title)
+      return [page, y] if y - height >= 70
+
+      @pages << page
+      [standard_page(title), 726]
+    end
+
+    def flowing_text(page, y, text, title, size:, width_chars:, leading:)
+      Page.new.wrapped_lines(text, width_chars: width_chars).each do |line|
+        page, y = ensure_space(page, y, leading, title)
+        page.text(48, y, line, size: size, color: TEXT)
+        y -= leading
+      end
+      [page, y]
+    end
+
+    def cover_excerpt(text, width, count)
+      lines = Page.new.wrapped_lines(text, width_chars: width)
+      excerpt = lines.first(count)
+      excerpt[-1] = "#{excerpt.last[0, width - 3]}..." if lines.size > count
+      excerpt.join("\n")
+    end
+
+    def company_name
+      @proposal.account.name.presence || 'Equipe comercial'
+    end
+
+    def document_footer
+      document_gopure?(@proposal.account) ? 'Saúde hoje. Mais vida amanhã.' : company_name
     end
 
     def build_commercial_conditions
@@ -92,6 +131,7 @@ module JrcCrm
       y = commercial_row(page, y, 'Total da contratação', money(@proposal.contract_total_cents), bold: true)
       y -= 16
 
+      page, y = ensure_space(page, y, 230, 'Condições (continuação)')
       page.text(48, y, 'Condição de pagamento', size: 12, bold: true, color: GREEN_2)
       y -= 25
       y = commercial_row(page, y, 'Modalidade', payment_condition_label)
@@ -107,6 +147,7 @@ module JrcCrm
       y -= 16
 
       if @proposal.has_monthly_fee?
+        page, y = ensure_space(page, y, 97, 'Condições (continuação)')
         page.text(48, y, 'Recorrência', size: 12, bold: true, color: GREEN_2)
         y -= 25
         y = commercial_row(page, y, 'Mensalidade', "#{money(@proposal.monthly_cents)}/mês")
@@ -114,11 +155,14 @@ module JrcCrm
         y -= 14
       end
 
+      page, y = ensure_space(page, y, 50, 'Observações (continuação)')
       page.text(48, y, 'Observações comerciais', size: 12, bold: true, color: GREEN_2)
       y -= 22
-      y = page.multiline(48, y, @proposal.commercial_notes.presence || 'Condições sujeitas à validação comercial, cadastral e operacional.', size: 9.2, color: TEXT, width_chars: 92, leading: 14)
+      page, y = flowing_text(page, y, @proposal.commercial_notes.presence || 'Condições sujeitas à validação comercial, cadastral e operacional.',
+                              'Observações (continuação)', size: 9.2, width_chars: 92, leading: 14)
       y -= 20
 
+      page, y = ensure_space(page, y, 184, 'Conclusão do pedido')
       page.text(48, y, 'Fluxo para conclusão', size: 12, bold: true, color: GREEN_2)
       y -= 24
       flow = [
@@ -136,6 +180,7 @@ module JrcCrm
         y -= 38
       end
       y -= 10
+      page, y = ensure_space(page, y, 110, 'Aceite comercial')
       page.text(48, y, 'Aceite comercial', size: 12, bold: true, color: GREEN_2)
       y -= 22
       page.multiline(48, y, 'Ao aprovar esta proposta, o cliente declara estar de acordo com os itens, quantidades, valores e condições comerciais aqui apresentados, ressalvadas as confirmações cadastrais e operacionais previstas.', size: 8.5, color: TEXT, width_chars: 94, leading: 13)
@@ -143,7 +188,7 @@ module JrcCrm
       page.line(48, y, 270, y, color: MUTED, width: 0.6)
       page.line(315, y, 537, y, color: MUTED, width: 0.6)
       page.text(48, y - 18, customer_name, size: 8, bold: true, color: TEXT)
-      page.text(315, y - 18, "GoPure - #{proposal_owner_name}", size: 8, bold: true, color: TEXT)
+      page.text(315, y - 18, "#{company_name} - #{proposal_owner_name}", size: 8, bold: true, color: TEXT)
       @pages << page
     end
 
@@ -152,10 +197,10 @@ module JrcCrm
       page.fill_rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, WHITE)
       page.fill_rect(0, 0, 10, PAGE_HEIGHT, GREEN)
       page.logo(420, 772, 120, 36)
-      page.text(48, 796, 'GOPURE | PROPOSTA COMERCIAL DE PRODUTOS', size: 8, bold: true, color: GREEN)
+      page.text(48, 796, "#{company_name.upcase} | PROPOSTA COMERCIAL", size: 8, bold: true, color: GREEN)
       page.text(48, 770, title, size: 20, bold: true, color: GREEN)
       page.line(48, 755, 547, 755, color: GREEN_2, width: 1)
-      page.text(48, 38, 'Saúde hoje. Mais vida amanhã.', size: 7.2, color: MUTED)
+      page.text(48, 38, document_footer, size: 7.2, color: MUTED)
       page.text(405, 38, "#{@proposal.proposal_number} | #{customer_name.upcase}", size: 6.8, bold: true, color: MUTED)
       page
     end
@@ -212,7 +257,7 @@ module JrcCrm
     end
 
     def logo_data
-      path = Rails.root.join('public', 'brand-assets', 'gopure-brand-header.png')
+      path = document_logo_path(@proposal.account)
       return nil unless File.exist?(path)
 
       image = MiniMagick::Image.open(path.to_s)
@@ -230,7 +275,7 @@ module JrcCrm
     end
 
     def customer_name
-      @contact&.name.presence || @deal.title
+      @contact&.name.presence || @deal&.title.presence || 'Cliente'
     end
 
     def valid_until_text
@@ -250,7 +295,7 @@ module JrcCrm
     end
 
     def proposal_owner_name
-      @proposal.owner&.name.presence || @deal.owner&.name.presence || 'Equipe GoPure'
+      @proposal.owner&.name.presence || @deal&.owner&.name.presence || 'Equipe comercial'
     end
 
     def payment_method_label
@@ -314,6 +359,10 @@ module JrcCrm
         @commands << "BT /#{bold ? 'F2' : 'F1'} #{size} Tf #{fmt(x)} #{fmt(y)} Td (#{escape(value)}) Tj ET\n".b
       end
 
+      def wrapped_lines(value, width_chars: 80)
+        wrap(value.to_s, width_chars)
+      end
+
       def multiline(x, y, value, size: 11, bold: false, color: TEXT, width_chars: 80, leading: 16)
         lines = wrap(value.to_s, width_chars)
         lines.each do |line|
@@ -341,7 +390,7 @@ module JrcCrm
 
       def wrap(text, max_chars)
         text.split("\n").flat_map do |paragraph|
-          words = paragraph.split(/\s+/)
+          words = paragraph.split(/\s+/).flat_map { |word| word.scan(/.{1,#{max_chars}}/) }
           next [''] if words.empty?
 
           words.each_with_object(['']) do |word, lines|
@@ -357,7 +406,7 @@ module JrcCrm
 
       def escape(value)
         value.to_s.encode(Encoding::Windows_1252, invalid: :replace, undef: :replace, replace: '?')
-             .gsub('\\', '\\\\').gsub('(', '\\(').gsub(')', '\\)')
+             .gsub(/[\\()]/) { |char| "\\#{char}" }
              .force_encoding(Encoding::BINARY)
       end
 

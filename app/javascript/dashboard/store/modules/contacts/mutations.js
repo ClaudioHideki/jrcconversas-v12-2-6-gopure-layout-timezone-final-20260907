@@ -16,6 +16,7 @@ export const mutations = {
 
   [types.SET_CONTACT_META]: ($state, data) => {
     const { count, current_page: currentPage, has_more: hasMore } = data;
+    $state.meta.relationshipStatistics = data.relationship_statistics;
     $state.meta.count = count;
     $state.meta.currentPage = currentPage;
     if (hasMore !== undefined) {

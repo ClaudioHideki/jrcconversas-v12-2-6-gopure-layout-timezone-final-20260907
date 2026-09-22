@@ -92,6 +92,62 @@
       "LOADING": "Consultando Lead…",
       "RETRY": "Não foi possível consultar o Lead. Tentar novamente",
       "REFRESH_ERROR": "Lead salvo. Não foi possível atualizar o contato; atualize a lista para consultar o vínculo."
+    },
+    "COMMERCIAL": {
+      "LOAD_ERROR": "Não foi possível carregar os registros. Tente novamente.",
+      "SAVE_ERROR": "Não foi possível salvar. Confira os dados e tente novamente.",
+      "SEARCH_CONTACT": "Buscar nome, telefone, e-mail ou empresa em toda a base",
+      "PREVIOUS": "Anterior",
+      "NEXT": "Próximo",
+      "CONTACTS": "contatos",
+      "NEXT_STEPS": "Próximos passos",
+      "COMPLETE": "Concluir",
+      "COMPLETED": "Concluído",
+      "TITLE": "Título",
+      "DATE": "Data e hora",
+      "TYPE": "Tipo",
+      "OWNER": "Responsável",
+      "ME": "Eu",
+      "DESCRIPTION": "Descrição",
+      "CUSTOMER": "Cliente",
+      "NEW_PRODUCT": "+ Novo produto",
+      "ORDER_DATE_REQUIRED": "Enter the order date to continue.",
+      "CUSTOMER_REQUIRED": "Selecione um cliente e um responsável para avançar.",
+      "ITEMS_REQUIRED": "Adicione pelo menos um item com quantidade maior que zero e preço válido.",
+      "IMPLEMENTATION_REQUIRED": "Informe responsável e data para cada item que exige implantação.",
+      "SHIPPING": "Frete",
+      "SURCHARGE": "Acréscimos",
+      "CONTRACT_RECURRING": "Recorrência contratada",
+      "CONTRACT_TOTAL": "Valor contratual global",
+      "INITIAL": "Valor inicial",
+      "MANAGE_FUNNEL": "Administrar funis e etapas",
+      "UP": "Mover acima",
+      "DOWN": "Mover abaixo",
+      "ACTIVITY_TYPES": {
+        "follow_up": "Acompanhamento",
+        "call": "Ligação",
+        "meeting": "Reunião",
+        "task": "Tarefa",
+        "email": "E-mail",
+        "whatsapp": "WhatsApp"
+      },
+      "FINANCIAL": "Condições financeiras",
+      "SUBTOTAL": "Subtotal único",
+      "DISCOUNT": "Desconto geral",
+      "TAXES": "Impostos",
+      "FINANCIAL_FIELDS": {
+        "discount": "Desconto geral (R$)",
+        "shipping": "Frete (R$)",
+        "taxes": "Impostos (%)",
+        "surcharge": "Acréscimos (R$)"
+      },
+      "IMPLEMENTATION_OWNER": "Responsável pela implantação",
+      "IMPLEMENTATION_DATE": "Data da implantação",
+      "DOCUMENTS": "Documentos de apoio"
+    },
+    "HOMOLOGATION": {
+      "COMMUNICATION_UNAVAILABLE": "Envio de e-mail do pedido ainda não configurado para este ambiente. Nenhum e-mail será enviado.",
+      "FOLLOW_UP_HELP": "A atividade ficará vinculada a este pedido e aparecerá na agenda do responsável."
     }
   }
 }

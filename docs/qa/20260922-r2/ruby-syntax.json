@@ -1,0 +1,177 @@
+[
+  {
+    "file": "app/controllers/api/v1/accounts/contacts_controller.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/controllers/api/v1/accounts/crm/activities_controller.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/controllers/api/v1/accounts/crm/products_controller.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/controllers/api/v1/accounts/crm/sales_orders_controller.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/controllers/api/v1/accounts/crm/stages_controller.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/models/jrc_crm/activity.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/models/jrc_crm/order_item.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/models/jrc_crm/pipeline.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/models/jrc_crm/product.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/models/jrc_crm/sales_order.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/models/jrc_crm/stage.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/serializers/jrc_crm/activity_serializer.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/serializers/jrc_crm/product_serializer.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/serializers/jrc_crm/proposal_serializer.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/services/contacts/relationship_filter.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/services/jrc_crm/commercial_document_brand.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/services/jrc_crm/contract_pdf_service.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/services/jrc_crm/order_financials.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/services/jrc_crm/order_pdf_service.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/services/jrc_crm/order_workflow_sync_service.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/services/jrc_crm/proposal_pdf_service.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/services/jrc_crm/proposal_to_order_service.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "app/services/jrc_crm/stage_reorder_input.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "db/migrate/20260922160000_extend_commercial_order_activities.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "db/schema.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "scripts/qa/commercial/financials_test.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "scripts/qa/commercial/input_test.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "scripts/qa/commercial/pdf_test.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "scripts/qa/commercial/standalone_support.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "spec/requests/api/v1/accounts/contacts_pagination_spec.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "spec/requests/api/v1/accounts/crm/activities_spec.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "spec/requests/api/v1/accounts/crm/commercial_complete_spec.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "spec/services/jrc_crm/commercial_documents_spec.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "spec/services/jrc_crm/order_financials_spec.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  },
+  {
+    "file": "spec/services/jrc_crm/stage_reorder_input_spec.rb",
+    "code": 0,
+    "output": "Syntax OK\n"
+  }
+]

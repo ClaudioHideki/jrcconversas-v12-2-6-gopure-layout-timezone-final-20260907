@@ -1,0 +1,14 @@
+JRC CRM COMMERCIAL - CONTINUATION r2 - 2026-09-22
+SOURCE: JRC-CRM-COMMERCIAL-CODEX-CHECKPOINT-20260922.zip
+SOURCE_SHA256: a9845c5a02b728bcd5edd989ada756bc05454ede8d8cbe6535edaa94193e9cb5
+STATUS: SOURCE CANDIDATE DELIVERED; INTEGRATED HOMOLOGATION PENDING.
+NOT rebuilt from scratch. Received status/diff/report preserved as historical records.
+112 distinct isolated tests passed in final dedicated runs.
+35 Ruby files: syntax OK. 31 JS/TS/Vue script files: parsing OK (NOT Vue compilation).
+6 synthetic PDFs / 33 pages rendered; final geometry clean. Rails/MiniMagick integration pending.
+Rails/Vitest/Vite/router/full NICO attempts logged as blocked, NOT passed.
+No database operations or external deliveries performed. No migrations added in r2.
+Existing migration: 20260922160000_extend_commercial_order_activities.rb.
+Reserved app image tag: 4.16.2-gopure-crm-comercial-20260922-r2. Not published here.
+READ docs/CRM-COMERCIAL-FECHAMENTO-20260922-r2.md and docs/DEPLOY-CRM-COMERCIAL-20260922-r2.md.
+DO NOT APPLY THE INCLUDED DIFFS AGAIN: THE SOURCE ALREADY CONTAINS THE CHANGES.

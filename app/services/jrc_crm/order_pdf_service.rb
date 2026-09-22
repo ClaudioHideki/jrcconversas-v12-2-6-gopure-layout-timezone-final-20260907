@@ -2,6 +2,7 @@ require 'mini_magick'
 
 module JrcCrm
   class OrderPdfService
+    include CommercialDocumentBrand
     P = ProposalPdfService
     def initialize(order)
       @order = order
@@ -11,7 +12,8 @@ module JrcCrm
     end
 
     def call
-      P::PdfDocument.new([summary_page, operation_page], logo: logo_data).render
+      pages = [summary_page] + @items.drop(7).each_slice(16).map { |items| items_page(items) }
+      P::PdfDocument.new(pages + [financial_page] + operation_pages, logo: logo_data).render
     end
 
     private
@@ -31,43 +33,88 @@ module JrcCrm
         page.text(52, y, item.name.to_s[0, 38], size: 8.2, bold: true, color: P::TEXT)
         page.text(300, y, "#{fmt_qty(item.quantity)} x #{money(item.unit_cents)}", size: 8, color: P::TEXT)
         page.text(450, y, money(item.one_time_cents), size: 8, bold: true, color: P::TEXT)
-        page.line(48, y - 8, 547, y - 8, color: P::BORDER, width: 0.5)
+        page.text(300, y - 11, "MRR: #{money(item.recurring_cents)}/mês · #{term_label(item)}", size: 7, color: P::MUTED)
+        page.line(48, y - 16, 547, y - 16, color: P::BORDER, width: 0.5)
         y -= 30
       end
-      page.text(48, 275, 'Resumo financeiro', size: 12, bold: true, color: P::GREEN_2)
-      y = commercial_row(page, 248, 'Valor único / itens', money(@order.products_cents))
-      y = commercial_row(page, y, 'Desconto', "- #{money(@order.discount_cents)}") if @order.discount_cents.to_i.positive?
-      y = commercial_row(page, y, 'Frete', money(@order.shipping_cents)) if @order.shipping_cents.to_i.positive?
-      y = commercial_row(page, y, 'Impostos', money(snap('taxes_cents', 0))) if snap('taxes_cents', 0).to_i.positive?
-      y = commercial_row(page, y, 'MRR / mensalidade', "#{money(@order.monthly_cents)}/mês") if @order.monthly_cents.to_i.positive?
-      commercial_row(page, y, 'TOTAL DO PEDIDO', money(@order.total_cents), true)
+      page.text(48, 265, 'Valores iniciais e recorrentes discriminados no resumo financeiro.', size: 9, color: P::MUTED)
       footer(page)
       page
     end
 
-    def operation_page
+    def items_page(items)
+      page = base_page('PRODUTOS E SERVIÇOS (CONTINUAÇÃO)')
+      y = 715
+      items.each do |item|
+        page.text(48, y, item.name.to_s[0, 70], size: 9, bold: true, color: P::TEXT)
+        page.text(48, y - 15, "#{fmt_qty(item.quantity)} x #{money(item.unit_cents)} | Inicial: #{money(item.one_time_cents)} | MRR: #{money(item.recurring_cents)}/mês", size: 8, color: P::TEXT)
+        page.text(48, y - 28, term_label(item), size: 8, color: P::MUTED)
+        y -= 38
+      end
+      footer(page)
+      page
+    end
+
+    def term_label(item)
+      return '' unless item.recurring_cents.positive?
+
+      months = item.snapshot['contract_term_months'].to_i
+      months.positive? ? "#{months} meses" : 'Prazo não definido'
+    end
+
+    def financial_page
+      page = base_page('RESUMO FINANCEIRO')
+      y = commercial_row(page, 710, 'Subtotal único (após desconto dos itens)', money(@order.products_cents))
+      y = commercial_row(page, y, 'Desconto geral', "- #{money(@order.discount_cents)}")
+      y = commercial_row(page, y, 'Frete', money(@order.shipping_cents))
+      y = commercial_row(page, y, 'Impostos', money(snap('taxes_cents', 0)))
+      y = commercial_row(page, y, 'Acréscimos', money(snap('surcharge_cents', 0)))
+      y = commercial_row(page, y, 'VALOR INICIAL', money(@order.total_cents), true)
+      y = commercial_row(page, y, 'MRR', "#{money(@order.monthly_cents)}/mês", true)
+      if snap('contract_total_cents')
+        y = commercial_row(page, y, 'Recorrência contratada', money(snap('contracted_recurring_cents')))
+        commercial_row(page, y, 'Valor contratual global', money(snap('contract_total_cents')), true)
+      end
+      footer(page)
+      page
+    end
+
+    def operation_pages
       page = base_page('CONDIÇÕES E OPERAÇÃO')
+      pages = [page]
       y = 718
       page.text(48, y, 'Condições financeiras', size: 12, bold: true, color: P::GREEN_2); y -= 30
       y = commercial_row(page, y, 'Forma de pagamento', payment_label)
       y = commercial_row(page, y, 'Parcelas', @order.installments_count.to_i.to_s)
       y = commercial_row(page, y, '1º vencimento', snap('first_due_date', 'A definir'))
       y -= 12
+      if @order.implementation_items.any? || (@snapshot['financial_version'].to_i < 2 && snap('send_to_implementation'))
       page.text(48, y, 'Implantação e entrega', size: 12, bold: true, color: P::GREEN_2); y -= 30
       y = commercial_row(page, y, 'Previsão de ativação', snap('activation_date', 'A definir'))
       y = commercial_row(page, y, 'Responsável interno', snap('operation_owner_name', @order.owner&.name || 'A definir'))
       y = commercial_row(page, y, 'Equipe', snap('implementation_team', 'Time de Implantação'))
       y = commercial_row(page, y, 'Prioridade', snap('priority', 'Normal'))
+      end
       y -= 12
       page.text(48, y, 'Observações', size: 12, bold: true, color: P::GREEN_2); y -= 25
-      page.multiline(48, y, @order.notes.presence || snap('operation_notes', 'Sem observações adicionais.'), size: 9, color: P::TEXT, width_chars: 92, leading: 14)
+      notes = @order.notes.presence || snap('operation_notes', 'Sem observações adicionais.')
+      page.wrapped_lines(notes, width_chars: 92).each do |line|
+        if y < 160
+          footer(page)
+          page = base_page('OBSERVAÇÕES (CONTINUAÇÃO)')
+          pages << page
+          y = 718
+        end
+        page.text(48, y, line, size: 9, color: P::TEXT)
+        y -= 14
+      end
       page.text(48, 120, 'Aceite do pedido', size: 11, bold: true, color: P::GREEN_2)
       page.line(48, 82, 260, 82, color: P::MUTED, width: 0.6)
       page.line(330, 82, 542, 82, color: P::MUTED, width: 0.6)
       page.text(48, 65, customer_name, size: 8, bold: true, color: P::TEXT)
       page.text(330, 65, company_signature, size: 8, bold: true, color: P::TEXT)
       footer(page)
-      page
+      pages
     end
 
     def base_page(title)
@@ -99,9 +146,8 @@ module JrcCrm
     end
 
     def logo_data
-      candidates = [snap('logo_path', nil), 'public/brand-assets/gopure-brand-header.png', 'public/brand-assets/logo.png'].compact
-      path = candidates.map { |x| Rails.root.join(x) }.find { |x| File.exist?(x) }
-      return nil unless path
+      path = document_logo_path(@order.account)
+      return nil unless File.exist?(path)
       image = MiniMagick::Image.open(path.to_s)
       image.combine_options { |cmd| cmd.background 'white'; cmd.alpha 'remove'; cmd.alpha 'off' }
       image.format('jpg'); w,h=image.dimensions
@@ -111,7 +157,7 @@ module JrcCrm
     end
 
     def snap(key, fallback=nil); @snapshot[key].presence || @snapshot[key.to_sym].presence || fallback; end
-    def company_name; snap('company_name', @order.business_unit&.name.presence || 'GoPure - JRC Conversas'); end
+    def company_name; snap('company_name', @order.business_unit&.name.presence || @order.account.name); end
     def company_signature; "#{company_name} - #{@order.owner&.name || 'Comercial'}"; end
     def customer_name; @contact&.name.presence || @order.deal&.title.presence || snap('customer_name', 'Cliente'); end
     def payment_label

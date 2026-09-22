@@ -29,6 +29,7 @@ RSpec.describe 'CRM activities API', type: :request do
 
     expect(response).to have_http_status(:created)
     expect(response.parsed_body['due_at_display']).to eq('29/08/2026 10:00')
+    expect(response.parsed_body['due_at_input']).to eq('2026-08-29T10:00')
     expect(response.parsed_body['related_label']).to eq('Negócio - Cliente Teste CRM')
     expect(response.parsed_body['related_type']).to eq('deal')
     expect(response.parsed_body['related_id']).to eq(deal.id)
@@ -43,6 +44,19 @@ RSpec.describe 'CRM activities API', type: :request do
     serialized_deal = response.parsed_body.find { |item| item['id'] == deal.id }
     expect(serialized_deal.dig('next_activity', 'title')).to eq('Retornar contato com cliente')
     expect(serialized_deal.dig('next_activity', 'due_at_display')).to eq('29/08/2026 10:00')
+  end
+
+  it 'preserves the scheduled instant when saving the account-local edit value' do
+    activity = account.jrc_crm_activities.create!(user: agent, deal: deal, activity_type: 'follow_up',
+                                                title: 'Retorno', due_at: Time.utc(2026, 8, 29, 13))
+    get "#{base_url}/#{activity.id}", headers: agent.create_new_auth_token, as: :json
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body['due_at_input']).to eq('2026-08-29T10:00')
+    local_value = response.parsed_body['due_at_input']
+    patch "#{base_url}/#{activity.id}", params: { activity: { due_at: local_value, title: 'Retorno editado' } },
+          headers: agent.create_new_auth_token, as: :json
+    expect(response).to have_http_status(:ok)
+    expect(activity.reload.due_at).to eq(Time.utc(2026, 8, 29, 13))
   end
 
   it 'rejects a deal from another account instead of persisting a detached relationship' do

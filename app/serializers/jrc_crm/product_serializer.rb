@@ -5,7 +5,7 @@ module JrcCrm
       @include_commercial_sensitive = include_commercial_sensitive
     end
 
-    def as_json(options = {})
+    def as_json(_options = {})
       data = {
         id: @product.id,
         name: @product.name,
@@ -18,6 +18,7 @@ module JrcCrm
         sales_unit: @product.sales_unit,
         billing_model: @product.billing_model,
         recurring: @product.recurring?,
+        requires_implementation: @product.requires_implementation,
         unit_price_cents: @product.unit_price_cents,
         monthly_equivalent_cents: @product.monthly_equivalent_cents,
         setup_fee_cents: @product.setup_fee_cents,

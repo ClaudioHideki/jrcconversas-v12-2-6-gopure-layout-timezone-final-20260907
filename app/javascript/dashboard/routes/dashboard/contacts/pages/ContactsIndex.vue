@@ -19,6 +19,7 @@ import ContactsBulkActionBar from '../components/ContactsBulkActionBar.vue';
 import Dialog from 'dashboard/components-next/dialog/Dialog.vue';
 import BulkActionsAPI from 'dashboard/api/bulkActions';
 import ContactAPI from 'dashboard/api/contacts';
+import AgentsAPI from 'dashboard/api/agents';
 import CreateNewContactDialog from 'dashboard/components-next/Contacts/ContactsForm/CreateNewContactDialog.vue';
 import {
   DuplicateContactException,
@@ -91,16 +92,20 @@ const createNewContactDialogRef = ref(null);
 const selectedCount = computed(() => selectedContactIds.value.length);
 const crmSelectedContact = ref(null);
 const relationshipTab = ref('Todos');
+const relationshipFilters = reactive({ owner_id: '', status: '', channel: '' });
+const relationshipKeys = { Todos: '', Pessoas: 'people', Empresas: 'companies', 'Grupos e listas': 'groups', 'Sem responsável': 'unassigned', Duplicados: 'duplicates' };
 const relationshipTabs = ['Todos', 'Pessoas', 'Empresas', 'Grupos e listas', 'Sem responsável', 'Duplicados'];
 
-const totalContactsMetric = computed(() => Number(totalItems.value || contacts.value.length || 0));
-const activeClientsMetric = computed(() =>
-  contacts.value.filter(contact => contact?.availabilityStatus === 'online').length
-);
-const withoutInteractionMetric = computed(() =>
-  contacts.value.filter(contact => !contact?.lastActivityAt && !contact?.last_activity_at).length
-);
-const newContactsMetric = computed(() => Math.min(contacts.value.length, 42));
+const relationshipAgents = ref([]);
+const totalContactsMetric = computed(() => meta.value?.relationshipStatistics?.total ?? totalItems.value ?? 0);
+const activeClientsMetric = computed(() => meta.value?.relationshipStatistics?.customers ?? '—');
+const withoutInteractionMetric = computed(() => meta.value?.relationshipStatistics?.without_interaction ?? '—');
+const newContactsMetric = computed(() => meta.value?.relationshipStatistics?.new_this_month ?? '—');
+const contactOwners = contact => (contact?.crmOwners || []).map(owner => owner.name).join(', ') || 'Sem responsável';
+const lastInteraction = contact => {
+  const timestamp = contact.lastActivityAt || contact.last_activity_at;
+  return timestamp ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(timestamp * 1000)) : 'Sem interação';
+};
 
 const selectedRelationshipContact = computed(() =>
   crmSelectedContact.value || contacts.value[0] || null
@@ -137,7 +142,7 @@ const contactPhone = contact => contact?.phoneNumber || contact?.phone_number ||
 const contactCompany = contact =>
   contact?.company?.name || contact?.companyName || contact?.additionalAttributes?.companyName || contact?.additionalAttributes?.company_name || '—';
 const contactStatus = contact =>
-  contact?.availabilityStatus === 'online' ? 'Cliente' : 'Lead';
+  ({ customer: 'Cliente', lead: 'Lead', visitor: 'Visitante' }[contact?.contactType || contact?.contact_type] || 'Contato');
 const contactInitials = contact => {
   const name = contact?.name || 'C';
   return name
@@ -286,6 +291,7 @@ const getCommonFetchParams = (page = 1) => ({
   page,
   sortAttr: buildSortAttr(),
   label: activeLabel.value,
+  filters: { include_relationship_summary: true, ...relationshipFilters, relationship: relationshipKeys[relationshipTab.value] },
 });
 
 const fetchContacts = async (page = 1, options = {}) => {
@@ -324,10 +330,7 @@ const fetchActiveContacts = async (page = 1, options = {}) => {
   }
 
   await store.dispatch('contacts/clearContactFilters');
-  await store.dispatch('contacts/active', {
-    page,
-    sortAttr: buildSortAttr(),
-  });
+  await store.dispatch('contacts/active', getCommonFetchParams(page));
   updatePageParam(page);
 };
 
@@ -386,7 +389,6 @@ const fetchContactsBasedOnContext = async (page, options = {}) => {
     clearSelection();
   }
   updatePageParam(page, searchValue.value);
-  if (isFetchingList.value) return;
   if (searchQuery.value) {
     await searchContacts(searchQuery.value, page, false, {
       clearSelection: shouldClearSelection,
@@ -587,7 +589,11 @@ watch(searchQuery, value => {
   }
 });
 
+watch([relationshipTab, relationshipFilters], () => { crmSelectedContact.value = null; if (searchValue.value) searchContacts(searchValue.value, 1); else fetchContactsBasedOnContext(1); }, { deep: true });
+const clearRelationshipFilters = () => { searchValue.value = ''; relationshipTab.value = 'Todos'; Object.assign(relationshipFilters, { owner_id: '', status: '', channel: '' }); fetchContactsBasedOnContext(1); };
+
 onMounted(async () => {
+  AgentsAPI.get().then(({ data }) => { relationshipAgents.value = data; }).catch(() => { relationshipAgents.value = []; });
   if (!activeSegmentId.value) {
     if (searchQuery.value) {
       await searchContacts(searchQuery.value, pageNumber.value, false, {
@@ -651,7 +657,7 @@ onMounted(async () => {
           <div class="rounded-2xl border p-4 shadow-sm" style="background:#ecfdf5;border-color:#86efac;border-top:4px solid #16a34a">
             <div class="flex items-center justify-between"><span class="text-xs font-semibold" style="color:#15803d">Novos neste mês</span><span class="flex size-9 items-center justify-center rounded-xl" style="background:#dcfce7;color:#16a34a"><span class="i-lucide-user-round-plus size-5" /></span></div>
             <strong class="mt-2 block text-2xl" style="color:#166534">{{ newContactsMetric }}</strong>
-            <small style="color:#16a34a">Base local atual</small>
+            <small style="color:#16a34a">Toda a base da conta</small>
           </div>
           <div class="rounded-2xl border p-4 shadow-sm" style="background:#fff7ed;border-color:#fdba74;border-top:4px solid #f97316">
             <div class="flex items-center justify-between"><span class="text-xs font-semibold" style="color:#c2410c">Sem interação</span><span class="flex size-9 items-center justify-center rounded-xl" style="background:#ffedd5;color:#f97316"><span class="i-lucide-clock-3 size-5" /></span></div>
@@ -659,9 +665,9 @@ onMounted(async () => {
             <small style="color:#ea580c">Requer acompanhamento</small>
           </div>
           <div class="rounded-2xl border p-4 shadow-sm" style="background:#f5f3ff;border-color:#c4b5fd;border-top:4px solid #7c3aed">
-            <div class="flex items-center justify-between"><span class="text-xs font-semibold" style="color:#6d28d9">Clientes ativos</span><span class="flex size-9 items-center justify-center rounded-xl" style="background:#ede9fe;color:#7c3aed"><span class="i-lucide-building-2 size-5" /></span></div>
+            <div class="flex items-center justify-between"><span class="text-xs font-semibold" style="color:#6d28d9">Clientes cadastrados</span><span class="flex size-9 items-center justify-center rounded-xl" style="background:#ede9fe;color:#7c3aed"><span class="i-lucide-building-2 size-5" /></span></div>
             <strong class="mt-2 block text-2xl" style="color:#5b21b6">{{ activeClientsMetric }}</strong>
-            <small style="color:#7c3aed">Disponíveis agora</small>
+            <small style="color:#7c3aed">Classificados como clientes</small>
           </div>
         </div>
       </div>
@@ -679,10 +685,10 @@ onMounted(async () => {
 
         <div class="grid gap-3 border-b border-n-weak p-4 md:grid-cols-[minmax(220px,1fr)_160px_150px_130px_auto]">
           <div class="relative"><span class="i-lucide-search absolute start-3 top-1/2 size-4 -translate-y-1/2 text-n-slate-8" /><input v-model="searchValue" type="search" placeholder="Buscar por nome, empresa, telefone ou e-mail" class="h-10 w-full rounded-lg border border-n-weak bg-n-background ps-9 pe-3 text-sm outline-none" @input="searchContacts(searchValue, 1, false, { clearSelection: false })" /></div>
-          <select class="h-10 rounded-lg border border-n-weak bg-n-background px-3 text-sm text-n-slate-10"><option>Responsável</option></select>
-          <select class="h-10 rounded-lg border border-n-weak bg-n-background px-3 text-sm text-n-slate-10"><option>Status</option></select>
-          <select class="h-10 rounded-lg border border-n-weak bg-n-background px-3 text-sm text-n-slate-10"><option>Canal</option></select>
-          <button type="button" class="text-sm font-semibold text-blue-600" @click="fetchContacts()">Limpar filtros</button>
+          <select v-model="relationshipFilters.owner_id" class="h-10 rounded-lg border border-n-weak bg-n-background px-3 text-sm text-n-slate-10"><option value="">Responsável comercial</option><option v-for="agent in relationshipAgents" :key="agent.id" :value="agent.id">{{ agent.name }}</option></select>
+          <select v-model="relationshipFilters.status" class="h-10 rounded-lg border border-n-weak bg-n-background px-3 text-sm text-n-slate-10"><option value="">Status</option><option value="lead">Lead</option><option value="customer">Cliente</option><option value="visitor">Visitante</option></select>
+          <select v-model="relationshipFilters.channel" class="h-10 rounded-lg border border-n-weak bg-n-background px-3 text-sm text-n-slate-10"><option value="">Canal</option><option value="Channel::Whatsapp">WhatsApp</option><option value="Channel::Email">E-mail</option><option value="Channel::WebWidget">Webchat</option></select>
+          <button type="button" class="text-sm font-semibold text-blue-600" @click="clearRelationshipFilters">Limpar filtros</button>
         </div>
 
         <div v-if="isFetchingList" class="flex min-h-0 flex-1 items-center justify-center"><Spinner /></div>
@@ -697,8 +703,8 @@ onMounted(async () => {
                 <td class="px-4 py-3"><div class="flex items-center gap-3"><span class="flex size-9 shrink-0 items-center justify-center rounded-xl bg-teal-500/10 font-semibold text-teal-700">{{ contactInitials(contact) }}</span><div><p class="font-semibold text-n-slate-12">{{ contact.name || 'Sem nome' }}</p><p class="text-xs text-n-slate-9">{{ contactPhone(contact) }}</p></div></div></td>
                 <td class="px-3 py-3 text-n-slate-10">{{ contactCompany(contact) }}</td>
                 <td class="px-3 py-3"><div class="flex gap-1"><span class="flex size-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600"><span class="i-ri-whatsapp-fill size-4" /></span><span class="flex size-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600"><span class="i-lucide-phone size-4" /></span><span class="flex size-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600"><span class="i-lucide-mail size-4" /></span></div></td>
-                <td class="px-3 py-3 text-n-slate-10">JRC ADM</td>
-                <td class="px-3 py-3 text-n-slate-10">Agora</td>
+                <td class="px-3 py-3 text-n-slate-10">{{ contactOwners(contact) }}</td>
+                <td class="px-3 py-3 text-n-slate-10">{{ lastInteraction(contact) }}</td>
                 <td class="px-3 py-3 font-medium text-blue-600">Definir próxima ação</td>
                 <td class="px-3 py-3"><span class="rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-700">{{ contactStatus(contact) }}</span></td>
                 <td class="px-3 py-3" @click.stop><div class="flex gap-1"><button type="button" class="flex size-8 items-center justify-center rounded-lg bg-emerald-500 text-white" @click="openWhatsappCalling(contact)"><span class="i-ri-whatsapp-fill size-4" /></button><button type="button" class="flex size-8 items-center justify-center rounded-lg bg-blue-500 text-white" @click="openWhatsappCalling(contact)"><span class="i-lucide-phone size-4" /></button><button type="button" class="flex size-8 items-center justify-center rounded-lg bg-violet-500 text-white" @click="openSelectedContact(contact)"><span class="i-lucide-calendar-plus size-4" /></button></div></td>
@@ -707,7 +713,7 @@ onMounted(async () => {
           </table>
         </div>
 
-        <div v-if="!isFetchingList && hasContacts && !isSearchView" class="flex items-center justify-between border-t border-n-weak px-4 py-3 text-xs text-n-slate-9"><span>Exibindo {{ contacts.length }} de {{ totalContactsMetric }} contatos</span><div class="flex items-center gap-2"><button class="rounded-lg border border-n-weak px-3 py-1.5" :disabled="currentPage <= 1" @click="onPageChange(currentPage - 1)">Anterior</button><span class="rounded-lg bg-blue-500 px-3 py-1.5 font-semibold text-white">{{ currentPage || 1 }}</span><button class="rounded-lg border border-n-weak px-3 py-1.5" :disabled="!hasNextPage" @click="onPageChange((currentPage || 1) + 1)">Próxima</button></div></div>
+        <div v-if="!isFetchingList && hasContacts && !isSearchView" class="flex items-center justify-between border-t border-n-weak px-4 py-3 text-xs text-n-slate-9"><span>Exibindo {{ contacts.length }} de {{ totalItems }} contatos</span><div class="flex items-center gap-2"><button class="rounded-lg border border-n-weak px-3 py-1.5" :disabled="currentPage <= 1" @click="onPageChange(currentPage - 1)">Anterior</button><span class="rounded-lg bg-blue-500 px-3 py-1.5 font-semibold text-white">{{ currentPage || 1 }}</span><button class="rounded-lg border border-n-weak px-3 py-1.5" :disabled="!hasNextPage" @click="onPageChange((currentPage || 1) + 1)">Próxima</button></div></div>
         <ContactsLoadMore v-if="isSearchView && hasContacts && hasMore" :is-loading="isLoadingMore" @load-more="loadMoreSearchResults" />
       </main>
 
@@ -715,7 +721,7 @@ onMounted(async () => {
         <template v-if="selectedRelationshipContact">
           <div class="flex items-start justify-between"><div class="flex items-center gap-3"><span class="flex size-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-lg font-bold text-emerald-700">{{ contactInitials(selectedRelationshipContact) }}</span><div><h2 class="font-semibold text-n-slate-12">{{ selectedRelationshipContact.name }}</h2><p class="text-xs text-n-slate-9">{{ contactCompany(selectedRelationshipContact) }}</p><span class="mt-1 inline-flex rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">{{ contactStatus(selectedRelationshipContact) }}</span></div></div><button class="text-n-slate-8" @click="crmSelectedContact = null">×</button></div>
           <div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3"><button class="rounded-lg bg-emerald-500 px-2 py-2 text-xs font-semibold text-white"><span class="i-ri-whatsapp-fill me-1 inline-block size-4 align-text-bottom" />WhatsApp</button><button class="rounded-lg bg-blue-500 px-2 py-2 text-xs font-semibold text-white" @click="openWhatsappCalling(selectedRelationshipContact)"><span class="i-lucide-phone me-1 inline-block size-4 align-text-bottom" />Ligar</button><button class="rounded-lg bg-amber-500 px-2 py-2 text-xs font-semibold text-white"><span class="i-lucide-mail me-1 inline-block size-4 align-text-bottom" />E-mail</button><button class="rounded-lg bg-violet-500 px-2 py-2 text-xs font-semibold text-white"><span class="i-lucide-calendar-plus me-1 inline-block size-4 align-text-bottom" />Agenda</button><button v-if="canUseCrm" class="rounded-lg bg-n-brand px-2 py-2 text-xs font-semibold text-white" @click="createDealForContact(selectedRelationshipContact)"><span class="i-lucide-briefcase-business me-1 inline-block size-4 align-text-bottom" />Novo negócio</button><ContactLeadAction v-if="canUseCrm" :contact="selectedRelationshipContact" @created="onRelationshipLeadCreated" /></div>
-          <div class="mt-5 space-y-3 text-sm"><p class="flex items-center gap-2 text-n-slate-10"><span class="i-ri-whatsapp-line size-4 text-emerald-500" />{{ contactPhone(selectedRelationshipContact) }}</p><p class="flex items-center gap-2 text-n-slate-10"><span class="i-lucide-mail size-4 text-blue-500" />{{ selectedRelationshipContact.email || 'Sem e-mail' }}</p><p class="flex items-center gap-2 text-n-slate-10"><span class="i-lucide-user-round size-4" />Responsável: JRC ADM</p></div>
+          <div class="mt-5 space-y-3 text-sm"><p class="flex items-center gap-2 text-n-slate-10"><span class="i-ri-whatsapp-line size-4 text-emerald-500" />{{ contactPhone(selectedRelationshipContact) }}</p><p class="flex items-center gap-2 text-n-slate-10"><span class="i-lucide-mail size-4 text-blue-500" />{{ selectedRelationshipContact.email || 'Sem e-mail' }}</p><p class="flex items-center gap-2 text-n-slate-10"><span class="i-lucide-user-round size-4" />Responsável: {{ contactOwners(selectedRelationshipContact) }}</p></div>
             <div class="mt-5 border-t border-n-weak pt-4"><div class="flex items-center justify-between"><p class="text-xs font-semibold uppercase tracking-wide text-n-slate-9">Relacionamento comercial</p><button v-if="canUseCrm" class="text-xs font-semibold text-n-brand" @click="openCustomer360(selectedRelationshipContact)">Abrir Cliente 360°</button></div><div class="mt-2 rounded-xl border border-n-weak bg-n-alpha-2 p-3"><div class="flex items-center justify-between"><strong class="text-n-slate-12">Múltiplos negócios</strong><strong class="text-emerald-600">CRM</strong></div><p class="mt-1 text-xs text-n-slate-9">Este contato pode ter vários negócios independentes. Consulte negócios, propostas, pedidos e contratos no Cliente 360°.</p></div></div>
           <div class="mt-5 border-t border-n-weak pt-4"><div class="flex gap-3 border-b border-n-weak text-xs font-semibold"><button class="border-b-2 border-blue-500 px-1 pb-2 text-blue-600">Histórico</button><button class="px-1 pb-2 text-n-slate-9">Negócios</button><button class="px-1 pb-2 text-n-slate-9">Atividades</button></div><div class="mt-4 space-y-4 text-xs text-n-slate-10"><div class="flex gap-3"><span class="i-ri-whatsapp-fill mt-0.5 size-4 text-emerald-500" /><div><strong class="block text-n-slate-11">Contato disponível</strong><span>Pronto para atendimento via WhatsApp.</span></div></div><div class="flex gap-3"><span class="i-lucide-phone mt-0.5 size-4 text-blue-500" /><div><strong class="block text-n-slate-11">Ligação</strong><span>Abra o WhatsApp Calling para iniciar.</span></div></div></div></div>
           <div class="mt-5 grid grid-cols-2 gap-2"><button v-if="canUseCrm" type="button" class="rounded-xl bg-n-brand px-3 py-2.5 text-sm font-semibold text-white" @click="openCustomer360(selectedRelationshipContact)">Cliente 360°</button><button type="button" class="rounded-xl border border-blue-500 px-3 py-2.5 text-sm font-semibold text-blue-600" @click="openSelectedContact(selectedRelationshipContact)">Cadastro do contato</button></div>

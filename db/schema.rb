@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_09_20_173000) do
+ActiveRecord::Schema[7.1].define(version: 2026_09_22_160000) do
   # These extensions should be enabled to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -1395,6 +1395,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_20_173000) do
     t.bigint "legacy_sales_activity_id"
     t.string "status", default: "scheduled", null: false
     t.bigint "business_unit_id"
+    t.bigint "sales_order_id"
     t.index ["account_id", "legacy_sales_activity_id"], name: "idx_jrc_crm_activities_legacy_sales", unique: true, where: "(legacy_sales_activity_id IS NOT NULL)"
     t.index ["account_id"], name: "index_jrc_crm_activities_on_account_id"
     t.index ["activity_type"], name: "index_jrc_crm_activities_on_activity_type"
@@ -1402,6 +1403,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_20_173000) do
     t.index ["deal_id"], name: "index_jrc_crm_activities_on_deal_id"
     t.index ["due_at"], name: "index_jrc_crm_activities_on_due_at"
     t.index ["organization_id"], name: "index_jrc_crm_activities_on_organization_id"
+    t.index ["sales_order_id"], name: "index_jrc_crm_activities_on_sales_order_id"
     t.index ["user_id"], name: "index_jrc_crm_activities_on_user_id"
   end
 
@@ -1931,7 +1933,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_20_173000) do
     t.integer "activation_days", default: 0, null: false
     t.integer "validation_period_days", default: 0, null: false
     t.boolean "rollover_allowance", default: false, null: false
-    t.integer "contract_term_months", default: 12, null: false
+    t.integer "contract_term_months"
     t.decimal "maximum_discount_percent", precision: 6, scale: 2, default: "20.0", null: false
     t.decimal "discount_approval_percent", precision: 6, scale: 2, default: "10.0", null: false
     t.string "renewal_type", default: "automatic", null: false
@@ -3022,6 +3024,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_20_173000) do
   add_foreign_key "jrc_crm_activities", "jrc_crm_deals", column: "deal_id"
   add_foreign_key "jrc_crm_activities", "jrc_crm_leads", column: "lead_id"
   add_foreign_key "jrc_crm_activities", "jrc_crm_organizations", column: "organization_id"
+  add_foreign_key "jrc_crm_activities", "jrc_crm_sales_orders", column: "sales_order_id"
   add_foreign_key "jrc_crm_activities", "users"
   add_foreign_key "jrc_crm_audit_events", "accounts"
   add_foreign_key "jrc_crm_backoffice_requests", "accounts"

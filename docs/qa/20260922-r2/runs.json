@@ -1,0 +1,107 @@
+[
+  {
+    "name": "financials-final",
+    "command": "ruby scripts/qa/commercial/financials_test.rb",
+    "exit_code": 0,
+    "seconds": 0.1,
+    "log": "financials-final.log"
+  },
+  {
+    "name": "inputs-final",
+    "command": "ruby scripts/qa/commercial/input_test.rb",
+    "exit_code": 0,
+    "seconds": 0.09,
+    "log": "inputs-final.log"
+  },
+  {
+    "name": "pdf-final",
+    "command": "ruby scripts/qa/commercial/pdf_test.rb",
+    "exit_code": 0,
+    "seconds": 0.17,
+    "log": "pdf-final.log"
+  },
+  {
+    "name": "frontend-helpers-final",
+    "command": "node --test scripts/qa/commercial/frontend_helpers_test.mjs",
+    "exit_code": 0,
+    "seconds": 0.1,
+    "log": "frontend-helpers-final.log"
+  },
+  {
+    "name": "whatsapp-ruby-final",
+    "command": "ruby scripts/qa/whatsapp24h/services_test.rb",
+    "exit_code": 0,
+    "seconds": 0.13,
+    "log": "whatsapp-ruby-final.log"
+  },
+  {
+    "name": "whatsapp-frontend-final",
+    "command": "node --experimental-vm-modules --test scripts/qa/whatsapp24h/frontend_test.mjs",
+    "exit_code": 0,
+    "seconds": 0.11,
+    "log": "whatsapp-frontend-final.log"
+  },
+  {
+    "name": "nico-contracts-final",
+    "command": "node --experimental-strip-types --test services/nico-runtime/test/contract.test.ts services/nico-runtime/test/erp-contract.test.ts",
+    "exit_code": 0,
+    "seconds": 0.18,
+    "log": "nico-contracts-final.log"
+  },
+  {
+    "name": "rails-full-final",
+    "command": "bundle3.3 exec ruby scripts/nico-specs.rb spec/jobs/jrc_nico spec/requests/jrc_nico* spec/services/jrc_nico spec/services/jrc_ai/nico_readiness_spec.rb spec/services/jrc_campaigns/governance_spec.rb spec/requests/api/v1/accounts/jrc_campaigns/governance_spec.rb spec/requests/api/v1/accounts/crm spec/models/jrc_crm spec/services/jrc_crm spec/policies/jrc_crm spec/requests/api/v1/accounts/contacts_pagination_spec.rb spec/controllers/super_admin/accounts_controller_spec.rb",
+    "exit_code": 1,
+    "seconds": 0.36,
+    "log": "rails-full-final.log"
+  },
+  {
+    "name": "vitest-final",
+    "command": "node node_modules/vitest/vitest.mjs run --config vitest.commercial.config.ts",
+    "exit_code": 1,
+    "seconds": 0.03,
+    "log": "vitest-final.log"
+  },
+  {
+    "name": "frontend-build-final",
+    "command": "NODE_OPTIONS=--max-old-space-size=4096 node node_modules/vite/bin/vite.js build",
+    "exit_code": 1,
+    "seconds": 0.04,
+    "log": "frontend-build-final.log"
+  },
+  {
+    "name": "router-final",
+    "command": "node --experimental-vm-modules --test tests/router/crm-routing.test.cjs",
+    "exit_code": 1,
+    "seconds": 0.08,
+    "log": "router-final.log"
+  },
+  {
+    "name": "nico-build-final",
+    "command": "cd services/nico-runtime && npm run build",
+    "exit_code": 2,
+    "seconds": 0.73,
+    "log": "nico-build-final.log"
+  },
+  {
+    "name": "nico-full-final",
+    "command": "node --experimental-strip-types --test --test-concurrency=1 services/nico-runtime/test/*.test.ts",
+    "exit_code": 1,
+    "seconds": 1.02,
+    "log": "nico-full-final.log"
+  },
+  {
+    "name": "dependencies-ruby-local",
+    "command": "bundle3.3 install --local",
+    "exit_code": 18,
+    "seconds": 0.35,
+    "log": "dependencies-ruby-local.log"
+  },
+  {
+    "name": "dependencies-pnpm-offline",
+    "command": "corepack pnpm install --frozen-lockfile --offline",
+    "exit_code": 1,
+    "seconds": 0.12,
+    "log": "dependencies-pnpm-offline.log"
+  }
+]

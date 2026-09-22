@@ -32,5 +32,9 @@ module JrcCrm
     belongs_to :product, class_name: 'JrcCrm::Product', optional: true
     validates :name, presence: true
     validates :quantity, numericality: { greater_than: 0 }
+    validates :unit_cents, :one_time_cents, :recurring_cents, :discount_cents, numericality: { greater_than_or_equal_to: 0 }
+    validate do
+      errors.add(:product, 'must belong to account') if product && product.account_id != sales_order.account_id
+    end
   end
 end

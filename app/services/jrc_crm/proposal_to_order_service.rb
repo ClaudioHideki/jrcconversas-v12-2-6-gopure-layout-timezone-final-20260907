@@ -9,7 +9,6 @@ module JrcCrm
       existing = @proposal.sales_orders.where.not(status: 'canceled').first
       return existing if existing
 
-      @proposal.recalculate_totals!
       order = nil
       JrcCrm::SalesOrder.transaction do
         order = JrcCrm::SalesOrder.create!(
@@ -17,14 +16,14 @@ module JrcCrm
           contact: @proposal.customer_contact, owner: @proposal.owner || @actor,
           business_unit: business_unit,
           products_cents: @proposal.initial_items_cents, shipping_cents: @proposal.shipping_cents,
-          discount_cents: @proposal.total_discount_cents,
+          discount_cents: @proposal.discount_cents,
           total_cents: @proposal.total_cents.to_i + @proposal.shipping_cents.to_i,
           monthly_cents: @proposal.has_monthly_fee? ? @proposal.monthly_cents : 0,
           payment_condition: @proposal.payment_condition, payment_method: @proposal.payment_method,
           down_payment_cents: @proposal.down_payment_cents, installments_count: @proposal.installments_count,
           sold_at: Time.current,
           snapshot: JrcCrm::ProposalSerializer.new(@proposal).as_json.merge(
-            'company_name' => business_unit&.name || 'GoPure',
+            'company_name' => business_unit&.name || @proposal.account.name,
             'origin' => 'proposal', 'proposal_number' => @proposal.proposal_number
           )
         )
@@ -33,8 +32,19 @@ module JrcCrm
             product: item.product, name: item.name_snapshot, quantity: item.quantity,
             unit_cents: item.unit_price_cents, discount_cents: item.discount_cents,
             one_time_cents: item.initial_total_cents, recurring_cents: item.recurring_total_cents,
-            snapshot: { description: item.description_snapshot, billing_model: item.billing_model, unit_name: item.unit_name, setup_fee_cents: item.setup_fee_cents }
+            snapshot: { description: item.description_snapshot, billing_model: item.billing_model, unit_name: item.unit_name,
+                        setup_fee_cents: item.setup_fee_cents, contract_term_months: item.product&.contract_term_months,
+                        requires_implementation: item.product&.requires_implementation }
           )
+        end
+        # Normalize from the proposal's item snapshots, never from its legacy
+        # initial total (which included the first recurring charge).
+        if order.order_items.any?
+          calculator = OrderFinancials.new(attributes: order.attributes, items: [])
+          order.order_items.each { |item| item.update!(calculator.normalize_item(item.attributes.with_indifferent_access)) }
+          OrderFinancials.recalculate!(order)
+          # Implementation details are filled in the existing order workflow.
+          order.update!(status: 'draft') if order.implementation_items.any?
         end
       end
       order

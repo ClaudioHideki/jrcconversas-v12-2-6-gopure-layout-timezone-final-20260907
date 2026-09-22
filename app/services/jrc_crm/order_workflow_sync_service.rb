@@ -28,13 +28,13 @@ module JrcCrm
         return if activities.where("metadata @> ?", { sales_order_id: @order.id }.to_json).exists?
 
         due_at = Time.zone.parse(snapshot[:follow_up_due_at].to_s) if snapshot[:follow_up_due_at].present?
-        unless @order.deal && due_at
-          @order.errors.add(:base, 'Para criar o follow-up, informe negócio e data/hora de acompanhamento.')
+        unless due_at
+          @order.errors.add(:base, 'Para criar o follow-up, informe data/hora de acompanhamento.')
           raise ActiveRecord::RecordInvalid, @order
         end
         activity = @order.account.jrc_crm_activities.new(
           activity_type: 'follow_up', title: "Follow-up do pedido #{@order.order_number}",
-          due_at: due_at, user: @order.owner, deal: @order.deal, contact: @order.contact,
+          due_at: due_at, user: @order.owner, deal: @order.deal, contact: @order.contact, sales_order: @order,
           metadata: { sales_order_id: @order.id }
         )
         result = JrcCrm::ActivityDispatchService.new(activity: activity, actor: @actor || @order.owner).call
@@ -59,13 +59,16 @@ module JrcCrm
           item.respond_to?(:to_h) ? item.to_h.deep_stringify_keys : { 'label' => item.to_s, 'done' => false }
         end
       end
+      implementation_items = @order.implementation_items
+      implementation_required = implementation_items.any?
+      # Existing orders keep their already configured workflow until explicitly edited.
+      implementation_required ||= existing_metadata[:implementation_required] == true if snap[:financial_version].to_i < 2
       metadata = existing_metadata.to_h.merge(
         'order_total_cents' => @order.total_cents,
         'monthly_cents' => @order.monthly_cents,
-        'implementation_required' => existing_metadata.fetch(:implementation_required) do
-          ActiveModel::Type::Boolean.new.cast(snap[:send_to_implementation]) || implementation_checklist.any?
-        end,
-        'implementation_checklist' => implementation_checklist,
+        'implementation_required' => implementation_required,
+        'implementation_item_ids' => implementation_items.map(&:id),
+        'implementation_checklist' => implementation_required ? implementation_checklist : [],
         'finance_required' => existing_metadata.fetch(:finance_required, true),
         'required_documents' => existing_metadata.fetch(:required_documents, Array(snap[:required_documents])),
         'provisioning_required' => existing_metadata.fetch(:provisioning_required, ActiveModel::Type::Boolean.new.cast(snap[:requires_provisioning]))

@@ -1,0 +1,9 @@
+{
+  "workflow_yaml": "valid",
+  "project_json": "valid",
+  "strong_secret_pattern_files": [],
+  "cleanup_candidates": {
+    "public/vite-test": 281
+  },
+  "limitations": "Heuristic secret scan, not a guarantee of absence of sensitive information."
+}

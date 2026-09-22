@@ -2,6 +2,7 @@ require 'mini_magick'
 
 module JrcCrm
   class ContractPdfService
+    include CommercialDocumentBrand
     PAGE_WIDTH = ProposalPdfService::PAGE_WIDTH
     PAGE_HEIGHT = ProposalPdfService::PAGE_HEIGHT
     GREEN = ProposalPdfService::GREEN
@@ -21,7 +22,7 @@ module JrcCrm
     end
 
     def call
-      ProposalPdfService::PdfDocument.new([cover_page, terms_page], logo: logo_data).render
+      ProposalPdfService::PdfDocument.new([cover_page] + terms_pages, logo: logo_data).render
     end
 
     private
@@ -29,7 +30,7 @@ module JrcCrm
     def cover_page
       page = base_page('CONTRATO COMERCIAL')
       page.text(48, 708, contract_title, size: 25, bold: true, color: GREEN)
-      page.multiline(48, 666, 'Instrumento comercial de contratação de produtos e serviços GoPure.', size: 11, color: MUTED, width_chars: 74, leading: 16)
+      page.multiline(48, 666, "Instrumento comercial de contratação de produtos e serviços de #{company_name}.", size: 11, color: MUTED, width_chars: 74, leading: 16)
       page.fill_rect(48, 490, 499, 132, LIGHT_GREEN)
       info_row(page, 588, 'CONTRATANTE', customer_name)
       info_row(page, 550, 'CONTRATO', @contract.contract_number)
@@ -44,29 +45,55 @@ module JrcCrm
       commercial_row(page, y, 'Índice de reajuste', @contract.adjustment_index.presence || 'IPCA')
 
       page.text(48, 164, 'Responsável comercial', size: 8, bold: true, color: MUTED)
-      page.text(48, 143, @contract.owner&.name.presence || 'Equipe GoPure', size: 11, bold: true, color: TEXT)
+      page.text(48, 143, @contract.owner&.name.presence || 'Equipe comercial', size: 11, bold: true, color: TEXT)
       footer(page)
       page
     end
 
-    def terms_page
-      page = base_page('ESCOPO E CONDIÇÕES')
-      page.text(48, 720, 'Produtos e serviços contratados', size: 12, bold: true, color: GREEN_2)
-      y = draw_items(page, 688)
-      y -= 18
+    def terms_pages
+      pages = []
+      chunks = @items.to_a.each_slice(12).to_a
+      chunks = [[]] if chunks.empty?
+      page = nil
+      y = 0
+      chunks.each do |items|
+        page = base_page('ESCOPO E CONDIÇÕES')
+        pages << page
+        page.text(48, 720, 'Produtos e serviços contratados', size: 12, bold: true, color: GREEN_2)
+        y = draw_items(page, 688, items) - 18
+        footer(page)
+      end
+      if y < 205
+        page = base_page('CONDIÇÕES (CONTINUAÇÃO)')
+        pages << page
+        footer(page)
+        y = 720
+      end
       page.text(48, y, 'Condições gerais', size: 12, bold: true, color: GREEN_2)
       y -= 24
       clauses.each_with_index do |clause, index|
-        y = page.multiline(48, y, "#{index + 1}. #{clause}", size: 9, color: TEXT, width_chars: 88, leading: 14)
+        page.wrapped_lines("#{index + 1}. #{clause}", width_chars: 88).each do |line|
+          if y < 160
+            page = base_page('CONDIÇÕES (CONTINUAÇÃO)')
+            pages << page
+            footer(page)
+            y = 720
+          end
+          page.text(48, y, line, size: 9, color: TEXT)
+          y -= 14
+        end
         y -= 11
       end
       page.text(48, 110, 'Assinaturas', size: 11, bold: true, color: GREEN_2)
       page.line(48, 80, 260, 80, color: MUTED, width: 0.6)
       page.line(330, 80, 542, 80, color: MUTED, width: 0.6)
       page.text(48, 64, customer_name, size: 8, bold: true, color: TEXT)
-      page.text(330, 64, 'GoPure - Grupo JRC', size: 8, bold: true, color: TEXT)
-      footer(page)
-      page
+      page.text(330, 64, company_name, size: 8, bold: true, color: TEXT)
+      pages
+    end
+
+    def company_name
+      @order.snapshot['company_name'].presence || @order.business_unit&.name.presence || @contract.account.name
     end
 
     def base_page(title)
@@ -74,7 +101,7 @@ module JrcCrm
       page.fill_rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, WHITE)
       page.fill_rect(0, 0, 10, PAGE_HEIGHT, GREEN)
       page.logo(420, 772, 120, 36)
-      page.text(48, 796, 'GOPURE | DOCUMENTO COMERCIAL', size: 8, bold: true, color: GREEN)
+      page.text(48, 796, "#{company_name.upcase} | DOCUMENTO COMERCIAL", size: 8, bold: true, color: GREEN)
       page.text(48, 770, title, size: 19, bold: true, color: GREEN)
       page.line(48, 755, 547, 755, color: GREEN_2, width: 1)
       page
@@ -92,25 +119,23 @@ module JrcCrm
       y - 29
     end
 
-    def draw_items(page, y)
-      rows = @items.to_a.first(7)
+    def draw_items(page, y, rows)
       page.fill_rect(48, y - 26, 499, 26, GREEN_2)
       page.text(56, y - 17, 'ITEM', size: 7, bold: true, color: WHITE)
-      page.text(350, y - 17, 'QTD.', size: 7, bold: true, color: WHITE)
-      page.text(418, y - 17, 'VALOR', size: 7, bold: true, color: WHITE)
+      page.text(315, y - 17, 'QTD.', size: 7, bold: true, color: WHITE)
+      page.text(364, y - 17, 'INICIAL', size: 7, bold: true, color: WHITE)
+      page.text(464, y - 17, 'MRR', size: 7, bold: true, color: WHITE)
       y -= 26
       rows.each_with_index do |item, index|
         page.fill_rect(48, y - 38, 499, 38, index.even? ? WHITE : [0.976, 0.982, 0.989])
         name = item.respond_to?(:name_snapshot) ? item.name_snapshot : item.name
         quantity = item.quantity.to_s
-        value = if item.respond_to?(:initial_total_cents)
-                  item.initial_total_cents
-                else
-                  item.one_time_cents.to_i + item.monthly_cents.to_i
-                end
-        page.text(56, y - 16, name.to_s.slice(0, 48), size: 8.5, bold: true, color: TEXT)
-        page.text(350, y - 16, quantity, size: 8.5, color: TEXT)
-        page.text(418, y - 16, money(value), size: 8.5, color: TEXT)
+        initial = item.respond_to?(:initial_total_cents) ? item.initial_total_cents : item.one_time_cents
+        monthly = item.respond_to?(:recurring_cents) ? item.recurring_cents : item.monthly_cents
+        page.text(56, y - 16, name.to_s.slice(0, 40), size: 8.5, bold: true, color: TEXT)
+        page.text(315, y - 16, quantity, size: 8.5, color: TEXT)
+        page.text(364, y - 16, money(initial), size: 8, color: TEXT)
+        page.text(464, y - 16, money(monthly), size: 8, color: TEXT)
         page.line(48, y - 38, 547, y - 38, color: BORDER, width: 0.5)
         y -= 38
       end
@@ -165,12 +190,12 @@ module JrcCrm
     end
 
     def footer(page)
-      page.text(48, 38, 'Documento gerado pelo CRM GoPure.', size: 7.2, color: MUTED)
+      page.text(48, 38, "Documento comercial - #{company_name}.", size: 7.2, color: MUTED)
       page.text(402, 38, @contract.contract_number, size: 7.2, bold: true, color: MUTED)
     end
 
     def logo_data
-      path = Rails.root.join('public', 'brand-assets', 'gopure-brand-header.png')
+      path = document_logo_path(@contract.account)
       return nil unless File.exist?(path)
 
       image = MiniMagick::Image.open(path.to_s)

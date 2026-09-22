@@ -1,0 +1,1138 @@
+[
+  {
+    "file": "app/builders/messages/facebook/message_builder.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/builders/messages/instagram/base_message_builder.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/builders/messages/instagram/message_builder.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/builders/messages/instagram/messenger/message_builder.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/controllers/api/v1/accounts/whatsapp_calling_configurations_controller.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/controllers/api/v1/accounts/concerns/whatsapp_health_management.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/controllers/api/v1/accounts/concerns/whatsapp_template_management.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/controllers/api/v1/accounts/instagram/authorizations_controller.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/controllers/api/v1/accounts/jrc_nico/agents_controller.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/controllers/api/v1/accounts/jrc_nico/assistance_controller.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/controllers/api/v1/accounts/jrc_nico/erp_controller.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/controllers/api/v1/accounts/jrc_nico/knowledge_documents_controller.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/controllers/api/v1/accounts/jrc_nico/operations_controller.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/controllers/api/v1/accounts/jrc_nico/proposals_controller.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/controllers/api/v1/accounts/jrc_nico/runs_controller.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/controllers/api/v1/accounts/whatsapp/authorizations_controller.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/controllers/concerns/instagram_concern.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/controllers/instagram/callbacks_controller.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/controllers/super_admin/whatsapp_calling_configurations_controller.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/controllers/super_admin/api/instagram/authorizations_controller.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/controllers/super_admin/api/whatsapp/authorizations_controller.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/controllers/webhooks/instagram_controller.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/controllers/webhooks/whatsapp_controller.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/helpers/instagram/integration_helper.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/javascript/dashboard/api/channel/whatsapp/whatsappCallsAPI.js",
+    "unchanged": true
+  },
+  {
+    "file": "app/javascript/dashboard/assets/images/channels/facebook_login.png",
+    "unchanged": true
+  },
+  {
+    "file": "app/javascript/dashboard/components-next/template-preview/templates/whatsapp-templates.js",
+    "unchanged": true
+  },
+  {
+    "file": "app/javascript/dashboard/components-next/whatsapp/WhatsAppTemplateParser.vue",
+    "unchanged": true
+  },
+  {
+    "file": "app/javascript/dashboard/routes/dashboard/settings/inbox/channels/Facebook.vue",
+    "unchanged": true
+  },
+  {
+    "file": "app/javascript/dashboard/routes/dashboard/settings/inbox/channels/Instagram.vue",
+    "unchanged": true
+  },
+  {
+    "file": "app/javascript/dashboard/routes/dashboard/settings/inbox/channels/Whatsapp.vue",
+    "unchanged": true
+  },
+  {
+    "file": "app/javascript/dashboard/routes/dashboard/settings/inbox/channels/instagram/DuplicateInboxBanner.vue",
+    "unchanged": true
+  },
+  {
+    "file": "app/javascript/dashboard/routes/dashboard/settings/inbox/channels/instagram/Reauthorize.vue",
+    "unchanged": true
+  },
+  {
+    "file": "app/javascript/dashboard/routes/dashboard/settings/inbox/channels/whatsapp/Reauthorize.vue",
+    "unchanged": true
+  },
+  {
+    "file": "app/javascript/dashboard/routes/dashboard/settings/inbox/channels/whatsapp/utils.js",
+    "unchanged": true
+  },
+  {
+    "file": "app/javascript/dashboard/routes/dashboard/settings/inbox/facebook/Reauthorize.vue",
+    "unchanged": true
+  },
+  {
+    "file": "app/jobs/channels/whatsapp/health_sync_job.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/jobs/channels/whatsapp/health_sync_scheduler_job.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/jobs/channels/whatsapp/templates_sync_job.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/jobs/channels/whatsapp/templates_sync_scheduler_job.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/jobs/jrc_nico/analyze_job.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/jobs/jrc_nico/continue_command_job.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/jobs/jrc_nico/customer_turn_job.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/jobs/jrc_nico/notice_plan_job.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/jobs/jrc_nico/recovery_job.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/jobs/webhooks/facebook_delivery_job.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/jobs/webhooks/facebook_events_job.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/jobs/webhooks/instagram_events_job.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/jobs/webhooks/whatsapp_events_job.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/listeners/jrc_nico_listener.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/models/whatsapp_calling_configuration.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/models/channel/facebook_page.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/models/channel/instagram.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/models/channel/whatsapp.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/models/concerns/whatsapp_template_auditable.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/models/jrc_nico/command.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/models/jrc_nico/delegation.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/models/jrc_nico/erp_binding.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/models/jrc_nico/erp_setting.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/models/jrc_nico/inference.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/models/jrc_nico/knowledge_document.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/models/jrc_nico/notice.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/models/jrc_nico/proposal.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/models/jrc_nico/run.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/models/jrc_nico/session.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/models/jrc_nico/turn.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/facebook/send_on_facebook_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/instagram/base_message_text.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/instagram/base_send_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/instagram/message_text.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/instagram/read_status_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/instagram/refresh_oauth_token_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/instagram/send_on_instagram_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/instagram/test_event_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/instagram/webhooks_base_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/instagram/messenger/message_text.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/instagram/messenger/send_on_instagram_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/jrc_nico/access.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/jrc_nico/agent_catalog.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/jrc_nico/commercial_actions.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/jrc_nico/context_builder.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/jrc_nico/customer_reply.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/jrc_nico/customer_request_scope.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/jrc_nico/delegated_actions.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/jrc_nico/delegation_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/jrc_nico/erp_client.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/jrc_nico/erp_context.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/jrc_nico/intent_classifier.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/jrc_nico/module_actions.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/jrc_nico/operational_access.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/jrc_nico/operational_inference.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/jrc_nico/operator_session.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/jrc_nico/result_access.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/jrc_nico/runtime_client.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/jrc_nico/run_capacity.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/jrc_nico/tool_catalog.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/jrc_nico/tool_executor.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/messages/markdown_renderers/instagram_renderer.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/twilio/whatsapp_identifier_helper.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/calling_configuration_test_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/channel_creation_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/conversation_window_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/csat_template_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/embedded_signup_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/facebook_api_client.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/health_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/identifier_sync_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/incoming_message_base_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/incoming_message_identifier_helper.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/incoming_message_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/incoming_message_service_helpers.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/incoming_message_whatsapp_cloud_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/liquid_template_processor_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/message_dedup_lock.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/oneoff_campaign_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/outgoing_message_guard.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/phone_info_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/phone_number_normalization_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/populate_template_parameters_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/reauthorization_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/send_on_whatsapp_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/template_catalog_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/template_parameter_converter_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/template_processor_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/template_sync_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/token_exchange_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/webhook_channel_finder_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/webhook_setup_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/webhook_teardown_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/phone_normalizers/argentina_phone_normalizer.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/phone_normalizers/base_phone_normalizer.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/phone_normalizers/brazil_phone_normalizer.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/providers/base_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/providers/whatsapp_360_dialog_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/whatsapp/providers/whatsapp_cloud_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "app/views/api/v1/accounts/callbacks/facebook_pages.json.jbuilder",
+    "unchanged": true
+  },
+  {
+    "file": "app/views/api/v1/accounts/callbacks/register_facebook_page.json.jbuilder",
+    "unchanged": true
+  },
+  {
+    "file": "app/views/api/v1/accounts/whatsapp/callbacks/embedded_signup.json.jbuilder",
+    "unchanged": true
+  },
+  {
+    "file": "app/views/mailers/administrator_notifications/channel_notifications_mailer/facebook_disconnect.liquid",
+    "unchanged": true
+  },
+  {
+    "file": "app/views/mailers/administrator_notifications/channel_notifications_mailer/instagram_disconnect.liquid",
+    "unchanged": true
+  },
+  {
+    "file": "app/views/mailers/administrator_notifications/channel_notifications_mailer/whatsapp_disconnect.liquid",
+    "unchanged": true
+  },
+  {
+    "file": "app/views/super_admin/accounts/_nico.html.erb",
+    "unchanged": true
+  },
+  {
+    "file": "app/views/super_admin/whatsapp_calling_configurations/show.html.erb",
+    "unchanged": true
+  },
+  {
+    "file": "config/initializers/facebook_messenger.rb",
+    "unchanged": true
+  },
+  {
+    "file": "config/locales/nico_admin.en.yml",
+    "unchanged": true
+  },
+  {
+    "file": "db/migrate/20250326034635_add_instagram_channel.rb",
+    "unchanged": true
+  },
+  {
+    "file": "db/migrate/20260718000000_add_phone_number_health_to_channel_whatsapp.rb",
+    "unchanged": true
+  },
+  {
+    "file": "db/migrate/20260826010000_create_whatsapp_calling_configurations.rb",
+    "unchanged": true
+  },
+  {
+    "file": "db/migrate/20260907110000_create_jrc_nico_foundation.rb",
+    "unchanged": true
+  },
+  {
+    "file": "db/migrate/20260907120000_add_nico_capacity_and_proposals.rb",
+    "unchanged": true
+  },
+  {
+    "file": "db/migrate/20260907130000_protect_nico_history_lifecycle.rb",
+    "unchanged": true
+  },
+  {
+    "file": "db/migrate/20260908100000_add_agent_key_to_nico_runs.rb",
+    "unchanged": true
+  },
+  {
+    "file": "db/migrate/20260908120000_create_nico_erp_configuration.rb",
+    "unchanged": true
+  },
+  {
+    "file": "db/migrate/20260909120000_create_nico_operations.rb",
+    "unchanged": true
+  },
+  {
+    "file": "db/migrate/20260909123000_scope_nico_customer_knowledge.rb",
+    "unchanged": true
+  },
+  {
+    "file": "db/migrate/20260910130000_create_nico_notices.rb",
+    "unchanged": true
+  },
+  {
+    "file": "db/migrate/20260910160000_add_nico_commercial_delegation.rb",
+    "unchanged": true
+  },
+  {
+    "file": "docker/nico-runtime.Dockerfile",
+    "unchanged": true
+  },
+  {
+    "file": "docs/whatsapp-24h/IMPLEMENTACAO-E-TESTES.md",
+    "unchanged": true
+  },
+  {
+    "file": "enterprise/app/controllers/api/v1/accounts/whatsapp_calls_controller.rb",
+    "unchanged": true
+  },
+  {
+    "file": "enterprise/app/jobs/enterprise/webhooks/whatsapp_events_job.rb",
+    "unchanged": true
+  },
+  {
+    "file": "enterprise/app/services/enterprise/whatsapp/providers/whatsapp_cloud_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "enterprise/app/services/whatsapp/call_conversation_builder.rb",
+    "unchanged": true
+  },
+  {
+    "file": "enterprise/app/services/whatsapp/call_permission_reply_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "enterprise/app/services/whatsapp/call_permission_request_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "enterprise/app/services/whatsapp/call_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "enterprise/app/services/whatsapp/inbound_call_identity_builder.rb",
+    "unchanged": true
+  },
+  {
+    "file": "enterprise/app/services/whatsapp/incoming_call_service.rb",
+    "unchanged": true
+  },
+  {
+    "file": "enterprise/app/views/api/v1/accounts/whatsapp_calls/accept.json.jbuilder",
+    "unchanged": true
+  },
+  {
+    "file": "enterprise/app/views/api/v1/accounts/whatsapp_calls/initiate.json.jbuilder",
+    "unchanged": true
+  },
+  {
+    "file": "enterprise/app/views/api/v1/accounts/whatsapp_calls/reject.json.jbuilder",
+    "unchanged": true
+  },
+  {
+    "file": "enterprise/app/views/api/v1/accounts/whatsapp_calls/show.json.jbuilder",
+    "unchanged": true
+  },
+  {
+    "file": "enterprise/app/views/api/v1/accounts/whatsapp_calls/terminate.json.jbuilder",
+    "unchanged": true
+  },
+  {
+    "file": "enterprise/app/views/api/v1/accounts/whatsapp_calls/upload_recording.json.jbuilder",
+    "unchanged": true
+  },
+  {
+    "file": "enterprise/app/views/api/v1/models/_whatsapp_call.json.jbuilder",
+    "unchanged": true
+  },
+  {
+    "file": "lib/integrations/facebook/delivery_status.rb",
+    "unchanged": true
+  },
+  {
+    "file": "lib/integrations/facebook/message_creator.rb",
+    "unchanged": true
+  },
+  {
+    "file": "lib/integrations/facebook/message_parser.rb",
+    "unchanged": true
+  },
+  {
+    "file": "public/assets/images/dashboard/channels/facebook.png",
+    "unchanged": true
+  },
+  {
+    "file": "public/assets/images/dashboard/channels/instagram.png",
+    "unchanged": true
+  },
+  {
+    "file": "public/assets/images/dashboard/channels/whatsapp.png",
+    "unchanged": true
+  },
+  {
+    "file": "public/integrations/channels/badges/instagram-dm.png",
+    "unchanged": true
+  },
+  {
+    "file": "public/integrations/channels/badges/whatsapp.png",
+    "unchanged": true
+  },
+  {
+    "file": "scripts/nico-specs.rb",
+    "unchanged": true
+  },
+  {
+    "file": "services/nico-runtime/package-lock.json",
+    "unchanged": true
+  },
+  {
+    "file": "services/nico-runtime/package.json",
+    "unchanged": true
+  },
+  {
+    "file": "services/nico-runtime/README.md",
+    "unchanged": true
+  },
+  {
+    "file": "services/nico-runtime/tsconfig.json",
+    "unchanged": true
+  },
+  {
+    "file": "services/nico-runtime/src/agents.ts",
+    "unchanged": true
+  },
+  {
+    "file": "services/nico-runtime/src/contract.ts",
+    "unchanged": true
+  },
+  {
+    "file": "services/nico-runtime/src/engine.ts",
+    "unchanged": true
+  },
+  {
+    "file": "services/nico-runtime/src/operations.ts",
+    "unchanged": true
+  },
+  {
+    "file": "services/nico-runtime/src/schema.ts",
+    "unchanged": true
+  },
+  {
+    "file": "services/nico-runtime/src/server.ts",
+    "unchanged": true
+  },
+  {
+    "file": "services/nico-runtime/src/sql.d.ts",
+    "unchanged": true
+  },
+  {
+    "file": "services/nico-runtime/src/transcription.ts",
+    "unchanged": true
+  },
+  {
+    "file": "services/nico-runtime/test/contract.test.ts",
+    "unchanged": true
+  },
+  {
+    "file": "services/nico-runtime/test/customer.test.ts",
+    "unchanged": true
+  },
+  {
+    "file": "services/nico-runtime/test/erp-contract.test.ts",
+    "unchanged": true
+  },
+  {
+    "file": "services/nico-runtime/test/operations.test.ts",
+    "unchanged": true
+  },
+  {
+    "file": "services/nico-runtime/test/provider.test.ts",
+    "unchanged": true
+  },
+  {
+    "file": "services/nico-runtime/test/runtime.test.ts",
+    "unchanged": true
+  },
+  {
+    "file": "services/nico-runtime/test/server.test.ts",
+    "unchanged": true
+  },
+  {
+    "file": "spec/builders/messages/facebook/message_builder_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/builders/messages/instagram/message_builder_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/builders/messages/instagram/messenger/message_builder_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/controllers/api/v1/accounts/instagram/authorizations_controller_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/controllers/api/v1/accounts/whatsapp/authorizations_controller_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/controllers/concerns/instagram_concern_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/controllers/instagram/callbacks_controller_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/controllers/webhooks/instagram_controller_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/controllers/webhooks/whatsapp_controller_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/enterprise/controllers/api/v1/accounts/whatsapp_calls_controller_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/enterprise/services/enterprise/whatsapp/providers/whatsapp_cloud_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/enterprise/services/whatsapp/call_permission_reply_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/enterprise/services/whatsapp/call_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/enterprise/services/whatsapp/incoming_call_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/factories/channel/channel_instagram.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/factories/channel/channel_whatsapp.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/factories/channel/facebook_pages.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/factories/channel/instagram_channel.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/factories/facebook_message/incoming_fb_text_message.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/factories/instagram/instagram_message_create_event.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/factories/instagram_message/incoming_messages.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/helpers/instagram/integration_helper_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/jobs/channels/whatsapp/health_sync_job_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/jobs/channels/whatsapp/health_sync_scheduler_job_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/jobs/channels/whatsapp/templates_sync_job_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/jobs/channels/whatsapp/templates_sync_scheduler_job_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/jobs/jrc_nico/analyze_job_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/jobs/jrc_nico/recovery_job_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/jobs/webhooks/facebook_delivery_job_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/jobs/webhooks/facebook_events_job_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/jobs/webhooks/instagram_events_job_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/jobs/webhooks/whatsapp_events_job_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/lib/integrations/facebook/delivery_status_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/models/channel/facebook_page_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/models/channel/instagram_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/models/channel/whatsapp_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/requests/jrc_nico_assistance_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/requests/jrc_nico_erp_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/requests/jrc_nico_history_access_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/requests/jrc_nico_knowledge_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/requests/jrc_nico_notices_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/requests/jrc_nico_operations_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/requests/jrc_nico_proposals_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/requests/jrc_nico_runs_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/requests/super_admin/whatsapp_calling_configurations_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/facebook/send_on_facebook_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/instagram/read_status_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/instagram/refresh_oauth_token_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/instagram/send_on_instagram_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/instagram/test_event_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/instagram/messenger/send_on_instagram_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/jrc_ai/nico_readiness_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/jrc_nico/commercial_delegation_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/jrc_nico/commercial_workflow_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/jrc_nico/context_builder_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/jrc_nico/erp_context_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/jrc_nico/runtime_client_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/whatsapp/calling_configuration_test_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/whatsapp/channel_creation_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/whatsapp/csat_template_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/whatsapp/embedded_signup_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/whatsapp/facebook_api_client_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/whatsapp/health_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/whatsapp/incoming_message_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/whatsapp/incoming_message_whatsapp_cloud_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/whatsapp/liquid_template_processor_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/whatsapp/message_dedup_lock_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/whatsapp/oneoff_campaign_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/whatsapp/phone_info_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/whatsapp/populate_template_parameters_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/whatsapp/send_on_whatsapp_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/whatsapp/template_parameter_converter_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/whatsapp/token_exchange_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/whatsapp/webhook_setup_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/whatsapp/webhook_teardown_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/whatsapp/providers/whatsapp360_dialog_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/services/whatsapp/providers/whatsapp_cloud_service_spec.rb",
+    "unchanged": true
+  },
+  {
+    "file": "spec/support/instagram_spec_helpers.rb",
+    "unchanged": true
+  },
+  {
+    "file": "swagger/definitions/request/inbox/channels/create_whatsapp_channel_payload.yml",
+    "unchanged": true
+  },
+  {
+    "file": "swagger/definitions/request/inbox/channels/update_whatsapp_channel_payload.yml",
+    "unchanged": true
+  },
+  {
+    "file": "JRC_CAMPANHAS_V12_WHATSAPP_EMAIL_20260904.md",
+    "unchanged": true
+  }
+]

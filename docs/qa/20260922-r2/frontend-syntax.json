@@ -1,0 +1,161 @@
+{
+  "note": "Syntax only. Does NOT compile Vue templates, resolve imports, execute Vitest or build Vite.",
+  "parser": "5.8.3",
+  "files": [
+    {
+      "file": "app/javascript/dashboard/api/contacts.js",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/api/crm/stages.js",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/api/specs/contacts.spec.js",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/contacts/pages/ContactsIndex.vue",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/CrmLayout.vue",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/activityDateTime.js",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/components/kanban/DealsFunnelKanban.vue",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/components/shared/ContactPicker.vue",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/components/shared/OrderActivities.vue",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/components/shared/OrderFinancialEditor.vue",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/crmControlClasses.js",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/specs/activityDateTime.spec.js",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/specs/commercial.spec.js",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/useCrmTheme.js",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/views/activities/ActivitiesIndex.vue",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/views/automations/AutomationsIndex.vue",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/views/campaigns/CampaignsCrmIndex.vue",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/views/contracts/ContractsView.vue",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/views/deals/DealsIndex.vue",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/views/leads/LeadConversionModal.vue",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/views/leads/LeadCreateModal.vue",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/views/leads/LeadDetailModal.vue",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/views/orders/SalesOrderWizard.vue",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/views/orders/SalesOrdersView.vue",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/views/products/ProductsIndex.vue",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/views/proposals/ProposalsIndex.vue",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/routes/dashboard/crm/views/settings/CrmSettingsView.vue",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/store/modules/contacts/actions.js",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "app/javascript/dashboard/store/modules/contacts/mutations.js",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "scripts/qa/commercial/frontend_helpers_test.mjs",
+      "segments": 1,
+      "errors": []
+    },
+    {
+      "file": "vitest.commercial.config.ts",
+      "segments": 1,
+      "errors": []
+    }
+  ]
+}

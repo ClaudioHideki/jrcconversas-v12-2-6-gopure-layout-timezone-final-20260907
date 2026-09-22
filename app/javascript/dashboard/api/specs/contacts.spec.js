@@ -34,7 +34,8 @@ describe('#ContactsAPI', () => {
     it('#get', () => {
       contactAPI.get(1, 'name', 'customer-support');
       expect(axiosMock.get).toHaveBeenCalledWith(
-        '/api/v1/contacts?include_contact_inboxes=false&page=1&sort=name&labels[]=customer-support'
+        '/api/v1/contacts?include_contact_inboxes=false&page=1&sort=name&labels[]=customer-support',
+        { params: {} }
       );
     });
 
@@ -70,7 +71,7 @@ describe('#ContactsAPI', () => {
       contactAPI.search('leads', 1, 'date', 'customer-support');
       expect(axiosMock.get).toHaveBeenCalledWith(
         '/api/v1/contacts/search?include_contact_inboxes=false&page=1&sort=date&q=leads&labels[]=customer-support',
-        { signal: undefined }
+        { signal: undefined, params: {} }
       );
     });
 
@@ -81,7 +82,7 @@ describe('#ContactsAPI', () => {
       });
       expect(axiosMock.get).toHaveBeenCalledWith(
         '/api/v1/contacts/search?include_contact_inboxes=false&page=1&sort=date&q=leads&labels[]=customer-support',
-        { signal: controller.signal }
+        { signal: controller.signal, params: {} }
       );
     });
 
@@ -121,7 +122,8 @@ describe('#ContactsAPI', () => {
       contactAPI.filter(1, 'name', queryPayload);
       expect(axiosMock.post).toHaveBeenCalledWith(
         '/api/v1/contacts/filter?include_contact_inboxes=false&page=1&sort=name',
-        queryPayload
+        queryPayload,
+        { params: {} }
       );
     });
 

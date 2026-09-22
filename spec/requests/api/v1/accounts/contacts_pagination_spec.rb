@@ -32,4 +32,13 @@ RSpec.describe 'Contact pagination and search', type: :request do
     end
     expect(seen).to match_array(contacts.map(&:id))
   end
+  it 'treats missing, zero, negative and malformed pages as the first page' do
+    contact = create(:contact, account: account, name: 'Busca segura')
+    [nil, 0, -4, 'invalid'].each do |page|
+      get "#{url}/search", params: { q: 'Busca segura', page: page }, headers: headers
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body['payload'].pluck('id')).to eq([contact.id])
+    end
+  end
+
 end

@@ -1,8 +1,9 @@
 <script setup>
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
-import { crmControlClasses } from './crmControlClasses';
+import { useCrmTheme } from './useCrmTheme';
 
+const { crmControlClasses, isGoPure } = useCrmTheme();
 const route = useRoute();
 const { t } = useI18n();
 /* eslint-disable vue/no-bare-strings-in-template, @intlify/vue-i18n/no-raw-text, @intlify/vue-i18n/no-dynamic-keys */
@@ -28,6 +29,7 @@ const navigation = [
 
 const activeTabClass = item => {
   if (route.name !== item.name) return '';
+  if (isGoPure.value) return '!border-transparent !bg-[#047857] !text-white !shadow-sm';
   const tones = {
     blue: '!border-transparent !bg-[#0669cc] !text-white !shadow-[0_8px_22px_rgba(8,124,240,.24)]',
     cyan: '!border-transparent !bg-[#0e7490] !text-white !shadow-[0_8px_22px_rgba(14,165,183,.22)]',
@@ -42,7 +44,7 @@ const activeTabClass = item => {
 </script>
 
 <template>
-  <div :class="crmControlClasses" class="jrc-crm-shell flex h-full min-w-0 flex-1 flex-col bg-[#f7f9fc]">
+  <div :class="crmControlClasses" class="jrc-crm-shell flex h-full min-h-0 min-w-0 flex-1 flex-col bg-[#f7f9fc]">
     <header class="jrc-crm-top relative shrink-0 border-b border-n-weak bg-n-solid-2 px-3 pt-2">
       <nav :aria-label="t('CRM.HOMOLOGATION.MENU')" class="relative flex min-w-0 gap-1 overflow-x-auto pb-2">
         <RouterLink v-for="item in navigation" :key="item.name" :to="{ name: item.name }" class="jrc-crm-tab flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-n-weak bg-n-solid-2 px-2.5 py-2 text-xs font-medium text-n-slate-11 shadow-[0_2px_8px_rgba(16,24,40,.04)] transition hover:-translate-y-0.5 hover:border-[#cfd7e4] hover:text-n-slate-12" :class="activeTabClass(item)">
@@ -51,7 +53,7 @@ const activeTabClass = item => {
         </RouterLink>
       </nav>
     </header>
-    <main class="min-w-0 bg-n-background jrc-visible-scrollbar min-h-0 flex-1 overflow-y-auto pb-24">
+    <main class="min-w-0 bg-n-background jrc-visible-scrollbar min-h-0 flex-1 overflow-hidden">
       <RouterView />
     </main>
   </div>

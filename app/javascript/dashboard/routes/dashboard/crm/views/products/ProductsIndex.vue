@@ -2,6 +2,8 @@
 /* eslint-disable vue/no-bare-strings-in-template, @intlify/vue-i18n/no-raw-text */
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useStore } from 'vuex';
+import { useRoute } from 'vue-router';
+const route = useRoute();
 import { useAlert } from 'dashboard/composables';
 import { productsAPI } from 'dashboard/api/crm';
 import { useCrmMetrics } from '../../composables/useCrmMetrics';
@@ -40,7 +42,7 @@ const defaultForm = () => ({
   subcategory: '',
   description: '',
   tags_text: '',
-  billing_model: 'monthly',
+  billing_model: 'one_time',
   sales_unit: 'unidade',
   unit_price: 0,
   cost: 0,
@@ -51,7 +53,7 @@ const defaultForm = () => ({
   minimum_quantity: 1,
   allow_variable_quantity: true,
   rollover_allowance: false,
-  contract_term_months: 12,
+  contract_term_months: null,
   included_quantity: 0,
   included_unit: 'chamadas',
   overage_unit_price: 0,
@@ -408,7 +410,7 @@ const payload = () => ({
     minimum_quantity: Number(form.minimum_quantity || 1),
     allow_variable_quantity: form.allow_variable_quantity,
     rollover_allowance: form.rollover_allowance,
-    contract_term_months: Number(form.contract_term_months || 12),
+    contract_term_months: form.contract_term_months ? Number(form.contract_term_months) : null,
     included_quantity: Number(form.included_quantity || 0),
     included_unit: form.included_unit || null,
     overage_unit_price_cents: toCents(form.overage_unit_price),
@@ -617,14 +619,7 @@ const buildImportedProduct = record => {
       importRowValue(record, ['rollover de franquia', 'rollover']),
       false
     ),
-    contract_term_months: Math.max(
-      1,
-      Math.round(
-        parseLocalizedNumber(
-          importRowValue(record, ['vigência', 'vigencia', 'vigência meses'])
-        ) || 12
-      )
-    ),
+    contract_term_months: parseLocalizedNumber(importRowValue(record, ['vigência', 'vigencia', 'vigência meses'])) || null,
     maximum_discount_percent: maximumDiscount,
     discount_approval_percent: approvalPercent,
     renewal_type: renewalFromImport(
@@ -848,7 +843,7 @@ const exportCatalog = () => {
     product.included_unit || '',
     (Number(product.overage_unit_price_cents || 0) / 100).toFixed(2),
     product.rollover_allowance ? 'Sim' : 'Não',
-    product.contract_term_months || 12,
+    product.contract_term_months || '',
     product.maximum_discount_percent || 0,
     product.discount_approval_percent || 0,
     renewalLabel(product.renewal_type),
@@ -886,7 +881,7 @@ const exportCatalog = () => {
 
 const refresh = () => store.dispatch('jrcCrm/products/fetchProducts');
 
-onMounted(refresh);
+onMounted(async () => { await refresh(); if(route.query.create && isAdmin.value) openCreate(); });
 </script>
 
 <template>
@@ -1105,7 +1100,7 @@ onMounted(refresh);
                     {{ formatBRL(product.unit_price_cents) }}
                   </p>
                   <p class="mt-1 text-xs text-n-slate-10">
-                    Implantação: {{ formatBRL(product.setup_fee_cents) }}
+                    Valor inicial unitário: {{ formatBRL(product.setup_fee_cents) }}
                   </p>
                 </td>
                 <td v-if="isAdmin" class="px-5 py-4">
@@ -1124,7 +1119,7 @@ onMounted(refresh);
                   </p>
                 </td>
                 <td class="px-5 py-4 text-n-slate-11">
-                  <p>{{ product.contract_term_months || 0 }} meses</p>
+                  <p>{{ product.contract_term_months ? `${product.contract_term_months} meses` : 'Sem prazo definido' }}</p>
                   <p class="mt-1 text-xs text-n-slate-10">
                     Ativação: {{ product.activation_days || 0 }} dias
                   </p>
@@ -1394,7 +1389,7 @@ onMounted(refresh);
                   />
                 </label>
                 <label class="text-sm font-medium text-n-slate-11">
-                  Setup / implantação (R$)
+                  Valor inicial unitário na recorrência (R$)
                   <input
                     v-model.number="form.setup_fee"
                     type="number"
@@ -1652,7 +1647,7 @@ onMounted(refresh);
                   <label
                     class="flex items-center justify-between rounded-xl border border-n-weak p-4"
                   >
-                    <span class="font-medium text-n-slate-11">Implantação</span>
+                    <span class="font-medium text-n-slate-11">Exige implantação (independente da recorrência)</span>
                     <input v-model="form.integration_implementation" type="checkbox" class="size-5 accent-n-blue-9" />
                   </label>
                 </div>
@@ -1771,7 +1766,7 @@ onMounted(refresh);
                 </div>
                 <div class="flex items-center justify-between gap-3">
                   <dt class="text-n-slate-10">Vigência</dt>
-                  <dd class="font-medium text-n-slate-12">{{ form.contract_term_months }} meses</dd>
+                  <dd class="font-medium text-n-slate-12">{{ form.contract_term_months ? `${form.contract_term_months} meses` : 'Sem prazo definido' }}</dd>
                 </div>
                 <div v-if="form.included_quantity" class="border-t border-n-weak pt-3">
                   <dt class="text-n-slate-10">Franquia incluída</dt>

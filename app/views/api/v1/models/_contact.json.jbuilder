@@ -19,3 +19,6 @@ if defined?(with_contact_inboxes) && with_contact_inboxes.present?
     end
   end
 end
+
+json.contact_type resource.contact_type
+json.crm_owners @relationship_owners[resource.id] if @relationship_owners

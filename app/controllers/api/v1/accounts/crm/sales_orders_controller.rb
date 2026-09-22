@@ -1,5 +1,8 @@
 module Api::V1::Accounts::Crm
   class SalesOrdersController < BaseController
+    rescue_from ArgumentError do |error|
+      render json: { message: error.message }, status: :unprocessable_entity
+    end
     before_action :set_order, only: [:show, :update, :pdf, :upload_attachments, :download_attachment]
 
     def index
@@ -21,7 +24,7 @@ module Api::V1::Accounts::Crm
       order = nil
       JrcCrm::SalesOrder.transaction do
         order = if params[:proposal_id].present? && !params[:sales_order].present?
-                proposal = crm_scope.jrc_crm_proposals.find(params[:proposal_id])
+                proposal = visible_to_current_user(crm_scope.jrc_crm_proposals).find(params[:proposal_id])
                 JrcCrm::ProposalToOrderService.new(proposal: proposal, actor: Current.user).call
               else
                 build_manual_order
@@ -33,8 +36,10 @@ module Api::V1::Accounts::Crm
 
     def update
       @order.transaction do
-        @order.update!(order_params)
-        replace_items!(@order) if params.dig(:sales_order, :items).present?
+        attrs = order_params
+        attrs[:snapshot] = @order.snapshot.merge(attrs[:snapshot]) if attrs[:snapshot]
+        @order.update!(attrs)
+        replace_items!(@order) if params[:sales_order].key?(:items)
         financial_keys = %w[items discount_cents shipping_cents installments_count snapshot]
         recalculate!(@order) if financial_keys.any? { |key| params[:sales_order].key?(key) }
         sync_downstream!(@order)
@@ -81,13 +86,23 @@ module Api::V1::Accounts::Crm
     end
 
     def order_params
-      params.require(:sales_order).permit(
+      attributes = params.require(:sales_order).permit(
         :deal_id, :proposal_id, :contact_id, :owner_id, :business_unit_id, :status,
-        :products_cents, :shipping_cents, :discount_cents, :total_cents, :monthly_cents,
+        :shipping_cents, :discount_cents,
         :payment_condition, :payment_method, :down_payment_cents, :installments_count,
         :sold_at, :closed_at, :notes,
         snapshot: {}
       )
+      { deal_id: crm_scope.jrc_crm_deals, proposal_id: crm_scope.jrc_crm_proposals }.each do |key, scope|
+        visible_to_current_user(scope).find(attributes[key]) if attributes[key].present?
+      end
+      crm_scope.contacts.find(attributes[:contact_id]) if attributes[:contact_id].present?
+      crm_scope.jrc_crm_business_units.find(attributes[:business_unit_id]) if attributes[:business_unit_id].present?
+      if attributes[:owner_id].present?
+        crm_scope.users.find(attributes[:owner_id])
+        raise Pundit::NotAuthorizedError if !crm_admin? && attributes[:owner_id].to_i != Current.user.id
+      end
+      attributes
     end
 
     def order_snapshot
@@ -96,28 +111,39 @@ module Api::V1::Accounts::Crm
     end
 
     def replace_items!(order)
+      items = submitted_items
       order.order_items.destroy_all
       calculator = JrcCrm::OrderFinancials.new(attributes: order.attributes, items: [])
-      submitted_items.each do |item|
+      items.each do |item|
         order.order_items.create!(calculator.normalize_item(item.with_indifferent_access))
       end
     end
 
     def submitted_items
       Array(params.dig(:sales_order, :items)).map do |item|
-        item.respond_to?(:to_unsafe_h) ? item.to_unsafe_h : item.to_h
+        row = (item.respond_to?(:to_unsafe_h) ? item.to_unsafe_h : item.to_h).with_indifferent_access
+        existing = @order&.order_items&.find_by(id: row[:id]) if row[:id].present?
+        if row[:product_id].present?
+          product = crm_scope.jrc_crm_products.find(row[:product_id])
+          row[:name] = product.name if row[:name].blank?
+          row[:snapshot] = { billing_model: product.billing_model, setup_fee_cents: product.setup_fee_cents,
+                             contract_term_months: product.contract_term_months, unit_name: product.sales_unit,
+                             requires_implementation: product.requires_implementation }.with_indifferent_access.merge(row[:snapshot] || {})
+          # An order cannot bypass a product's operational requirement by sending false.
+          # Persisted items retain the setting agreed when the order was created.
+          row[:snapshot][:requires_implementation] = existing && existing.product_id == product.id ?
+            ActiveModel::Type::Boolean.new.cast(existing.snapshot['requires_implementation']) : product.requires_implementation
+        end
+        row
       end
     end
 
     def recalculate!(order)
-      result = JrcCrm::OrderFinancials.new(attributes: order.attributes, items: order.order_items.map(&:attributes)).call
-      snapshot = (order.snapshot || {}).merge('financial_version' => 1, 'taxes_cents' => result[:taxes_cents],
-                                             'installments' => result[:installments])
-      order.update!(result.slice(:products_cents, :monthly_cents, :shipping_cents, :discount_cents, :total_cents, :installments_count)
-                     .merge(snapshot: snapshot))
+      JrcCrm::OrderFinancials.recalculate!(order)
     end
 
     def sync_downstream!(order)
+      order.validate_implementation! unless order.draft? || order.canceled?
       JrcCrm::OrderWorkflowSyncService.new(order: order.reload, actor: Current.user).call
     end
 
@@ -147,6 +173,8 @@ module Api::V1::Accounts::Crm
         payment_method: order.payment_method, down_payment_cents: order.down_payment_cents,
         installments_count: order.installments_count, sold_at: order.sold_at,
         notes: order.notes, snapshot: snap,
+        communication_available: false,
+        next_activity: visible_to_current_user(order.activities, owner_column: :user_id).pending.order(:due_at).first&.then { |activity| JrcCrm::ActivitySerializer.new(activity).as_json },
         contact: order.contact && { id: order.contact.id, name: order.contact.name, email: order.contact.email, phone_number: order.contact.phone_number },
         owner: { id: order.owner.id, name: order.owner.name },
         business_unit: order.business_unit && { id: order.business_unit.id, name: order.business_unit.name, code: order.business_unit.code },

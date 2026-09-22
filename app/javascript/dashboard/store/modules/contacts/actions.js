@@ -52,16 +52,21 @@ export const handleContactOperationErrors = error => {
   }
 };
 
+let listRequest = 0;
+
 export const actions = {
   search: async (
     { commit },
-    { search, page, sortAttr, label, append = false }
+    { search, page, sortAttr, label, append = false, filters = {} }
   ) => {
+    listRequest += 1;
+    const request = listRequest;
     commit(types.SET_CONTACT_UI_FLAG, { isFetching: true });
     try {
       const {
         data: { payload, meta },
-      } = await ContactAPI.search(search, page, sortAttr, label);
+      } = await ContactAPI.search(search, page, sortAttr, label, { filters });
+      if (request !== listRequest) return;
       if (!append) {
         commit(types.CLEAR_CONTACTS);
       }
@@ -69,36 +74,45 @@ export const actions = {
       commit(types.SET_CONTACT_META, meta);
       commit(types.SET_CONTACT_UI_FLAG, { isFetching: false });
     } catch (error) {
+      if (request !== listRequest) return;
       commit(types.SET_CONTACT_UI_FLAG, { isFetching: false });
     }
   },
 
-  get: async ({ commit }, { page = 1, sortAttr, label } = {}) => {
+  get: async ({ commit }, { page = 1, sortAttr, label, filters = {} } = {}) => {
+    listRequest += 1;
+    const request = listRequest;
     commit(types.SET_CONTACT_UI_FLAG, { isFetching: true });
     try {
       const {
         data: { payload, meta },
-      } = await ContactAPI.get(page, sortAttr, label);
+      } = await ContactAPI.get(page, sortAttr, label, filters);
+      if (request !== listRequest) return;
       commit(types.CLEAR_CONTACTS);
       commit(types.SET_CONTACTS, payload);
       commit(types.SET_CONTACT_META, meta);
       commit(types.SET_CONTACT_UI_FLAG, { isFetching: false });
     } catch (error) {
+      if (request !== listRequest) return;
       commit(types.SET_CONTACT_UI_FLAG, { isFetching: false });
     }
   },
 
-  active: async ({ commit }, { page = 1, sortAttr } = {}) => {
+  active: async ({ commit }, { page = 1, sortAttr, filters = {} } = {}) => {
+    listRequest += 1;
+    const request = listRequest;
     commit(types.SET_CONTACT_UI_FLAG, { isFetching: true });
     try {
       const {
         data: { payload, meta },
-      } = await ContactAPI.active(page, sortAttr);
+      } = await ContactAPI.active(page, sortAttr, filters);
+      if (request !== listRequest) return;
       commit(types.CLEAR_CONTACTS);
       commit(types.SET_CONTACTS, payload);
       commit(types.SET_CONTACT_META, meta);
       commit(types.SET_CONTACT_UI_FLAG, { isFetching: false });
     } catch (error) {
+      if (request !== listRequest) return;
       commit(types.SET_CONTACT_UI_FLAG, { isFetching: false });
     }
   },
@@ -301,13 +315,16 @@ export const actions = {
 
   filter: async (
     { commit },
-    { page = 1, sortAttr, queryPayload, resetState = true } = {}
+    { page = 1, sortAttr, queryPayload, resetState = true, filters = {} } = {}
   ) => {
+    listRequest += 1;
+    const request = listRequest;
     commit(types.SET_CONTACT_UI_FLAG, { isFetching: true });
     try {
       const {
         data: { payload, meta },
-      } = await ContactAPI.filter(page, sortAttr, queryPayload);
+      } = await ContactAPI.filter(page, sortAttr, queryPayload, filters);
+      if (request !== listRequest) return [];
       if (resetState) {
         commit(types.CLEAR_CONTACTS);
         commit(types.SET_CONTACTS, payload);
@@ -316,6 +333,7 @@ export const actions = {
       }
       return payload;
     } catch (error) {
+      if (request !== listRequest) return [];
       commit(types.SET_CONTACT_UI_FLAG, { isFetching: false });
     }
     return [];

@@ -6,7 +6,7 @@
 #  activation_days              :integer          default(0), not null
 #  active                       :boolean          default(TRUE), not null
 #  adjustment_index             :string           default("IPCA"), not null
-#  adjustment_period_months     :integer          default(12), not null
+#  adjustment_period_months     :integer
 #  allow_standalone_sale        :boolean          default(TRUE), not null
 #  allow_variable_quantity      :boolean          default(TRUE), not null
 #  available_for                :jsonb            not null
@@ -15,7 +15,7 @@
 #  category                     :string
 #  commission_rate              :decimal(6, 2)    default(0.0), not null
 #  contract_template_name       :string
-#  contract_term_months         :integer          default(12), not null
+#  contract_term_months         :integer
 #  cost_cents                   :bigint           default(0), not null
 #  currency                     :string           default("BRL")
 #  custom_attributes            :jsonb            not null
@@ -101,8 +101,9 @@ module JrcCrm
     validates :sku, uniqueness: { scope: :account_id }, allow_blank: true
     validates :unit_price_cents, :cost_cents, :setup_fee_cents, :minimum_price_cents,
               :overage_unit_price_cents, numericality: { greater_than_or_equal_to: 0 }
-    validates :minimum_quantity, :contract_term_months, :adjustment_period_months,
+    validates :minimum_quantity, :adjustment_period_months,
               numericality: { greater_than: 0 }
+    validates :contract_term_months, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
     validates :activation_days, :validation_period_days,
               numericality: { greater_than_or_equal_to: 0 }
     validates :included_quantity, numericality: { greater_than_or_equal_to: 0 }
@@ -126,6 +127,17 @@ module JrcCrm
 
     def recurring?
       %w[monthly annual usage].include?(billing_model)
+    end
+
+    # Reuse the explicit implementation integration setting; product type and
+    # recurrence do not imply that implementation is required.
+    def requires_implementation
+      Array(integrations).include?('implementation')
+    end
+
+    def requires_implementation=(value)
+      self.integrations = Array(integrations) - ['implementation']
+      self.integrations += ['implementation'] if ActiveModel::Type::Boolean.new.cast(value)
     end
 
     def estimated_margin_cents

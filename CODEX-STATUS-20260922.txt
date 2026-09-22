@@ -1,0 +1,64 @@
+ M .github/workflows/build-ghcr.yml
+ M app/controllers/api/v1/accounts/contacts_controller.rb
+ M app/controllers/api/v1/accounts/crm/activities_controller.rb
+ M app/controllers/api/v1/accounts/crm/products_controller.rb
+ M app/controllers/api/v1/accounts/crm/sales_orders_controller.rb
+ M app/controllers/api/v1/accounts/crm/stages_controller.rb
+ M app/javascript/dashboard/api/contacts.js
+ M app/javascript/dashboard/api/crm/stages.js
+ M app/javascript/dashboard/api/specs/contacts.spec.js
+ M app/javascript/dashboard/i18n/locale/en/crm.json
+ M app/javascript/dashboard/i18n/locale/pt_BR/crm.json
+ M app/javascript/dashboard/routes/dashboard/contacts/pages/ContactsIndex.vue
+ M app/javascript/dashboard/routes/dashboard/crm/CrmLayout.vue
+ M app/javascript/dashboard/routes/dashboard/crm/components/kanban/DealsFunnelKanban.vue
+ M app/javascript/dashboard/routes/dashboard/crm/crmControlClasses.js
+ M app/javascript/dashboard/routes/dashboard/crm/views/activities/ActivitiesIndex.vue
+ M app/javascript/dashboard/routes/dashboard/crm/views/automations/AutomationsIndex.vue
+ M app/javascript/dashboard/routes/dashboard/crm/views/campaigns/CampaignsCrmIndex.vue
+ M app/javascript/dashboard/routes/dashboard/crm/views/contracts/ContractsView.vue
+ M app/javascript/dashboard/routes/dashboard/crm/views/deals/DealsIndex.vue
+ M app/javascript/dashboard/routes/dashboard/crm/views/leads/LeadConversionModal.vue
+ M app/javascript/dashboard/routes/dashboard/crm/views/leads/LeadCreateModal.vue
+ M app/javascript/dashboard/routes/dashboard/crm/views/leads/LeadDetailModal.vue
+ M app/javascript/dashboard/routes/dashboard/crm/views/orders/SalesOrderWizard.vue
+ M app/javascript/dashboard/routes/dashboard/crm/views/orders/SalesOrdersView.vue
+ M app/javascript/dashboard/routes/dashboard/crm/views/products/ProductsIndex.vue
+ M app/javascript/dashboard/routes/dashboard/crm/views/proposals/ProposalsIndex.vue
+ M app/javascript/dashboard/routes/dashboard/crm/views/settings/CrmSettingsView.vue
+ M app/javascript/dashboard/store/modules/contacts/actions.js
+ M app/javascript/dashboard/store/modules/contacts/mutations.js
+ M app/models/jrc_crm/activity.rb
+ M app/models/jrc_crm/order_item.rb
+ M app/models/jrc_crm/pipeline.rb
+ M app/models/jrc_crm/product.rb
+ M app/models/jrc_crm/sales_order.rb
+ M app/models/jrc_crm/stage.rb
+ M app/serializers/jrc_crm/activity_serializer.rb
+ M app/serializers/jrc_crm/product_serializer.rb
+ M app/serializers/jrc_crm/proposal_serializer.rb
+ M app/services/jrc_crm/order_financials.rb
+ M app/services/jrc_crm/order_pdf_service.rb
+ M app/services/jrc_crm/order_workflow_sync_service.rb
+ M app/services/jrc_crm/proposal_to_order_service.rb
+ M app/views/api/v1/accounts/contacts/active.json.jbuilder
+ M app/views/api/v1/accounts/contacts/filter.json.jbuilder
+ M app/views/api/v1/accounts/contacts/index.json.jbuilder
+ M app/views/api/v1/accounts/contacts/search.json.jbuilder
+ M app/views/api/v1/models/_account.json.jbuilder
+ M app/views/api/v1/models/_contact.json.jbuilder
+ M db/schema.rb
+?? CODEX-ALTERACOES-20260922.diff
+?? CODEX-STATUS-20260922.txt
+?? app/javascript/dashboard/routes/dashboard/crm/components/shared/ContactPicker.vue
+?? app/javascript/dashboard/routes/dashboard/crm/components/shared/OrderActivities.vue
+?? app/javascript/dashboard/routes/dashboard/crm/components/shared/OrderFinancialEditor.vue
+?? app/javascript/dashboard/routes/dashboard/crm/specs/
+?? app/javascript/dashboard/routes/dashboard/crm/useCrmTheme.js
+?? app/services/contacts/relationship_filter.rb
+?? db/migrate/20260922160000_extend_commercial_order_activities.rb
+?? docs/CRM-COMERCIAL-VALIDACAO-20260922.md
+?? spec/requests/api/v1/accounts/crm/commercial_complete_spec.rb
+?? spec/services/jrc_crm/commercial_documents_spec.rb
+?? spec/services/jrc_crm/order_financials_spec.rb
+?? vitest.commercial.config.ts
