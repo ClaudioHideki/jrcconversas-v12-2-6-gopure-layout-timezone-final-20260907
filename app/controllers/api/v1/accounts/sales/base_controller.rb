@@ -13,7 +13,7 @@ class Api::V1::Accounts::Sales::BaseController < Api::V1::Accounts::BaseControll
   end
 
   def use_account_timezone(&block)
-    timezone = ActiveSupport::TimeZone[Current.account.reporting_timezone] || Time.zone
+    timezone = Time.find_zone(Current.account.reporting_timezone) || Time.zone
     Time.use_zone(timezone, &block)
   end
 

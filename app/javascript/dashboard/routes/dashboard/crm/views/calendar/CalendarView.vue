@@ -195,7 +195,7 @@ onMounted(async () => {
           <RouterLink :to="{ name: 'crm_activities', query: { new: '1' } }" class="rounded-xl bg-[#7c3aed] px-4 py-2.5 text-sm font-semibold text-white shadow-md">
             <i class="i-lucide-plus mr-1 size-4" /> Novo compromisso
           </RouterLink>
-          <button type="button" :disabled="refreshing" @click="refresh" class="rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white shadow-md">
+          <button type="button" :disabled="refreshing" @click="refresh" class="rounded-xl bg-n-brand px-4 py-2.5 text-sm font-semibold text-white shadow-md disabled:opacity-60">
             <i class="i-lucide-refresh-cw mr-1 size-4" /> {{ t('CRM.HOMOLOGATION.REFRESH_CALENDAR') }}
           </button>
         </template>

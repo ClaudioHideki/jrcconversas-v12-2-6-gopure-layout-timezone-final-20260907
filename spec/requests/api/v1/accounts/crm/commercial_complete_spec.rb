@@ -9,6 +9,36 @@ RSpec.describe 'Commercial orders, contacts and isolation', type: :request do
   let(:base) { "/api/v1/accounts/#{account.id}" }
   before { account.enable_features!('jrc_crm') }
 
+  it 'keeps direct 100x20 and monthly 30 financials identical in preview, save, reload and PDF' do
+    scenarios = [
+      { billing: 'one_time', quantity: 100, price: 2000, initial: 200_000, mrr: 0, contract: nil, pdf: 'R$ 2.000,00' },
+      { billing: 'monthly', quantity: 1, price: 3000, initial: 0, mrr: 3000, contract: 36_000, pdf: 'R$ 360,00' }
+    ]
+    scenarios.each do |scenario|
+      product = create(:jrc_crm_product, account: account, sku: scenario[:billing], billing_model: scenario[:billing],
+        unit_price_cents: scenario[:price], setup_fee_cents: 0, contract_term_months: 12, requires_implementation: false)
+      payload = { sales_order: { contact_id: contact.id, status: 'pending', items: [
+        { product_id: product.id, quantity: scenario[:quantity], unit_cents: scenario[:price] }
+      ] } }
+      expected = { 'total_cents' => scenario[:initial], 'monthly_cents' => scenario[:mrr] }
+      post "#{base}/crm/sales_orders/preview", headers: headers, as: :json, params: payload
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(expected.merge('contract_total_cents' => scenario[:contract]))
+      post "#{base}/crm/sales_orders", headers: headers, as: :json, params: payload
+      expect(response).to have_http_status(:created)
+      id = response.parsed_body.fetch('id')
+      expect(response.parsed_body).to include(expected)
+      expect(JrcCrm::SalesOrder.find(id).implementation_items).to be_empty
+      get "#{base}/crm/sales_orders/#{id}", headers: headers
+      expect(response.parsed_body).to include(expected)
+      get "#{base}/crm/sales_orders/#{id}/pdf", headers: headers
+      expect(response).to have_http_status(:ok)
+      expect(response.media_type).to eq('application/pdf')
+      expect(response.body).to include(scenario[:pdf])
+      File.binwrite(Rails.root.join("tmp/r3-#{scenario[:billing]}.pdf"), response.body) if ENV['CRM_QA_ARTIFACTS'] == '1'
+    end
+  end
+
   it 'exposes the configured CRM theme without exposing arbitrary account attributes' do
     account.update!(custom_attributes: { crm_theme: 'gopure', internal_config: 'private-value' })
     get base, headers: headers

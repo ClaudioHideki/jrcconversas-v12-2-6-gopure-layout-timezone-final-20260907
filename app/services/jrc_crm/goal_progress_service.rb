@@ -9,9 +9,10 @@ module JrcCrm
 
     attr_reader :goal
 
-    def initialize(goal:, user_id: nil)
+    def initialize(goal:, user_id: nil, as_of: nil)
       @goal = goal
       @user_id = user_id
+      @as_of = as_of
     end
 
     def call
@@ -43,15 +44,22 @@ module JrcCrm
         product = goal.account.jrc_crm_products.find_by(id: product_id)
         next unless product
         target = (row['target_cents'] || row[:target_cents] || 0).to_i
-        realized = order_scope_for(product_id: product_id).joins(:order_items)
-                   .where(jrc_crm_order_items: { product_id: product_id })
-                   .sum('jrc_crm_sales_orders.total_cents')
+        items = JrcCrm::OrderItem.where(sales_order_id: order_scope.select(:id), product_id: product_id)
+        realized = items.sum(goal.metric == 'mrr' ? :recurring_cents : :one_time_cents)
         { product_id: product_id, name: product.name, target_cents: target, realized_cents: realized,
           percent: percent(realized, target) }
       end
     end
 
+    def realized_through(date)
+      self.class.new(goal: goal, user_id: @user_id, as_of: date).send(:realized_value)
+    end
+
     private
+
+    def period_end
+      [goal.period_end, @as_of].compact.min.end_of_day
+    end
 
     def monetary?
       MONETARY_METRICS.include?(goal.metric)
@@ -126,37 +134,41 @@ module JrcCrm
     def order_scope_for(product_id: nil)
       scope = goal.account.jrc_crm_sales_orders
       date_sql = 'COALESCE(jrc_crm_sales_orders.sold_at, jrc_crm_sales_orders.closed_at, jrc_crm_sales_orders.created_at) BETWEEN ? AND ?'
-      scope = scope.where(date_sql, goal.period_start.beginning_of_day, goal.period_end.end_of_day)
+      scope = scope.where(date_sql, goal.period_start.beginning_of_day, period_end)
       owner_id = @user_id.presence || goal.user_id
       scope = scope.where(owner_id: owner_id) if owner_id.present?
       scope = scope.where(business_unit_id: goal.business_unit_id) if goal.business_unit_id.present?
+      scope = scope.where(owner_id: goal.team.members.select(:id)) if goal.team_id.present?
       if product_id.present?
-        scope = scope.joins(:order_items).where(jrc_crm_order_items: { product_id: product_id }).distinct
+        scope = scope.where(id: JrcCrm::OrderItem.where(product_id: product_id).select(:sales_order_id))
       end
       apply_settings(scope)
     end
 
     def order_items_scope
-      JrcCrm::OrderItem.where(sales_order_id: order_scope.select(:id))
+      items = JrcCrm::OrderItem.where(sales_order_id: order_scope.select(:id))
+      goal.product_id.present? ? items.where(product_id: goal.product_id) : items
     end
 
     def contract_scope
-      scope = goal.account.jrc_crm_contracts.where(created_at: goal.period_start.beginning_of_day..goal.period_end.end_of_day)
+      scope = goal.account.jrc_crm_contracts.where(created_at: goal.period_start.beginning_of_day..period_end)
       scope = scope.where(owner_id: (@user_id.presence || goal.user_id)) if @user_id.present? || goal.user_id.present?
       scope = scope.where(business_unit_id: goal.business_unit_id) if goal.business_unit_id.present?
+      scope = scope.where(owner_id: goal.team.members.select(:id)) if goal.team_id.present?
       scope
     end
 
     def deal_scope
       scope = goal.account.jrc_crm_deals.where(status: 'won')
-      scope = scope.where(updated_at: goal.period_start.beginning_of_day..goal.period_end.end_of_day)
+      scope = scope.where(updated_at: goal.period_start.beginning_of_day..period_end)
       owner_id = @user_id.presence || goal.user_id
       scope = scope.where(owner_id: owner_id) if owner_id.present?
+      scope = scope.where(team_id: goal.team_id) if goal.team_id.present?
       scope
     end
 
     def conversion_percent
-      scope = goal.account.jrc_crm_deals.where(updated_at: goal.period_start.beginning_of_day..goal.period_end.end_of_day)
+      scope = goal.account.jrc_crm_deals.where(updated_at: goal.period_start.beginning_of_day..period_end)
       owner_id = @user_id.presence || goal.user_id
       scope = scope.where(owner_id: owner_id) if owner_id.present?
       closed = scope.where(status: %w[won lost]).count
@@ -182,10 +194,18 @@ module JrcCrm
       scope
     end
 
+    def effective_order_statuses
+      statuses = ORDER_STATUSES.fetch(goal.calculation_method.to_s, ORDER_STATUSES['approved_orders'])
+      settings = (goal.settings || {}).with_indifferent_access
+      selected = settings[:statuses].presence || settings[:order_statuses].presence
+      selected ? statuses & Array(selected).map(&:to_s) : statuses
+    end
+
     def effective_criteria
       { metric: goal.metric, period_start: goal.period_start, period_end: goal.period_end,
         user_id: @user_id.presence || goal.user_id, business_unit_id: goal.business_unit_id,
-        product_id: goal.product_id, settings: goal.settings || {} }
+        product_id: goal.product_id, calculation_method: goal.calculation_method,
+        order_statuses: effective_order_statuses, settings: goal.settings || {} }
     end
 
     def percent(value, target)

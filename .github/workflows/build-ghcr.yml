@@ -1,4 +1,4 @@
-name: Build GoPure - CRM auditado r2
+name: Build GoPure - CRM correcoes r3
 
 concurrency:
   group: gopure-nico-${{ github.ref }}
@@ -100,10 +100,10 @@ jobs:
         include:
           - component: app
             dockerfile: ./docker/Dockerfile
-            tag: 4.16.2-gopure-crm-comercial-20260922-r2
+            tag: 4.16.2-gopure-crm-comercial-20260923-r3
           - component: nico-runtime
             dockerfile: ./docker/nico-runtime.Dockerfile
-            tag: nico-runtime-gopure-crm-comercial-20260922-r2
+            tag: nico-runtime-gopure-crm-comercial-20260923-r3
 
     permissions:
       contents: read
@@ -131,7 +131,7 @@ jobs:
           flavor: latest=false
           tags: |
             type=raw,value=${{ matrix.tag }}
-            type=sha,prefix=${{ matrix.component }}-sha-
+            type=sha,format=long,prefix=${{ matrix.component }}-sha-
 
       - name: Construir e publicar imagem
         uses: docker/build-push-action@v6

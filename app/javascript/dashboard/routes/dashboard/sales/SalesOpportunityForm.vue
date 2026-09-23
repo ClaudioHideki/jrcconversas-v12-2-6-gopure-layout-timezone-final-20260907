@@ -44,6 +44,7 @@ const controlClass =
   'w-full rounded-lg border border-n-weak bg-n-solid-2 px-3 py-2 text-sm text-n-slate-12 outline-none focus:border-n-brand';
 
 const save = async () => {
+  if (isSaving.value) return;
   isSaving.value = true;
   try {
     const request = props.opportunity
