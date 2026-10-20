@@ -32,5 +32,6 @@ class JrcCampaigns::Consent < ApplicationRecord
 
   before_validation { self.phone_number = JrcCampaigns::PhoneNormalizer.call(phone_number) }
   validates :phone_number, :evidence, :granted_at, presence: true
+  validates :purpose, inclusion: { in: %w[whatsapp_campaigns] }, allow_nil: true
   validates :phone_number, uniqueness: { scope: :account_id, conditions: -> { where(revoked_at: nil) } }, if: -> { revoked_at.nil? }
 end

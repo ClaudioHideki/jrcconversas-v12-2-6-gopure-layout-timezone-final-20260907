@@ -1,5 +1,10 @@
 <script setup>
 import {
+  sourceInboxesForChannel,
+  evolutionMinimumInterval,
+  testResultAlert,
+} from '../evolutionHelpers';
+import {
   computed,
   onBeforeUnmount,
   onMounted,
@@ -48,6 +53,7 @@ const recipientPagination = ref({
 });
 const testDestination = ref('');
 const testSending = ref(false);
+const latestTest = ref(null);
 let audienceTimer;
 let recipientSearchTimer;
 
@@ -118,6 +124,7 @@ const audienceSourceSignature = computed(() =>
     pipeline_id: form.audience_config.pipeline_id,
     stage_ids: form.audience_config.stage_ids,
     sanitized_list_id: form.audience_config.sanitized_list_id,
+    sending_inbox_ids: selectedInboxIds.value,
   })
 );
 const deliveryChannelLabel = computed(() =>
@@ -132,19 +139,29 @@ const availableSendingInboxes = computed(() =>
     ? props.metadata.email_inboxes || []
     : props.metadata.whatsapp_inboxes || props.metadata.inboxes || []
 );
-const availableSourceInboxes = computed(() => {
-  const channelType = isEmail.value
-    ? 'Channel::Email'
-    : 'Channel::Whatsapp';
-  return (props.metadata.source_inboxes || []).filter(
-    inbox => inbox.channel_type === channelType
-  );
-});
+const availableSourceInboxes = computed(() =>
+  sourceInboxesForChannel(props.metadata, isEmail.value)
+);
 const selectedSendingInboxes = computed(() =>
   availableSendingInboxes.value.filter(inbox =>
     selectedInboxIds.value.includes(Number(inbox.id))
   )
 );
+const usesEvolution = computed(() =>
+  selectedSendingInboxes.value.some(inbox => inbox.connector === 'evolution')
+);
+watch(selectedSendingInboxes, inboxes => {
+  const minimum = evolutionMinimumInterval(inboxes);
+  if (minimum) {
+    form.delay_min_seconds = Math.max(form.delay_min_seconds, minimum);
+    form.delay_max_seconds = Math.max(form.delay_max_seconds, minimum);
+    form.steps.forEach(message => {
+      if (!message.id && !message.template_name && !message.body)
+        message.kind = 'text';
+    });
+  }
+});
+const testKeys = new Map();
 const templates = computed(() => {
   const uniqueTemplates = new Map();
   selectedSendingInboxes.value.forEach(inbox => {
@@ -477,9 +494,7 @@ const preflightItems = computed(() => {
           ? 'JRC_CAMPAIGNS.WIZARD.WARNING_NO_EMAIL'
           : 'JRC_CAMPAIGNS.WIZARD.WARNING_NO_WHATSAPP',
         {
-          count: formatNumber(
-            audiencePreview.value.without_destination_count
-          ),
+          count: formatNumber(audiencePreview.value.without_destination_count),
         }
       ),
     });
@@ -656,7 +671,9 @@ const moveInbox = (inboxId, direction) => {
   ];
 };
 const addMessage = () => {
-  const message = defaultMessage(isEmail.value ? 'email' : 'template');
+  let kind = usesEvolution.value ? 'text' : 'template';
+  if (isEmail.value) kind = 'email';
+  const message = defaultMessage(kind);
   message.position = form.steps.length;
   form.steps.push(message);
   activeMessageIndex.value = form.steps.length - 1;
@@ -833,6 +850,7 @@ const refreshAudiencePreview = async () => {
   previewingAudience.value = true;
   try {
     const { data } = await JrcCampaignsAPI.audiencePreview({
+      inbox_id: form.inboxLinks[0]?.inbox_id,
       audience_type: form.audience_type,
       delivery_channel: form.delivery_channel,
       audience_config: form.audience_config,
@@ -856,6 +874,7 @@ const refreshRecipientManager = async () => {
   try {
     const { data } = await JrcCampaignsAPI.audiencePreview(
       {
+        inbox_id: form.inboxLinks[0]?.inbox_id,
         audience_type: form.audience_type,
         delivery_channel: form.delivery_channel,
         audience_config: form.audience_config,
@@ -932,6 +951,7 @@ const save = async startAfterSave => {
   }
 };
 const sendTest = async (message = activeMessage.value) => {
+  if (testSending.value) return;
   if (!testDestination.value.trim()) {
     useAlert(
       t(
@@ -946,16 +966,40 @@ const sendTest = async (message = activeMessage.value) => {
     useAlert(t('JRC_CAMPAIGNS.ALERTS.TEST_CONFIG_REQUIRED'));
     return;
   }
+  const inbox = selectedSendingInboxes.value.find(
+    item => Number(item.id) === Number(form.inboxLinks[0].inbox_id)
+  );
+  const evolution = inbox?.connector === 'evolution';
+  if (
+    evolution &&
+    !window.confirm(
+      t('JRC_CAMPAIGNS.EVOLUTION.CONFIRM_TEST', {
+        sender: inbox.phone_number,
+        recipient: testDestination.value,
+      })
+    )
+  )
+    return;
   testSending.value = true;
   try {
-    await JrcCampaignsAPI.testMessage({
+    const payload = {
       delivery_channel: form.delivery_channel,
       phone_number: isEmail.value ? null : testDestination.value,
       email: isEmail.value ? testDestination.value : null,
       inbox_id: form.inboxLinks[0].inbox_id,
       step: serializeStep(message),
-    });
-    useAlert(t('JRC_CAMPAIGNS.ALERTS.TEST_SENT'));
+    };
+    if (evolution) {
+      const signature = JSON.stringify(payload);
+      if (!testKeys.has(signature))
+        testKeys.set(signature, crypto.randomUUID());
+      payload.idempotency_key = testKeys.get(signature);
+      payload.operator_confirmed = true;
+    }
+    const { data } = await JrcCampaignsAPI.testMessage(payload);
+    if (data.test_delivery_id)
+      latestTest.value = { ...data, id: data.test_delivery_id };
+    useAlert(t(testResultAlert(data)));
   } catch (error) {
     useAlert(
       error?.response?.data?.errors?.join(', ') ||
@@ -973,6 +1017,14 @@ const validateMessage = message => {
         : 'JRC_CAMPAIGNS.ALERTS.MESSAGE_INVALID'
     )
   );
+};
+const refreshTestResult = async () => {
+  try {
+    const { data } = await JrcCampaignsAPI.testDelivery(latestTest.value.id);
+    latestTest.value = data;
+  } catch {
+    useAlert(t('JRC_CAMPAIGNS.ALERTS.ACTION_FAILED'));
+  }
 };
 const previewVariableValue = (message, variable) => {
   const mapping = message.variableMappings[variable];
@@ -1077,7 +1129,11 @@ const hydrate = campaign => {
   form.steps = (
     campaign.steps?.length
       ? campaign.steps
-      : [defaultMessage(form.delivery_channel === 'email' ? 'email' : 'template')]
+      : [
+          defaultMessage(
+            form.delivery_channel === 'email' ? 'email' : 'template'
+          ),
+        ]
   ).map((message, position) => {
     const hydrated = {
       ...defaultMessage(),
@@ -1245,6 +1301,26 @@ onBeforeUnmount(() => {
         class="mx-auto grid w-full max-w-[1540px] gap-5 p-5 lg:grid-cols-12 lg:p-8"
       >
         <section class="lg:col-span-9">
+          <div
+            v-if="latestTest"
+            class="mb-4 rounded-lg border border-n-weak p-3 text-sm"
+            role="status"
+          >
+            {{ t('JRC_CAMPAIGNS.EVOLUTION.TEST_RESULT') }} #{{
+              latestTest.id
+            }}
+            · {{ latestTest.provider_status || latestTest.status }}
+            <p v-if="latestTest.error_message">
+              {{ latestTest.error_message }}
+            </p>
+            <button
+              type="button"
+              class="mt-2 rounded-lg border border-n-strong px-3 py-2"
+              @click="refreshTestResult"
+            >
+              {{ t('JRC_CAMPAIGNS.REFRESH') }}
+            </button>
+          </div>
           <div v-if="stepIndex === 0" class="space-y-5">
             <div>
               <h3 class="text-xl font-semibold text-n-slate-12">
@@ -1283,9 +1359,14 @@ onBeforeUnmount(() => {
                 >
                   <span
                     class="flex size-9 items-center justify-center rounded-xl bg-n-alpha-2 text-n-slate-11"
-                    ><span class="size-5" :class="[channel.icon]"
+                    ><span
+                      class="size-5 shrink-0"
+                      :class="channel.icon"
+                      aria-hidden="true"
                   /></span>
-                  <span class="mt-3 block text-sm font-semibold text-n-slate-12">
+                  <span
+                    class="mt-3 block text-sm font-semibold text-n-slate-12"
+                  >
                     {{ channel.label }}
                   </span>
                   <span class="mt-1 block text-xs leading-5 text-n-slate-10">
@@ -1527,7 +1608,8 @@ onBeforeUnmount(() => {
                     },
                   ]"
                   :key="item.key"
-                  class="campaign-preview-card rounded-xl border p-4" :class="`campaign-preview-card-${index + 1}`"
+                  class="campaign-preview-card rounded-xl border p-4"
+                  :class="`campaign-preview-card-${index + 1}`"
                 >
                   <p class="text-xs text-n-slate-10">{{ item.label }}</p>
                   <p class="mt-2 text-xl font-semibold" :class="item.className">
@@ -1538,6 +1620,25 @@ onBeforeUnmount(() => {
                     }}
                   </p>
                 </div>
+              </div>
+              <div
+                v-if="audiencePreview.rejections?.length"
+                class="mt-4 max-h-48 overflow-y-auto rounded-lg border border-n-weak p-3 text-sm"
+                role="status"
+              >
+                <p class="font-medium">
+                  {{ t('JRC_CAMPAIGNS.EVOLUTION.REJECTIONS') }}
+                </p>
+                <p
+                  v-for="rejection in audiencePreview.rejections"
+                  :key="rejection.selection_key"
+                  class="mt-2"
+                >
+                  {{
+                    rejection.name || rejection.phone_number || rejection.email
+                  }}
+                  · {{ rejection.reason }}
+                </p>
               </div>
               <button
                 v-if="Number(audiencePreview.available_recipients || 0) > 0"
@@ -1602,9 +1703,7 @@ onBeforeUnmount(() => {
                     v-model="recipientSearch"
                     type="search"
                     class="w-full rounded-xl border border-n-weak bg-n-background py-2.5 pl-9 pr-3 text-sm"
-                    :placeholder="
-                      $t('JRC_CAMPAIGNS.WIZARD.SEARCH_RECIPIENTS')
-                    "
+                    :placeholder="$t('JRC_CAMPAIGNS.WIZARD.SEARCH_RECIPIENTS')"
                   />
                 </div>
                 <div
@@ -1727,7 +1826,12 @@ onBeforeUnmount(() => {
                           class="block truncate text-sm font-medium text-n-slate-12"
                           >{{ inbox.name }}</span
                         ><span class="block truncate text-xs text-n-slate-9"
-                          >{{ inbox.email_address || inbox.phone_number }} ·
+                          >{{
+                            inbox.connector === 'evolution'
+                              ? t('JRC_CAMPAIGNS.EVOLUTION.SENDER')
+                              : ''
+                          }}
+                          {{ inbox.email_address || inbox.phone_number }} ·
                           {{ inbox.provider }}</span
                         ></span
                       ><span
@@ -2167,7 +2271,7 @@ onBeforeUnmount(() => {
                       v-model="activeMessage.kind"
                       class="mt-1.5 w-full rounded-xl border border-n-weak bg-n-background px-3 py-2.5 text-sm"
                     >
-                      <option value="template">
+                      <option value="template" :disabled="usesEvolution">
                         {{ $t('JRC_CAMPAIGNS.WIZARD.TEMPLATE') }}
                       </option>
                       <option value="text">
@@ -2215,7 +2319,8 @@ onBeforeUnmount(() => {
                       rows="10"
                       class="mt-1.5 w-full rounded-xl border border-n-weak bg-n-background px-3 py-2.5 text-sm"
                       :placeholder="$t('JRC_CAMPAIGNS.WIZARD.BODY_PLACEHOLDER')"
-                  /></label>
+                    />
+                  </label>
                   <label class="block text-xs font-medium text-n-slate-10"
                     >{{ $t('JRC_CAMPAIGNS.WIZARD.EMAIL_ATTACHMENT') }}
                     <input
@@ -2517,17 +2622,24 @@ onBeforeUnmount(() => {
                         {{ selectedSendingInboxes[0]?.email_address || '—' }}
                       </p>
                       <p class="mt-1 font-semibold">
-                        {{ activeMessage.subject || $t('JRC_CAMPAIGNS.WIZARD.EMAIL_NO_SUBJECT') }}
+                        {{
+                          activeMessage.subject ||
+                          $t('JRC_CAMPAIGNS.WIZARD.EMAIL_NO_SUBJECT')
+                        }}
                       </p>
                     </div>
-                    <p class="min-h-56 whitespace-pre-wrap p-4 text-sm leading-6">
+                    <p
+                      class="min-h-56 whitespace-pre-wrap p-4 text-sm leading-6"
+                    >
                       {{ previewText(activeMessage) }}
                     </p>
                     <p
                       v-if="activeMessage.file_name"
                       class="border-t border-slate-200 px-4 py-3 text-xs text-slate-500"
                     >
-                      <span class="i-lucide-paperclip mr-1 inline-block size-3" />
+                      <span
+                        class="i-lucide-paperclip mr-1 inline-block size-3"
+                      />
                       {{ activeMessage.file_name }}
                     </p>
                   </div>
@@ -2634,7 +2746,8 @@ onBeforeUnmount(() => {
                   },
                 ]"
                 :key="card.title"
-                class="campaign-review-card rounded-2xl border p-5" :class="`campaign-review-card-${index + 1}`"
+                class="campaign-review-card rounded-2xl border p-5"
+                :class="`campaign-review-card-${index + 1}`"
               >
                 <div class="flex items-center gap-2">
                   <span
@@ -2666,7 +2779,7 @@ onBeforeUnmount(() => {
                 </h4>
                 <div class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
                   <div
-                    v-for="(item, index) in [
+                    v-for="item in [
                       {
                         label: $t('JRC_CAMPAIGNS.WIZARD.ELIGIBLE'),
                         value: formatNumber(eligibleCount),
@@ -2786,7 +2899,7 @@ onBeforeUnmount(() => {
               </h3>
               <div class="mt-5 space-y-4">
                 <div
-                  v-for="(item, index) in [
+                  v-for="item in [
                     {
                       icon: 'i-lucide-users-round',
                       label: $t('JRC_CAMPAIGNS.WIZARD.REVIEW_CONTACTS'),
@@ -2798,7 +2911,9 @@ onBeforeUnmount(() => {
                             }),
                     },
                     {
-                      icon: isEmail ? 'i-lucide-mail' : 'i-lucide-message-circle',
+                      icon: isEmail
+                        ? 'i-lucide-mail'
+                        : 'i-lucide-message-circle',
                       label: $t('JRC_CAMPAIGNS.FILTERS.CHANNEL'),
                       value: deliveryChannelLabel,
                     },
@@ -2938,4 +3053,68 @@ onBeforeUnmount(() => {
     </footer>
   </div>
 </template>
-<style scoped>.campaign-channel-panel{background:#eff6ff!important;border-color:#93c5fd!important}.campaign-source-panel{background:#f5f3ff!important;border-color:#c4b5fd!important}.campaign-preview-panel{background:#ecfeff!important;border-color:#67e8f9!important}.campaign-preview-card-1{background:#eff6ff!important;border-color:#93c5fd!important;border-top:4px solid #2563eb!important}.campaign-preview-card-2{background:#ecfdf5!important;border-color:#86efac!important;border-top:4px solid #16a34a!important}.campaign-preview-card-3{background:#fff7ed!important;border-color:#fdba74!important;border-top:4px solid #f97316!important}.campaign-preview-card-4{background:#fff1f2!important;border-color:#fda4af!important;border-top:4px solid #e11d48!important}.campaign-preview-card-5{background:#f5f3ff!important;border-color:#c4b5fd!important;border-top:4px solid #7c3aed!important}.campaign-preview-card-6{background:#fdf2f8!important;border-color:#f9a8d4!important;border-top:4px solid #ec4899!important}.campaign-review-card-1{background:#eff6ff!important;border-color:#93c5fd!important;border-top:4px solid #2563eb!important}.campaign-review-card-2{background:#ecfdf5!important;border-color:#86efac!important;border-top:4px solid #16a34a!important}.campaign-review-card-3{background:#f5f3ff!important;border-color:#c4b5fd!important;border-top:4px solid #7c3aed!important}.campaign-summary-panel{background:#fff7ed!important;border-color:#fdba74!important;border-top:4px solid #f97316!important}</style>
+
+<style scoped>
+.campaign-channel-panel {
+  background: #eff6ff !important;
+  border-color: #93c5fd !important;
+}
+.campaign-source-panel {
+  background: #f5f3ff !important;
+  border-color: #c4b5fd !important;
+}
+.campaign-preview-panel {
+  background: #ecfeff !important;
+  border-color: #67e8f9 !important;
+}
+.campaign-preview-card-1 {
+  background: #eff6ff !important;
+  border-color: #93c5fd !important;
+  border-top: 4px solid #2563eb !important;
+}
+.campaign-preview-card-2 {
+  background: #ecfdf5 !important;
+  border-color: #86efac !important;
+  border-top: 4px solid #16a34a !important;
+}
+.campaign-preview-card-3 {
+  background: #fff7ed !important;
+  border-color: #fdba74 !important;
+  border-top: 4px solid #f97316 !important;
+}
+.campaign-preview-card-4 {
+  background: #fff1f2 !important;
+  border-color: #fda4af !important;
+  border-top: 4px solid #e11d48 !important;
+}
+.campaign-preview-card-5 {
+  background: #f5f3ff !important;
+  border-color: #c4b5fd !important;
+  border-top: 4px solid #7c3aed !important;
+}
+.campaign-preview-card-6 {
+  background: #fdf2f8 !important;
+  border-color: #f9a8d4 !important;
+  border-top: 4px solid #ec4899 !important;
+}
+.campaign-review-card-1 {
+  background: #eff6ff !important;
+  border-color: #93c5fd !important;
+  border-top: 4px solid #2563eb !important;
+}
+.campaign-review-card-2 {
+  background: #ecfdf5 !important;
+  border-color: #86efac !important;
+  border-top: 4px solid #16a34a !important;
+}
+.campaign-review-card-3 {
+  background: #f5f3ff !important;
+  border-color: #c4b5fd !important;
+  border-top: 4px solid #7c3aed !important;
+}
+.campaign-summary-panel {
+  background: #fff7ed !important;
+  border-color: #fdba74 !important;
+  border-top: 4px solid #f97316 !important;
+}
+</style>

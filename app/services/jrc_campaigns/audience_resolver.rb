@@ -1,5 +1,3 @@
-require 'set'
-
 class JrcCampaigns::AudienceResolver
   Entry = Data.define(:contact, :name, :phone_number, :email, :source, :metadata) do
     def destination(channel)
@@ -38,25 +36,35 @@ class JrcCampaigns::AudienceResolver
   def build_preview
     resolved = resolved_entries
     counters = Hash.new(0)
+    rejections = []
+    evolution = campaign.whatsapp? && campaign.evolution_connectors.any?
     eligible = resolved.filter_map do |entry|
       normalized = normalized_entry(entry)
       destination = normalized.destination(campaign.delivery_channel)
       if destination.blank?
         counters[:without_destination_count] += 1
+        rejections << rejection_json(entry, normalized, campaign.email? ? 'E-mail inválido.' : 'Telefone inválido.')
         next
       end
       if campaign.whatsapp? && blacklisted_phones.include?(destination)
         counters[:blacklisted_count] += 1
+        rejections << rejection_json(entry, normalized, 'Destinatário na blacklist.')
         next
       end
       if entry.contact&.blocked?
         counters[:blocked_count] += 1
+        rejections << rejection_json(entry, normalized, 'Contato bloqueado.')
         next
       end
 
-      if campaign.whatsapp? && JrcCampaigns::EligibilityPolicy.new(account: account, phone_number: destination, contact: entry.contact).rejection_reason
-        counters[:without_consent_count] += 1
-        next
+      if campaign.whatsapp?
+        reason = JrcCampaigns::EligibilityPolicy.new(account: account, phone_number: destination, contact: entry.contact,
+                                                     purpose: evolution ? 'whatsapp_campaigns' : nil).rejection_reason
+        if reason
+          counters[reason == 'Telefone inválido.' ? :without_destination_count : :without_consent_count] += 1
+          rejections << rejection_json(entry, normalized, reason)
+          next
+        end
       end
 
       normalized
@@ -76,9 +84,14 @@ class JrcCampaigns::AudienceResolver
       blocked_count: counters[:blocked_count],
       without_consent_count: counters[:without_consent_count],
       duplicate_count: eligible.size - selectable_entries.size,
+      rejections: rejections,
       selectable_entries: selectable_entries,
       entries: selected_entries
     }
+  end
+
+  def rejection_json(entry, normalized, reason)
+    { selection_key: entry.selection_key, name: entry.name, phone_number: normalized.phone_number, email: normalized.email, reason: reason }
   end
 
   def selected_by_user?(entry)

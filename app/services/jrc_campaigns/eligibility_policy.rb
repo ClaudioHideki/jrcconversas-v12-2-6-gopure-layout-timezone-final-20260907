@@ -1,16 +1,18 @@
 class JrcCampaigns::EligibilityPolicy
-  def initialize(account:, phone_number:, contact: nil)
+  def initialize(account:, phone_number:, contact: nil, purpose: nil)
     @account = account
     @phone_number = JrcCampaigns::PhoneNormalizer.call(phone_number)
     @contact = contact
+    @purpose = purpose
   end
 
   def rejection_reason
-    return 'Telefone inválido.' if phone_number.blank?
+    return 'Telefone inválido.' unless phone_number.match?(/\A\+[1-9]\d{7,14}\z/)
     return 'Destinatário na blacklist.' if account.jrc_campaign_blacklists.exists?(phone_number: phone_number)
     return 'Contato bloqueado.' if blocked?
-    return 'Consentimento positivo não registrado ou revogado.' unless JrcCampaigns::Consent.active.exists?(account: account,
-                                                                                                            phone_number: phone_number)
+    consent = JrcCampaigns::Consent.active.where(account: account, phone_number: phone_number)
+    return 'Consentimento positivo não registrado ou revogado.' unless consent.exists?
+    return 'Consentimento sem finalidade confirmada para campanhas e testes WhatsApp.' if @purpose && !consent.exists?(purpose: @purpose)
 
     nil
   end

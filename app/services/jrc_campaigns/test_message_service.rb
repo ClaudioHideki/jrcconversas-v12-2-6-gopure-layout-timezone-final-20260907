@@ -2,7 +2,8 @@ class JrcCampaigns::TestMessageService
   CampaignContext = Data.define(:account)
   RecipientContext = Data.define(:campaign, :contact, :name, :phone_number, :email)
 
-  def initialize(account:, user:, delivery_channel: 'whatsapp', phone_number: nil, email: nil, inbox_id:, step:)
+  def initialize(account:, user:, delivery_channel: 'whatsapp', phone_number: nil, email: nil, inbox_id:, step:,
+                 idempotency_key: nil, operator_confirmed: false)
     @account = account
     @user = user
     @delivery_channel = delivery_channel.presence || 'whatsapp'
@@ -10,6 +11,8 @@ class JrcCampaigns::TestMessageService
     @email = JrcCampaigns::EmailNormalizer.call(email)
     @inbox = account.inboxes.includes(:channel).find(inbox_id)
     @step = step.to_h.with_indifferent_access
+    @idempotency_key = idempotency_key
+    @operator_confirmed = operator_confirmed
   end
 
   def perform
@@ -27,6 +30,9 @@ class JrcCampaigns::TestMessageService
 
   def send_whatsapp
     raise ArgumentError, 'Informe um número válido para o teste.' if phone_number.blank?
+    connector = JrcCampaigns::EvolutionConnector.for(inbox)
+    return send_evolution(connector) if connector
+
     raise ArgumentError, 'A caixa selecionada não é WhatsApp.' unless channel.is_a?(Channel::Whatsapp)
 
     eligibility = JrcCampaigns::EligibilityPolicy.new(account: account, phone_number: phone_number)
@@ -59,6 +65,14 @@ class JrcCampaigns::TestMessageService
       email: email,
       delivery_channel: 'email'
     }
+  end
+
+  def send_evolution(connector)
+    rendered_step = %w[kind body media_url file_name].index_with { |key| renderer.render(effective_value(key)) }
+    JrcCampaigns::EvolutionTestService.new(
+      connector: connector, user: user, phone_number: phone_number, step: rendered_step,
+      idempotency_key: @idempotency_key, operator_confirmed: @operator_confirmed
+    ).perform
   end
 
   def channel

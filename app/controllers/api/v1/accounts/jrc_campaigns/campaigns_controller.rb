@@ -44,7 +44,9 @@ class Api::V1::Accounts::JrcCampaigns::CampaignsController < Api::V1::Accounts::
       phone_number: test_message_params[:phone_number],
       email: test_message_params[:email],
       inbox_id: test_message_params[:inbox_id],
-      step: test_message_params[:step]
+      step: test_message_params[:step],
+      idempotency_key: test_message_params[:idempotency_key],
+      operator_confirmed: test_message_params[:operator_confirmed]
     ).perform
     render json: result
   rescue StandardError => e
@@ -166,7 +168,8 @@ class Api::V1::Accounts::JrcCampaigns::CampaignsController < Api::V1::Accounts::
   end
 
   def audience_preview_params
-    params.require(:campaign).permit(:audience_type, :delivery_channel, audience_config: {})
+    params.require(:campaign).permit(:audience_type, :delivery_channel, :inbox_id,
+                                    campaign_inboxes_attributes: [:inbox_id, :enabled, :position], audience_config: {})
   end
 
   def test_message_params
@@ -175,6 +178,8 @@ class Api::V1::Accounts::JrcCampaigns::CampaignsController < Api::V1::Accounts::
       :phone_number,
       :email,
       :inbox_id,
+      :idempotency_key,
+      :operator_confirmed,
       step: [
         :kind, :subject, :body, :media_url, :file_name, :media_asset_id, :template_name, :template_namespace, :template_language,
         { template_params: {}, inbox_overrides: {} }

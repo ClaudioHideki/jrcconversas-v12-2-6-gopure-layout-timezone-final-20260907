@@ -1,0 +1,13 @@
+# Merge with the existing GoPure Compose; retain its databases, volumes and secrets.
+# Set GOPURE_CAMPAIGNS_IMAGE to the verified GHCR reference pinned by digest.
+x-evolution-environment: &evolution-environment
+  JRC_CAMPAIGNS_EVOLUTION_CONNECTORS: ${JRC_CAMPAIGNS_EVOLUTION_CONNECTORS:-[]}
+  JRC_CAMPAIGNS_EVOLUTION_DEMO_API_KEY: ${JRC_CAMPAIGNS_EVOLUTION_DEMO_API_KEY:-}
+
+services:
+  rails:
+    image: ${GOPURE_CAMPAIGNS_IMAGE:?Informe a imagem GoPure validada com digest}
+    environment: *evolution-environment
+  sidekiq:
+    image: ${GOPURE_CAMPAIGNS_IMAGE:?Informe a mesma imagem GoPure validada com digest}
+    environment: *evolution-environment

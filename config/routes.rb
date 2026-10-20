@@ -251,6 +251,7 @@ Rails.application.routes.draw do
             resources :activities, only: :update
           end
           namespace :jrc_campaigns do
+            resources :test_deliveries, only: [:index, :show]
             resources :consents, only: [:index, :create, :destroy]
             resource :metadata, only: :show, controller: :metadata
             resources :blacklists, only: [:index, :create, :destroy]

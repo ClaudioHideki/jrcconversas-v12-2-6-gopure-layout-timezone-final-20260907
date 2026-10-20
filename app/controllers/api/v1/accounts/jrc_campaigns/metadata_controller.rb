@@ -26,6 +26,12 @@ class Api::V1::Accounts::JrcCampaigns::MetadataController < Api::V1::Accounts::J
 
   def whatsapp_inboxes
     Current.account.inboxes.includes(:channel).filter_map do |inbox|
+      connector = JrcCampaigns::EvolutionConnector.for(inbox)
+      if connector
+        next({ id: inbox.id, name: inbox.name, phone_number: connector.sender_number, provider: 'Evolution Demo',
+               connector: 'evolution', health_status: 'UNKNOWN', health_error: false, templates: [],
+               min_interval_seconds: connector.min_interval_seconds, daily_limit: connector.daily_limit })
+      end
       next unless inbox.channel_type == 'Channel::Whatsapp'
 
       channel = inbox.channel

@@ -62,6 +62,10 @@ class JrcCampaignsAPI extends ApiClient {
     return axios.post(`${this.url}/test_message`, { test_message: payload });
   }
 
+  testDelivery(id) {
+    return axios.get(`${super.baseUrl()}/jrc_campaigns/test_deliveries/${id}`);
+  }
+
   preview(id) {
     return axios.get(`${this.url}/${id}/preview`);
   }

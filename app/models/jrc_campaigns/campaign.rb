@@ -157,9 +157,38 @@ class JrcCampaigns::Campaign < ApplicationRecord
   def sending_inbox_links
     links = enabled_campaign_inboxes
     return links if links.any?
-    return [] unless inbox&.channel_type == expected_channel_type
+    return [] unless accepts_sending_inbox?(inbox)
 
     [InboxLink.new(inbox: inbox, weight: 1)]
+  end
+
+  def accepts_sending_inbox?(candidate)
+    return false unless candidate && candidate.account_id == account_id
+    return true if candidate.channel_type == expected_channel_type
+
+    whatsapp? && JrcCampaigns::EvolutionConnector.for(candidate).present?
+  end
+
+  def evolution_connectors
+    sending_inbox_links.filter_map { |link| JrcCampaigns::EvolutionConnector.for(link.inbox) }
+  end
+
+  def ensure_sender_compatibility!
+    invalid = sending_inbox_links.any? { |link| !accepts_sending_inbox?(link.inbox) }
+    connectors = evolution_connectors
+    reason = if invalid
+               'Caixa remetente não autorizada para esta conta e canal.'
+             elsif connectors.any? && sending_inbox_links.size != connectors.size
+               'Use campanhas separadas para Evolution Demo e WhatsApp oficial.'
+             elsif connectors.any? && steps.any? { |step| step.kind == 'template' }
+               'Templates Meta exigem uma caixa WhatsApp oficial.'
+             elsif connectors.any? && delay_min_seconds < connectors.map(&:min_interval_seconds).max
+               'O intervalo da campanha Evolution deve respeitar o mínimo configurado para a caixa.'
+             end
+    return unless reason
+
+    errors.add(:base, reason)
+    raise ActiveRecord::RecordInvalid, self
   end
 
   def latest_execution

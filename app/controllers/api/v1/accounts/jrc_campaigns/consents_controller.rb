@@ -5,7 +5,7 @@ class Api::V1::Accounts::JrcCampaigns::ConsentsController < Api::V1::Accounts::J
 
   def create
     consent = scope.new(params.require(:consent).permit(:phone_number, :evidence))
-    consent.assign_attributes(recorded_by: Current.user, granted_at: Time.current)
+    consent.assign_attributes(recorded_by: Current.user, granted_at: Time.current, purpose: 'whatsapp_campaigns')
     if consent.save
       render json: consent.as_json(only: fields), status: :created
     else
@@ -25,6 +25,6 @@ class Api::V1::Accounts::JrcCampaigns::ConsentsController < Api::V1::Accounts::J
   end
 
   def fields
-    [:id, :phone_number, :evidence, :granted_at, :recorded_by_id, :revoked_at]
+    [:id, :phone_number, :evidence, :purpose, :granted_at, :recorded_by_id, :revoked_at]
   end
 end

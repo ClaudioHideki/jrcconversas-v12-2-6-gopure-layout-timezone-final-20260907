@@ -1,14 +1,16 @@
-name: Build GoPure - CRM correcoes r3
+name: GoPure - Campanhas Evolution
 
 concurrency:
-  group: gopure-nico-${{ github.ref }}
+  group: gopure-campanhas-evolution-${{ github.ref }}
   cancel-in-progress: true
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publicar a imagem candidata após validação
+        type: boolean
+        default: false
 
 env:
   REGISTRY: ghcr.io
@@ -73,8 +75,8 @@ jobs:
           bundle exec ruby scripts/nico-specs.rb
           spec/jobs/jrc_nico spec/requests/jrc_nico*
           spec/services/jrc_nico spec/services/jrc_ai/nico_readiness_spec.rb
-          spec/services/jrc_campaigns/governance_spec.rb
-          spec/requests/api/v1/accounts/jrc_campaigns/governance_spec.rb
+          spec/services/jrc_campaigns
+          spec/requests/api/v1/accounts/jrc_campaigns
           spec/requests/api/v1/accounts/crm
           spec/models/jrc_crm spec/services/jrc_crm spec/policies/jrc_crm
           spec/requests/api/v1/accounts/contacts_pagination_spec.rb
@@ -87,23 +89,37 @@ jobs:
         run: node --experimental-vm-modules --test tests/router/crm-routing.test.cjs
       - name: Testar interfaces CRM e NICO
         run: pnpm exec vitest run --config vitest.commercial.config.ts
+      - name: Testar selecao Evolution e confirmacao de testes
+        run: pnpm exec vitest run --config vitest.campaigns.config.ts
+      - name: Verificar inicializacao Rails e Sidekiq
+        run: bundle exec rails runner 'require "sidekiq"; Rails.application.eager_load!; abort "missing job" unless JrcCampaigns::DispatchStepJob < ApplicationJob; puts "Rails and Sidekiq loaded"'
       - name: Compilar e testar runtime
         working-directory: services/nico-runtime
         run: npm ci --include=dev && npm run build && npm test
   build-and-push:
     needs: validate
+    if: inputs.publish
     name: Publicar ${{ matrix.component }}
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: qa-only
+          POSTGRES_DB: gopure_image_smoke
+        ports: ['5432:5432']
+        options: --health-cmd="pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
     strategy:
       fail-fast: false
       matrix:
         include:
           - component: app
             dockerfile: ./docker/Dockerfile
-            tag: 4.16.2-gopure-crm-comercial-20260923-r3
-          - component: nico-runtime
-            dockerfile: ./docker/nico-runtime.Dockerfile
-            tag: nico-runtime-gopure-crm-comercial-20260923-r3
+            tag: gopure-campanhas-evolution-20261020
 
     permissions:
       contents: read
@@ -112,6 +128,7 @@ jobs:
     steps:
       - name: Baixar codigo
         uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
 
       - name: Configurar Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -133,14 +150,27 @@ jobs:
             type=raw,value=${{ matrix.tag }}
             type=sha,format=long,prefix=${{ matrix.component }}-sha-
 
-      - name: Construir e publicar imagem
+      - name: Construir imagem candidata
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
-          push: true
+          push: false
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=gopure-${{ matrix.component }}
           cache-to: type=gha,scope=gopure-${{ matrix.component }},mode=max
+      - name: Testar Rails e Sidekiq na imagem final
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.tag }}
+        run: bash scripts/qa/campaigns/image_smoke.sh "$IMAGE"
+      - name: Publicar somente a imagem testada
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.tag }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          while IFS= read -r tag; do docker push "$tag"; done <<< "$TAGS"
+          docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$IMAGE" >> "$GITHUB_STEP_SUMMARY"

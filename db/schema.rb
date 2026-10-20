@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_09_22_160000) do
+ActiveRecord::Schema[7.1].define(version: 2026_10_20_120000) do
   # These extensions should be enabled to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -1156,6 +1156,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_22_160000) do
     t.datetime "revoked_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "purpose"
     t.index ["account_id", "phone_number"], name: "index_jrc_campaign_consents_active_phone", unique: true, where: "(revoked_at IS NULL)"
     t.index ["account_id"], name: "index_jrc_campaign_consents_on_account_id"
     t.index ["recorded_by_id"], name: "index_jrc_campaign_consents_on_recorded_by_id"
@@ -1324,6 +1325,25 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_22_160000) do
     t.index ["campaign_id", "position"], name: "index_jrc_campaign_steps_on_campaign_id_and_position"
     t.index ["campaign_id"], name: "index_jrc_campaign_steps_on_campaign_id"
     t.index ["media_asset_id"], name: "index_jrc_campaign_steps_on_media_asset_id"
+  end
+
+  create_table "jrc_campaign_test_deliveries", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "inbox_id", null: false
+    t.bigint "requested_by_id", null: false
+    t.string "idempotency_key", null: false
+    t.string "payload_digest", null: false
+    t.string "status", default: "sending", null: false
+    t.string "phone_number", null: false
+    t.string "external_id"
+    t.text "error_message"
+    t.jsonb "metadata", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "idempotency_key"], name: "idx_jrc_campaign_test_idempotency", unique: true
+    t.index ["account_id"], name: "index_jrc_campaign_test_deliveries_on_account_id"
+    t.index ["inbox_id"], name: "index_jrc_campaign_test_deliveries_on_inbox_id"
+    t.index ["requested_by_id"], name: "index_jrc_campaign_test_deliveries_on_requested_by_id"
   end
 
   create_table "jrc_campaigns", force: :cascade do |t|
@@ -3013,6 +3033,9 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_22_160000) do
   add_foreign_key "jrc_campaign_sanitized_lists", "users", column: "created_by_id"
   add_foreign_key "jrc_campaign_steps", "jrc_campaign_media_assets", column: "media_asset_id", on_delete: :nullify
   add_foreign_key "jrc_campaign_steps", "jrc_campaigns", column: "campaign_id"
+  add_foreign_key "jrc_campaign_test_deliveries", "accounts"
+  add_foreign_key "jrc_campaign_test_deliveries", "inboxes"
+  add_foreign_key "jrc_campaign_test_deliveries", "users", column: "requested_by_id"
   add_foreign_key "jrc_campaigns", "accounts"
   add_foreign_key "jrc_campaigns", "inboxes"
   add_foreign_key "jrc_campaigns", "users", column: "approved_by_id"
