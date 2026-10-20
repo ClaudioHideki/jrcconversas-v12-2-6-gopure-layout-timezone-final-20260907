@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_10_20_193000) do
+ActiveRecord::Schema[7.1].define(version: 2026_10_20_201000) do
   # These extensions should be enabled to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -1157,9 +1157,11 @@ ActiveRecord::Schema[7.1].define(version: 2026_10_20_193000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.string "purpose"
+    t.bigint "supersedes_id"
     t.index ["account_id", "phone_number"], name: "index_jrc_campaign_consents_active_phone", unique: true, where: "(revoked_at IS NULL)"
     t.index ["account_id"], name: "index_jrc_campaign_consents_on_account_id"
     t.index ["recorded_by_id"], name: "index_jrc_campaign_consents_on_recorded_by_id"
+    t.index ["supersedes_id"], name: "index_jrc_campaign_consents_on_supersedes_id", unique: true
   end
 
   create_table "jrc_campaign_deliveries", force: :cascade do |t|
@@ -3031,6 +3033,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_10_20_193000) do
   add_foreign_key "jrc_campaign_blacklists", "accounts"
   add_foreign_key "jrc_campaign_blacklists", "users", column: "created_by_id"
   add_foreign_key "jrc_campaign_consents", "accounts"
+  add_foreign_key "jrc_campaign_consents", "jrc_campaign_consents", column: "supersedes_id"
   add_foreign_key "jrc_campaign_consents", "users", column: "recorded_by_id"
   add_foreign_key "jrc_campaign_deliveries", "inboxes"
   add_foreign_key "jrc_campaign_deliveries", "jrc_campaign_recipients", column: "recipient_id"

@@ -14,7 +14,9 @@ class JrcCampaigns::EvolutionTestService
     account.with_lock do
       existing = JrcCampaigns::TestDelivery.find_by(account: account, idempotency_key: idempotency_key)
       unless existing
-        @authorization = JrcCampaigns::TestAuthorization.available.where(account: account, inbox: connector.inbox, phone_number: phone_number).lock.first
+        unless JrcCampaigns::Consent.active.exists?(account: account, phone_number: phone_number, purpose: 'whatsapp_campaigns')
+          @authorization = JrcCampaigns::TestAuthorization.available.where(account: account, inbox: connector.inbox, phone_number: phone_number).lock.first
+        end
         eligibility!
         @delivery = JrcCampaigns::TestDelivery.create!(account: account, inbox: connector.inbox, requested_by: user,
                                                       idempotency_key: idempotency_key, phone_number: phone_number, payload_digest: digest,

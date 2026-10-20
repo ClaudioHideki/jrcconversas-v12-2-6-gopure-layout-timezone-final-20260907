@@ -54,6 +54,9 @@ const recipientPagination = ref({
 const testDestination = ref('');
 const testSending = ref(false);
 const latestTest = ref(null);
+const latestTestSignature = ref(null);
+const newTestCoolingDown = ref(false);
+let newTestTimer;
 let audienceTimer;
 let recipientSearchTimer;
 
@@ -994,16 +997,29 @@ const sendTest = async (message = activeMessage.value) => {
       inbox_id: form.inboxLinks[0].inbox_id,
       step: serializeStep(message),
     };
+    let signature = null;
     if (evolution) {
-      const signature = JSON.stringify(payload);
+      signature = JSON.stringify(payload);
       if (!testKeys.has(signature))
         testKeys.set(signature, crypto.randomUUID());
       payload.idempotency_key = testKeys.get(signature);
       payload.operator_confirmed = true;
     }
     const { data } = await JrcCampaignsAPI.testMessage(payload);
-    if (data.test_delivery_id)
+    if (data.test_delivery_id) {
       latestTest.value = { ...data, id: data.test_delivery_id };
+      latestTestSignature.value = signature;
+      if (data.status === 'sent') {
+        clearTimeout(newTestTimer);
+        newTestCoolingDown.value = true;
+        newTestTimer = setTimeout(
+          () => {
+            newTestCoolingDown.value = false;
+          },
+          Math.max(60, Number(inbox.min_interval_seconds) || 60) * 1000
+        );
+      }
+    }
     useAlert(t(testResultAlert(data)));
   } catch (error) {
     useAlert(
@@ -1014,6 +1030,20 @@ const sendTest = async (message = activeMessage.value) => {
     testSending.value = false;
   }
 };
+const prepareNewTest = () => {
+  if (
+    testSending.value ||
+    newTestCoolingDown.value ||
+    latestTest.value?.status !== 'sent' ||
+    !latestTestSignature.value
+  )
+    return;
+  if (!window.confirm(t('JRC_CAMPAIGNS.EVOLUTION.NEW_TEST_CONFIRM'))) return;
+  testKeys.delete(latestTestSignature.value);
+  latestTestSignature.value = null;
+  latestTest.value = null;
+};
+onBeforeUnmount(() => clearTimeout(newTestTimer));
 const validateMessage = message => {
   useAlert(
     t(
@@ -1325,6 +1355,18 @@ onBeforeUnmount(() => {
             >
               {{ t('JRC_CAMPAIGNS.REFRESH') }}
             </button>
+            <button
+              v-if="latestTest.status === 'sent' && latestTestSignature"
+              type="button"
+              class="ml-2 mt-2 rounded-lg border border-n-brand px-3 py-2 text-n-brand disabled:opacity-40"
+              :disabled="testSending || newTestCoolingDown"
+              @click="prepareNewTest"
+            >
+              {{ t('JRC_CAMPAIGNS.EVOLUTION.NEW_TEST') }}
+            </button>
+            <p v-if="newTestCoolingDown" class="mt-2 text-n-slate-11">
+              {{ t('JRC_CAMPAIGNS.EVOLUTION.WAIT_INTERVAL') }}
+            </p>
           </div>
           <div v-if="stepIndex === 0" class="space-y-5">
             <div>
@@ -2656,6 +2698,9 @@ onBeforeUnmount(() => {
                   <p class="mt-1 text-xs text-n-slate-10">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.MESSAGE_TEST_HELP') }}
                   </p>
+                  <p v-if="usesEvolution" class="mt-2 text-xs text-n-slate-11">
+                    {{ t('JRC_CAMPAIGNS.EVOLUTION.CONTINUOUS_HELP') }}
+                  </p>
                   <input
                     v-model="testDestination"
                     class="mt-3 w-full rounded-xl border border-n-weak bg-n-background px-3 py-2.5 text-sm"
@@ -2677,7 +2722,7 @@ onBeforeUnmount(() => {
                     ><button
                       type="button"
                       class="rounded-xl bg-n-brand px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
-                      :disabled="testSending"
+                      :disabled="testSending || newTestCoolingDown"
                       @click="sendTest(activeMessage)"
                     >
                       {{ $t('JRC_CAMPAIGNS.WIZARD.SEND_TEST') }}
@@ -2700,7 +2745,8 @@ onBeforeUnmount(() => {
               </div>
               <button
                 type="button"
-                class="rounded-xl border border-n-brand px-3 py-2 text-xs font-medium text-n-brand"
+                class="rounded-xl border border-n-brand px-3 py-2 text-xs font-medium text-n-brand disabled:opacity-50"
+                :disabled="testSending || newTestCoolingDown"
                 @click="sendTest()"
               >
                 <span class="i-lucide-send mr-1 inline-block size-3" />{{
@@ -2865,6 +2911,9 @@ onBeforeUnmount(() => {
               <h4 class="text-sm font-semibold text-n-slate-12">
                 {{ $t('JRC_CAMPAIGNS.WIZARD.MESSAGE_TEST') }}
               </h4>
+              <p v-if="usesEvolution" class="mt-2 text-xs text-n-slate-11">
+                {{ t('JRC_CAMPAIGNS.EVOLUTION.CONTINUOUS_HELP') }}
+              </p>
               <div class="mt-3 flex flex-wrap gap-3">
                 <input
                   v-model="testDestination"
@@ -2879,7 +2928,7 @@ onBeforeUnmount(() => {
                 /><button
                   type="button"
                   class="rounded-xl border border-n-brand px-4 py-2.5 text-sm font-medium text-n-brand disabled:opacity-50"
-                  :disabled="testSending"
+                  :disabled="testSending || newTestCoolingDown"
                   @click="sendTest()"
                 >
                   {{ $t('JRC_CAMPAIGNS.WIZARD.SEND_TEST') }}

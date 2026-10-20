@@ -194,6 +194,47 @@ RSpec.describe 'Evolution campaign integration', type: :request do
     expect(a_request(:post, send_url)).to have_been_made.once
   end
 
+  it 'allows new deliberate tests with the same continuous consent after the interval' do
+    consent = JrcCampaigns::Consent.find_by!(account: account, phone_number: contact.phone_number)
+    original = consent.attributes
+    first = JrcCampaigns::TestMessageService.new(**test_options).perform
+    travel 61.seconds do
+      second = JrcCampaigns::TestMessageService.new(**test_options.merge(idempotency_key: SecureRandom.uuid)).perform
+      expect(second[:status]).to eq('sent')
+      expect(second[:test_delivery_id]).not_to eq(first[:test_delivery_id])
+    end
+    expect(consent.reload.attributes).to eq(original)
+    expect(JrcCampaigns::TestAuthorization.where(account: account)).to be_empty
+    expect(a_request(:post, send_url)).to have_been_made.twice
+  end
+
+  it 'prefers continuous consent without consuming an optional single-test authorization' do
+    authorization = JrcCampaigns::TestAuthorization.create!(
+      account: account, inbox: inbox, recorded_by: admin, phone_number: contact.phone_number, evidence: 'Only one optional test',
+      granted_at: Time.current, connector_snapshot: connector.public_configuration.slice(*JrcCampaigns::TestAuthorization::IDENTITY_FIELDS)
+    )
+    expect(JrcCampaigns::TestMessageService.new(**test_options).perform[:status]).to eq('sent')
+    expect(authorization.reload.consumed_at).to be_nil
+  end
+
+  it 'does not let continuous consent for one phone authorize a different destination' do
+    expect do
+      JrcCampaigns::TestMessageService.new(**test_options.merge(phone_number: '+5511999999001')).perform
+    end.to raise_error(ArgumentError, /Consentimento/)
+    expect(a_request(:post, send_url)).not_to have_been_made
+  end
+
+  it 'stops later continuous tests after revocation' do
+    JrcCampaigns::TestMessageService.new(**test_options).perform
+    JrcCampaigns::Consent.find_by!(account: account, phone_number: contact.phone_number).update!(revoked_at: Time.current)
+    travel 61.seconds do
+      expect do
+        JrcCampaigns::TestMessageService.new(**test_options.merge(idempotency_key: SecureRandom.uuid)).perform
+      end.to raise_error(ArgumentError, /revogado/)
+    end
+    expect(a_request(:post, send_url)).to have_been_made.once
+  end
+
   it 'does not allow a revoked test destination' do
     JrcCampaigns::Consent.find_by!(account: account, phone_number: contact.phone_number).update!(revoked_at: Time.current)
     expect { JrcCampaigns::TestMessageService.new(**test_options).perform }.to raise_error(ArgumentError, /revogado/)

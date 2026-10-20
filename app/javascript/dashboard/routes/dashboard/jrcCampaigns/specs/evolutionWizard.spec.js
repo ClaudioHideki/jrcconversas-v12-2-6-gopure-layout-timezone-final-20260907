@@ -52,6 +52,7 @@ describe('Evolution campaign test confirmation', () => {
   afterEach(() => {
     wrapper.unmount();
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   it('does not send when the operator declines confirmation', async () => {
@@ -101,5 +102,49 @@ describe('Evolution campaign test confirmation', () => {
       'JRC_CAMPAIGNS.EVOLUTION.TEST_UNCONFIRMED'
     );
     expect(useAlert).not.toHaveBeenCalledWith('JRC_CAMPAIGNS.ALERTS.TEST_SENT');
+  });
+
+  it('prepares a fresh request after an accepted test and the configured interval', async () => {
+    vi.useFakeTimers();
+    await wrapper.vm.sendTest();
+    const firstKey = api.testMessage.mock.calls[0][0].idempotency_key;
+    wrapper.vm.prepareNewTest();
+    expect(wrapper.vm.latestTest.id).toBe(7);
+    await vi.advanceTimersByTimeAsync(61000);
+    wrapper.vm.prepareNewTest();
+    expect(wrapper.vm.latestTest).toBeNull();
+    expect(api.testMessage).toHaveBeenCalledOnce();
+    await wrapper.vm.sendTest();
+    expect(api.testMessage.mock.calls[1][0].idempotency_key).not.toBe(firstKey);
+  });
+
+  it('does not prepare another request for an unknown result', async () => {
+    api.testMessage.mockResolvedValue({
+      data: { test_delivery_id: 7, status: 'unknown' },
+    });
+    await wrapper.vm.sendTest();
+    wrapper.vm.prepareNewTest();
+    expect(wrapper.vm.latestTest.status).toBe('unknown');
+    expect(api.testMessage).toHaveBeenCalledOnce();
+  });
+
+  it('sends from the Review button independently of campaign audience size', async () => {
+    wrapper.vm.stepIndex = 3;
+    wrapper.vm.audiencePreview = { estimated_recipients: 0, sample: [] };
+    await flushPromises();
+    const button = wrapper
+      .findAll('button')
+      .find(item => item.text() === 'JRC_CAMPAIGNS.WIZARD.SEND_TEST');
+    await button.trigger('click');
+    await flushPromises();
+    expect(api.testMessage).toHaveBeenCalledOnce();
+    expect(api.testMessage.mock.calls[0][0].phone_number).toBe('5511999999000');
+    expect(wrapper.vm.latestTest.status).toBe('sent');
+    expect(wrapper.vm.newTestCoolingDown).toBe(true);
+    const updatedButtons = wrapper
+      .findAll('button')
+      .filter(item => item.text() === 'JRC_CAMPAIGNS.WIZARD.SEND_TEST');
+    expect(updatedButtons).toHaveLength(2);
+    expect(updatedButtons.every(item => item.element.disabled)).toBe(true);
   });
 });

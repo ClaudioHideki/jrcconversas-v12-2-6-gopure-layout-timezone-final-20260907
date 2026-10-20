@@ -67,6 +67,20 @@ Para rollback, pausar/cancelar as campanhas dessa versão, parar Sidekiq e Rails
 
 ## Validação e limites
 
+### Revisão r3: consentimento contínuo por destinatário
+
+A tag `gopure-campanhas-evolution-20261020-r3` torna o **Consentimento contínuo para testes e campanhas** o cadastro principal na aba de consentimentos. O administrador registra uma vez a autorização real de cada destinatário, com evidência, origem e data, confirmando explicitamente que o escopo inclui mensagens recorrentes pelo WhatsApp desta conta. O consentimento permanece válido até revogação; não é consumido por testes ou campanhas. Isso não concede autorização global para telefones sem consentimento nem ativa campanhas automaticamente.
+
+Registros históricos sem finalidade confirmada não são ampliados por migration. A ação **Registrar nova autorização para este telefone** exige nova evidência e confirmação do titular. Ela encerra o registro anterior e cria um consentimento vinculado por `supersedes_id`, na mesma transação e sob bloqueio da Account. Evidência, data, autor e finalidade originais permanecem no histórico. Falhas de validação desfazem toda a transação; um consentimento contínuo já ativo não é substituído por repetição da solicitação. Revogações repetidas preservam sua primeira data.
+
+A migration adicional `20261020201000_add_campaign_consent_supersession.rb` adiciona somente a referência histórica nullable, seu índice único e a chave estrangeira para a própria tabela. Ela não preenche finalidade e não altera consentimentos existentes. O POST de consentimentos passa a exigir `operator_confirmed: true`; integrações administrativas devem enviar essa confirmação real. Recarregar a interface depois de atualizar Rails e Sidekiq.
+
+Com consentimento contínuo ativo, o teste usa esse registro e preserva eventual autorização de teste único disponível. A opção de teste único e seus históricos permanecem numa seção opcional recolhida. Revogações, blacklist, bloqueios e limites operacionais continuam sendo verificados. Para iniciar uma campanha, os destinatários autorizados também precisam constar no público e estar selecionados.
+
+O botão **Preparar novo teste**, após um envio aceito e o intervalo configurado, inicia uma nova solicitação intencional, inclusive para o mesmo conteúdo. Preparar não envia: ainda é necessário clicar em **Enviar teste** e confirmar remetente e destinatário. Repetir uma solicitação existente preserva a mesma chave idempotente. Resultados desconhecidos não habilitam esse botão; não há reenvio automático. Os dois botões de teste da Revisão usam o mesmo fluxo, mesmo com público de campanha zerado, e respeitam a espera entre testes.
+
+Não há novas variáveis de ambiente nem alteração do NICO Runtime. Aplicar a nova migration com a imagem r3, usar a mesma imagem/digest em Rails e Sidekiq e atualizar a página. Para rollback desta revisão, restaurar `gopure-campanhas-evolution-20261020-r2@sha256:8fa45bc19a1244eac679dac5ba12e1052a1fa9c4bd45b79f90a7d22eabb7a51a` nos dois serviços. Preservar a coluna e todos os registros; não executar rollback destrutivo. Consentimentos contínuos explicitamente concedidos continuam ativos no código r2, que já reconhece essa finalidade.
+
 ### Revisão r2: autorização de um único teste
 
 A tag `gopure-campanhas-evolution-20261020-r2` adiciona a seção **Autorizações de teste único** dentro da aba **Consentimentos para campanhas**. O administrador registra a caixa Evolution, o telefone do destinatário, a evidência da autorização e sua confirmação explícita. O registro guarda também a identidade do conector e o número remetente. Ele não cria nem altera consentimento para campanhas e não modifica evidências históricas sem finalidade confirmada.
