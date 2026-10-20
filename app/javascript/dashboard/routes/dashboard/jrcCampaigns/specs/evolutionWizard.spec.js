@@ -60,6 +60,20 @@ describe('Evolution campaign test confirmation', () => {
     expect(api.testMessage).not.toHaveBeenCalled();
   });
 
+  it('preserves a configured media message when the sender selection changes', async () => {
+    wrapper.vm.form.steps[0] = {
+      ...wrapper.vm.form.steps[0],
+      kind: 'image',
+      body: '',
+      media_url: 'https://media.example.test/image.png',
+    };
+    wrapper.vm.form.inboxLinks = [];
+    await flushPromises();
+    wrapper.vm.form.inboxLinks = [{ inbox_id: 8, enabled: true }];
+    await flushPromises();
+    expect(wrapper.vm.form.steps[0].kind).toBe('image');
+  });
+
   it('reuses the idempotency key and displays accepted rather than delivered', async () => {
     await wrapper.vm.sendTest();
     await wrapper.vm.sendTest();

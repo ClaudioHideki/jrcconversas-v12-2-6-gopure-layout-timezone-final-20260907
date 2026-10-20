@@ -39,4 +39,5 @@ done
 test "$ready" = true
 ruby -rjson -e 'data = JSON.parse(File.read("/tmp/gopure-image-health.json")); abort data.inspect unless data["data_services"] == "ok" && data["queue_services"] == "ok"'
 test "$(docker inspect --format '{{.State.Running}}' gopure-evolution-sidekiq-smoke)" = true
+docker exec gopure-evolution-rails-smoke bundle exec rails runner 'require "sidekiq/api"; abort "Sidekiq did not register in Redis" unless Sidekiq::ProcessSet.new.any?; puts "Sidekiq registered in isolated Redis"'
 echo 'Production image: Rails HTTP, PostgreSQL, Redis and Sidekiq startup passed.'

@@ -9,7 +9,10 @@ RSpec.describe 'Evolution campaign integration', type: :request do
     { account_id: account.id, inbox_id: inbox.id, base_url: 'https://evolution.example.test', instance: 'demo',
       sender_number: '551155550000', api_key_env: 'JRC_CAMPAIGNS_EVOLUTION_DEMO_API_KEY', min_interval_seconds: 60, daily_limit: 2 }
   end
-  let(:campaign) { JrcCampaigns::Campaign.create!(account: account, inbox: inbox, created_by: admin, name: 'Demo QA', delay_min_seconds: 60, delay_max_seconds: 60) }
+  let(:campaign) do
+    JrcCampaigns::Campaign.create!(account: account, inbox: inbox, created_by: admin, name: 'Demo QA', delay_min_seconds: 60, delay_max_seconds: 60,
+                                   sending_window: { days: [0, 1, 2, 3, 4, 5, 6], start: '00:00', end: '23:59' })
+  end
   let(:step) { campaign.steps.create!(kind: 'text', body: 'Olá {{nome}}', position: 0) }
   let(:execution) { campaign.executions.create!(run_number: 1, status: 'running') }
   let(:recipient) do
@@ -26,8 +29,11 @@ RSpec.describe 'Evolution campaign integration', type: :request do
   end
 
   around do |example|
+    travel_to(Time.current.change(hour: 12, min: 0, sec: 0))
     with_modified_env('JRC_CAMPAIGNS_EVOLUTION_CONNECTORS' => [configuration].to_json,
                       'JRC_CAMPAIGNS_EVOLUTION_DEMO_API_KEY' => 'isolated-qa-key') { example.run }
+  ensure
+    travel_back
   end
 
   before do

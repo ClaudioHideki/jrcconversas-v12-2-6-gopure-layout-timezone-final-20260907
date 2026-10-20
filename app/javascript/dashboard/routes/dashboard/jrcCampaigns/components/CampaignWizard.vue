@@ -156,7 +156,12 @@ watch(selectedSendingInboxes, inboxes => {
     form.delay_min_seconds = Math.max(form.delay_min_seconds, minimum);
     form.delay_max_seconds = Math.max(form.delay_max_seconds, minimum);
     form.steps.forEach(message => {
-      if (!message.id && !message.template_name && !message.body)
+      if (
+        message.kind === 'template' &&
+        !message.id &&
+        !message.template_name &&
+        !message.body
+      )
         message.kind = 'text';
     });
   }
