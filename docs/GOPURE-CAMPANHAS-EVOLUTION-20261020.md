@@ -71,4 +71,6 @@ Os testes cobrem envio simulado, confirmação real pelo ID, ausência de ID, AC
 
 O workflow manual `build-ghcr.yml` executa a validação antes do build. A opção `publish` é falsa por padrão. Quando autorizada e selecionada, constrói a imagem de produção, inicia Rails e Sidekiq contra PostgreSQL e Redis exclusivos de CI, verifica HTTP e processos, e somente então publica as mesmas camadas testadas. Não publica `latest` e não executa deploy.
 
+O smoke test identificou um falso negativo no health check de PostgreSQL quando a conexão ainda não havia sido inicializada. O endpoint verifica a conexão antes de consultar sua atividade; um teste de regressão reproduz a conexão fria e exige o resultado saudável com o banco disponível.
+
 O relatório final deve informar os resultados efetivamente obtidos, SHA, digest e eventuais impedimentos. Testes com mocks e inicialização da imagem não comprovam homologação da instância real, suas credenciais, persistência de ACKs ou configuração de espelhamento no Dokploy. A consulta de status depende de a Evolution persistir mensagens e atualizações; se isso não ocorrer, a entrega permanece não confirmada. O provedor também pode espelhar mensagens de forma assíncrona; duplicatas de registro precisam ser verificadas no teste real antes da liberação operacional.
