@@ -20,7 +20,9 @@ describe('Continuous recipient consent', () => {
     api.createConsent.mockResolvedValue({ data: { id: 5 } });
     api.revokeConsent.mockResolvedValue({});
     wrapper = mount(ConsentPanel, {
-      global: { stubs: { TestAuthorizationPanel: true } },
+      global: {
+        stubs: { TestAuthorizationPanel: true, ConsentImportPanel: true },
+      },
     });
   });
   afterEach(() => wrapper.unmount());

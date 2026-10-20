@@ -67,6 +67,18 @@ Para rollback, pausar/cancelar as campanhas dessa versão, parar Sidekiq e Rails
 
 ## Validação e limites
 
+### Revisão r4: importação de consentimentos em lote
+
+A tag `gopure-campanhas-evolution-20261020-r4` acrescenta **Importar consentimentos em lote** à aba de consentimentos. O arquivo CSV UTF-8 aceita vírgula ou ponto e vírgula, BOM opcional e campos entre aspas. O limite é 500 destinatários e 1 MB por arquivo. O modelo contém, nessa ordem, `phone_number,source,granted_at,evidence`: telefone com DDI/DDD, origem, data ISO 8601 com horário e fuso, e evidência real da autorização contínua de cada titular.
+
+O administrador seleciona o arquivo, confere a prévia e confirma explicitamente o escopo recorrente para todos os titulares. `POST /consents/import_preview` não grava; `POST /consents/import_csv` exige `operator_confirmed: true` booleano e revalida o arquivo e o banco sob bloqueio da Account. O lote é atômico: qualquer erro impede todas as novas gravações. A data original da autorização é preservada em `granted_at`, e origem/evidência ficam no registro, com o administrador responsável. O parâmetro CSV é filtrado dos logs Rails.
+
+Consentimentos contínuos ativos são preservados sem duplicação. Registros históricos ativos sem finalidade exigem confirmação individual com evidência nova. A importação não reativa autorização cuja data anteceda uma revogação; uma autorização nova, posterior à revogação, cria outro registro e preserva o anterior. Não altera contatos, blacklist, autorizações de teste único ou estado de entregas. Não envia mensagens nem inicia campanhas.
+
+Importar consentimentos não inclui telefones no público da campanha. Após importar, selecionar/conferir a lista na etapa Público e usar **Atualizar público e elegibilidade**, também disponível na Revisão. A lista sanitizada existente é reavaliada com os consentimentos atuais. Zero aptos continua bloqueando o lançamento; blacklist e bloqueios permanecem válidos.
+
+Sem nova migration ou variável de ambiente nesta revisão. Quem ainda está em uma versão anterior à r3 deve aplicar as migrations pendentes. Usar a mesma imagem em Rails e Sidekiq. Para rollback da r4, retornar ambos à r3 pelo digest `sha256:c9ec951849b5323d826bdae9d2921ffde78eca51f76c053660ef05c7b00c9cba`, preservando dados e migrations. Os consentimentos contínuos importados continuam compatíveis com r3.
+
 ### Revisão r3: consentimento contínuo por destinatário
 
 A tag `gopure-campanhas-evolution-20261020-r3` torna o **Consentimento contínuo para testes e campanhas** o cadastro principal na aba de consentimentos. O administrador registra uma vez a autorização real de cada destinatário, com evidência, origem e data, confirmando explicitamente que o escopo inclui mensagens recorrentes pelo WhatsApp desta conta. O consentimento permanece válido até revogação; não é consumido por testes ou campanhas. Isso não concede autorização global para telefones sem consentimento nem ativa campanhas automaticamente.

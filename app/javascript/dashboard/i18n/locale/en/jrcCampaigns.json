@@ -487,7 +487,7 @@
       "CONVERSATION": "Criação de conversa",
       "FOLLOW_UP": "Retorno após",
       "AUDIENCE": "Destinatários aprovados",
-      "EMPTY_AUDIENCE": "Nenhum destinatário com consentimento ativo. Registre o consentimento na aba Blacklist antes de revisar novamente.",
+      "EMPTY_AUDIENCE": "Nenhum destinatário com consentimento ativo. Registre ou importe os consentimentos em Consentimentos para campanhas e atualize o público.",
       "CONSENTS": "Consentimentos para campanhas",
       "CONTINUOUS_TITLE": "Consentimento contínuo para testes e campanhas",
       "CONSENT_HELP": "Cadastre uma vez por destinatário, com a evidência, origem e data da autorização do titular. O consentimento permite novos testes e campanhas WhatsApp desta conta até ser revogado; não precisa ser recriado a cada mensagem. O destinatário também precisa constar no público selecionado para receber uma campanha.",
@@ -505,6 +505,24 @@
       "RECORD_CONSENT": "Registrar consentimento contínuo",
       "REVOKE": "Revogar",
       "REVOKED": "Revogado"
+    },
+    "CONSENT_IMPORT": {
+      "TITLE": "Importar consentimentos em lote",
+      "HELP": "Importe apenas autorizações contínuas realmente obtidas dos titulares para testes e campanhas WhatsApp desta conta. Até 500 linhas por arquivo UTF-8, máximo 1 MB. Confira a prévia antes de confirmar. Nenhuma mensagem será enviada.",
+      "FORMAT": "Colunas: phone_number, source, granted_at, evidence. Telefone com DDI e DDD; origem e evidência por destinatário. Data ISO 8601 com horário e fuso, por exemplo 2026-10-20T14:00:00-03:00. Separador vírgula ou ponto e vírgula; use aspas em campos que contenham separadores.",
+      "TEMPLATE": "Baixar modelo CSV",
+      "FILE": "Selecionar CSV de consentimentos",
+      "SIZE_ERROR": "Arquivo muito grande. O limite é 1 MB.",
+      "RESULT": "{imported} consentimentos registrados; {existing} já ativos preservados. Nenhuma mensagem enviada. Volte ao Público e atualize a prévia da lista.",
+      "SUMMARY": "{total} linhas: {ready} novas, {existing} já ativas, {errors} com erro. Corrija todos os erros antes de importar.",
+      "LINE": "Linha",
+      "STATUS": "Resultado",
+      "READY": "Pronto para registrar",
+      "EXISTING": "Já ativo — preservar registro",
+      "CONFIRM": "Conferi a origem, data e evidência de cada linha: todos esses titulares autorizaram mensagens recorrentes desta conta pelo WhatsApp, incluindo testes e campanhas, até revogação.",
+      "IMPORT": "Confirmar e importar consentimentos",
+      "AUDIENCE_HELP": "O público selecionado ainda não tem destinatários aptos. Registre ou importe os consentimentos e confira a seleção na etapa Público. Importar consentimentos não adiciona contatos à lista e não remove bloqueios ou blacklist.",
+      "REFRESH": "Atualizar público e elegibilidade"
     }
   }
 }

@@ -47,6 +47,20 @@ class JrcCampaignsAPI extends ApiClient {
     return axios.delete(`${super.baseUrl()}/jrc_campaigns/consents/${id}`);
   }
 
+  previewConsentImport(csv) {
+    return axios.post(
+      `${super.baseUrl()}/jrc_campaigns/consents/import_preview`,
+      { csv }
+    );
+  }
+
+  importConsents(csv, operatorConfirmed) {
+    return axios.post(`${super.baseUrl()}/jrc_campaigns/consents/import_csv`, {
+      csv,
+      operator_confirmed: operatorConfirmed,
+    });
+  }
+
   pause(id) {
     return axios.post(`${this.url}/${id}/pause`);
   }

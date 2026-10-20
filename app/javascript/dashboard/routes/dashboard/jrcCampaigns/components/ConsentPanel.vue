@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import JrcCampaignsAPI from 'dashboard/api/jrcCampaigns';
 import { useAlert } from 'dashboard/composables';
 import TestAuthorizationPanel from './TestAuthorizationPanel.vue';
+import ConsentImportPanel from './ConsentImportPanel.vue';
 
 const { t } = useI18n();
 const entries = ref([]);
@@ -189,6 +190,7 @@ onMounted(load);
       </button>
     </div>
   </section>
+  <ConsentImportPanel @imported="load" />
   <details class="mt-6 rounded-xl border border-n-weak p-5">
     <summary class="cursor-pointer font-medium text-n-slate-12">
       {{ t('JRC_CAMPAIGNS.GOVERNANCE.SINGLE_TEST_OPTION') }}

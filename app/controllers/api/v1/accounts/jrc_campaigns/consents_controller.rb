@@ -41,7 +41,29 @@ class Api::V1::Accounts::JrcCampaigns::ConsentsController < Api::V1::Accounts::J
     head :no_content
   end
 
+  def import_preview
+    render json: importer.preview
+  rescue ArgumentError => e
+    render json: { errors: [e.message] }, status: :unprocessable_entity
+  end
+
+  def import_csv
+    unless params[:operator_confirmed] == true
+      return render json: { errors: ['Confirme a autorização contínua de todos os titulares do arquivo.'] }, status: :unprocessable_entity
+    end
+
+    render json: importer.import!, status: :created
+  rescue ArgumentError => e
+    render json: { errors: [e.message] }, status: :unprocessable_entity
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
+  end
+
   private
+
+  def importer
+    JrcCampaigns::ConsentImporter.new(account: Current.account, user: Current.user, csv: params.require(:csv))
+  end
 
   def scope
     JrcCampaigns::Consent.where(account: Current.account)

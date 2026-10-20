@@ -120,7 +120,7 @@ jobs:
         include:
           - component: app
             dockerfile: ./docker/Dockerfile
-            tag: gopure-campanhas-evolution-20261020-r3
+            tag: gopure-campanhas-evolution-20261020-r4
 
     permissions:
       contents: read

@@ -2880,6 +2880,20 @@ onBeforeUnmount(() => {
                     class="i-lucide-triangle-alert mr-2 inline-block size-4 text-n-amber-11"
                   />{{ $t('JRC_CAMPAIGNS.WIZARD.ATTENTION') }}
                 </h4>
+                <p
+                  v-if="eligibleCount === 0"
+                  class="mt-3 text-xs text-n-slate-12"
+                >
+                  {{ t('JRC_CAMPAIGNS.CONSENT_IMPORT.AUDIENCE_HELP') }}
+                </p>
+                <button
+                  type="button"
+                  class="mt-3 rounded-lg border border-n-strong px-3 py-2 text-xs text-n-slate-12 disabled:opacity-40"
+                  :disabled="previewingAudience || !sourceValid"
+                  @click="refreshAudiencePreview"
+                >
+                  {{ t('JRC_CAMPAIGNS.CONSENT_IMPORT.REFRESH') }}
+                </button>
                 <div class="mt-4 space-y-3">
                   <div
                     v-for="item in preflightItems"

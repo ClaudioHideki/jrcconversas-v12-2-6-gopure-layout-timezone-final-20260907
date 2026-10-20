@@ -253,7 +253,12 @@ Rails.application.routes.draw do
           namespace :jrc_campaigns do
             resources :test_authorizations, only: [:index, :create, :destroy]
             resources :test_deliveries, only: [:index, :show]
-            resources :consents, only: [:index, :create, :destroy]
+            resources :consents, only: [:index, :create, :destroy] do
+              collection do
+                post :import_preview
+                post :import_csv
+              end
+            end
             resource :metadata, only: :show, controller: :metadata
             resources :blacklists, only: [:index, :create, :destroy]
             resources :sanitized_lists, only: [:index, :show, :create, :destroy]

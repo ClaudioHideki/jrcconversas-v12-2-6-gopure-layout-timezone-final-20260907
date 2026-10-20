@@ -61,6 +61,24 @@ describe('Evolution campaign test confirmation', () => {
     expect(api.testMessage).not.toHaveBeenCalled();
   });
 
+  it('refreshes eligibility from Review after registering consent without sending or launching', async () => {
+    wrapper.vm.stepIndex = 3;
+    await flushPromises();
+    api.audiencePreview.mockResolvedValueOnce({
+      data: { estimated_recipients: 2, sample: [] },
+    });
+    const calls = api.audiencePreview.mock.calls.length;
+    await wrapper
+      .findAll('button')
+      .find(button => button.text() === 'JRC_CAMPAIGNS.CONSENT_IMPORT.REFRESH')
+      .trigger('click');
+    await flushPromises();
+    expect(api.audiencePreview.mock.calls.length).toBe(calls + 1);
+    expect(wrapper.vm.eligibleCount).toBe(2);
+    expect(api.testMessage).not.toHaveBeenCalled();
+    expect(wrapper.emitted('launch')).toBeUndefined();
+  });
+
   it('preserves a configured media message when the sender selection changes', async () => {
     wrapper.vm.form.steps[0] = {
       ...wrapper.vm.form.steps[0],
