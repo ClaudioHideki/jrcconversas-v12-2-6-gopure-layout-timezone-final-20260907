@@ -10,14 +10,16 @@ class JrcCampaigns::EvolutionTestService
     raise ArgumentError, 'Confirme explicitamente o remetente e o destinatário do teste Evolution.' unless operator_confirmed == true
     raise ArgumentError, 'Chave de idempotência UUID obrigatória para o teste Evolution.' unless idempotency_key.to_s.match?(/\A[0-9a-f-]{36}\z/i)
 
-    eligibility!
     existing = nil
     account.with_lock do
       existing = JrcCampaigns::TestDelivery.find_by(account: account, idempotency_key: idempotency_key)
       unless existing
+        @authorization = JrcCampaigns::TestAuthorization.available.where(account: account, inbox: connector.inbox, phone_number: phone_number).lock.first
+        eligibility!
         @delivery = JrcCampaigns::TestDelivery.create!(account: account, inbox: connector.inbox, requested_by: user,
                                                       idempotency_key: idempotency_key, phone_number: phone_number, payload_digest: digest,
                                                       metadata: { 'step' => step, 'connector' => connector.public_configuration })
+        @authorization&.update!(consumed_at: Time.current, test_delivery: delivery)
       end
     end
     if existing
@@ -72,10 +74,21 @@ class JrcCampaigns::EvolutionTestService
   end
 
   def eligibility!
-    reason = JrcCampaigns::EligibilityPolicy.new(account: account, phone_number: phone_number, purpose: 'whatsapp_campaigns').rejection_reason
+    policy = JrcCampaigns::EligibilityPolicy.new(account: account, phone_number: phone_number, purpose: 'whatsapp_campaigns')
+    reason = policy.safety_rejection_reason
     raise ArgumentError, reason if reason
     raise ArgumentError, 'Template Meta exige uma caixa WhatsApp oficial.' if step['kind'] == 'template'
     raise ArgumentError, 'O número remetente não pode ser o destinatário do teste.' if phone_number.delete_prefix('+') == connector.sender_number
+
+    if @authorization
+      @authorization.reload
+      valid = @authorization.revoked_at.nil? && @authorization.granted_at <= Time.current && @authorization.matches_connector?(connector)
+      valid &&= delivery ? @authorization.test_delivery_id == delivery.id : @authorization.consumed_at.nil?
+      raise ArgumentError, 'Autorização de teste indisponível, revogada ou incompatível com o remetente.' unless valid
+    else
+      reason = policy.rejection_reason
+      raise ArgumentError, reason if reason
+    end
   end
 
   def record_message

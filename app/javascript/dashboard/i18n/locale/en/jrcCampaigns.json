@@ -446,6 +446,22 @@
       "5": "Sex",
       "6": "Sáb"
     },
+    "TEST_AUTHORIZATION": {
+      "TITLE": "Autorizações de teste único",
+      "HELP": "Autorize uma única solicitação de teste pela caixa Evolution escolhida. Isso não autoriza campanhas. A autorização é consumida ao iniciar a solicitação, mesmo se houver falha ou resultado desconhecido. Repetir a mesma solicitação apenas consulta seu resultado; não reenvia.",
+      "SENDER": "Caixa e número remetente",
+      "DESTINATION": "Telefone destinatário com DDI",
+      "EVIDENCE": "Resposta do titular, data e referência da autorização para um único teste",
+      "CONFIRM": "Conferi a autorização do titular deste destinatário para uma única mensagem de teste pelo remetente selecionado.",
+      "RECORD": "Registrar autorização de um teste",
+      "RECORDED": "Autorização registrada. Nenhuma mensagem foi enviada.",
+      "EMPTY": "Nenhuma autorização de teste registrada.",
+      "ROUTE": "Remetente: {sender} → Destinatário: {destination}",
+      "AVAILABLE": "Disponível para uma solicitação de teste",
+      "CONSUMED": "Consumida — não autoriza novo envio",
+      "REVOKED": "Revogada",
+      "REQUEST": "Solicitação de teste #{id}"
+    },
     "GOVERNANCE": {
       "REVIEW": "Revisar e aprovar envio",
       "SAVE_FOR_REVIEW": "Salvar e revisar",

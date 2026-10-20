@@ -23,6 +23,22 @@ class JrcCampaignsAPI extends ApiClient {
     return axios.get(`${super.baseUrl()}/jrc_campaigns/consents`);
   }
 
+  testAuthorizations() {
+    return axios.get(`${super.baseUrl()}/jrc_campaigns/test_authorizations`);
+  }
+
+  createTestAuthorization(testAuthorization) {
+    return axios.post(`${super.baseUrl()}/jrc_campaigns/test_authorizations`, {
+      test_authorization: testAuthorization,
+    });
+  }
+
+  revokeTestAuthorization(id) {
+    return axios.delete(
+      `${super.baseUrl()}/jrc_campaigns/test_authorizations/${id}`
+    );
+  }
+
   createConsent(consent) {
     return axios.post(`${super.baseUrl()}/jrc_campaigns/consents`, { consent });
   }

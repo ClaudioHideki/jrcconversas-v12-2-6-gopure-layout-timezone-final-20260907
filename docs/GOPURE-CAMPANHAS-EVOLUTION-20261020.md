@@ -67,6 +67,18 @@ Para rollback, pausar/cancelar as campanhas dessa versão, parar Sidekiq e Rails
 
 ## Validação e limites
 
+### Revisão r2: autorização de um único teste
+
+A tag `gopure-campanhas-evolution-20261020-r2` adiciona a seção **Autorizações de teste único** dentro da aba **Consentimentos para campanhas**. O administrador registra a caixa Evolution, o telefone do destinatário, a evidência da autorização e sua confirmação explícita. O registro guarda também a identidade do conector e o número remetente. Ele não cria nem altera consentimento para campanhas e não modifica evidências históricas sem finalidade confirmada.
+
+Uma autorização disponível permite uma solicitação de teste nessa conta, caixa, destinatário e remetente. Ao criar a solicitação, o sistema consome a autorização na mesma transação, antes da chamada externa. Falha, rejeição, timeout ou queda do worker não a tornam reutilizável. Solicitações repetidas com a mesma chave retornam o histórico existente; uma chave nova exige outra autorização do titular. Blacklist, telefone, bloqueios e revogações são verificados antes do envio. O consentimento amplo já confirmado continua funcionando como antes.
+
+A migration adicional `20261020193000_create_jrc_campaign_test_authorizations.rb` apenas cria a tabela e seus índices/chaves estrangeiras. Não altera o registro antigo de consentimento. Não há novas variáveis de ambiente. Aplicar a migration uma vez antes de iniciar Rails e Sidekiq com a imagem r2; ambos precisam usar a mesma imagem/digest. Não executar SQL para ampliar a finalidade do consentimento antigo.
+
+Depois da atualização: registrar na nova seção a autorização real do titular com sua data e referência; voltar ao teste individual, selecionar a mesma caixa e destinatário, conferir o conteúdo e confirmar o único envio autorizado. O público da campanha pode continuar com zero aptos, pois essa autorização não habilita campanhas. Não ativar a campanha.
+
+Para voltar da r2 à primeira imagem desta entrega, usar `gopure-campanhas-evolution-20261020@sha256:244742d7bd71c6a487438aa6354875cf02b6f0316bc28084616f576b94714bef` nos dois serviços. Manter a tabela nova e seus registros; a imagem anterior não utiliza essas autorizações. Não executar rollback destrutivo de migration.
+
 Os testes cobrem envio simulado, confirmação real pelo ID, ausência de ID, ACKs, timeout, rejeição, duplicidade, queda de worker, limites, consentimento e revogação, Account, histórico, mídias, janela e pausa/cancelamento no preflight. Há testes Vue para a confirmação do operador, idempotência e resultado desconhecido, além da regressão existente de CRM/NICO, financeiro, PDFs e WhatsApp oficial.
 
 O workflow manual `build-ghcr.yml` executa a validação antes do build. A opção `publish` é falsa por padrão. Quando autorizada e selecionada, constrói a imagem de produção, inicia Rails e Sidekiq contra PostgreSQL e Redis exclusivos de CI, verifica HTTP e processos, e somente então publica as mesmas camadas testadas. Não publica `latest` e não executa deploy.

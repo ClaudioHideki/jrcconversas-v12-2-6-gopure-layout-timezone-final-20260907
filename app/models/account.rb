@@ -139,6 +139,7 @@ class Account < ApplicationRecord
   has_many :jrc_crm_deal_conversations, class_name: 'JrcCrm::DealConversation', dependent: :destroy_async
   has_many :jrc_campaigns, class_name: 'JrcCampaigns::Campaign', dependent: :destroy_async
   has_many :jrc_campaign_test_deliveries, class_name: 'JrcCampaigns::TestDelivery', dependent: :destroy_async
+  has_many :jrc_campaign_test_authorizations, class_name: 'JrcCampaigns::TestAuthorization', dependent: :destroy_async
   has_many :jrc_campaign_blacklists, class_name: 'JrcCampaigns::Blacklist', dependent: :destroy_async
   has_many :jrc_campaign_sanitized_lists, class_name: 'JrcCampaigns::SanitizedList', dependent: :destroy_async
   has_many :jrc_campaign_media_assets, class_name: 'JrcCampaigns::MediaAsset', dependent: :destroy_async

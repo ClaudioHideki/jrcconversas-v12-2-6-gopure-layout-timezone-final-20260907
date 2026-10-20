@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import JrcCampaignsAPI from 'dashboard/api/jrcCampaigns';
 import { useAlert } from 'dashboard/composables';
+import TestAuthorizationPanel from './TestAuthorizationPanel.vue';
 
 const { t } = useI18n();
 const entries = ref([]);
@@ -50,6 +51,7 @@ onMounted(load);
 </script>
 
 <template>
+  <TestAuthorizationPanel />
   <section class="mt-8 space-y-4 rounded-xl border border-n-weak p-5">
     <h2 class="text-xl font-semibold text-n-slate-12">
       {{ t('JRC_CAMPAIGNS.GOVERNANCE.CONSENTS') }}

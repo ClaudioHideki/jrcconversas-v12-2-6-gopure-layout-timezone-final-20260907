@@ -199,6 +199,119 @@ RSpec.describe 'Evolution campaign integration', type: :request do
     expect { JrcCampaigns::TestMessageService.new(**test_options).perform }.to raise_error(ArgumentError, /revogado/)
   end
 
+  context 'with authorization for only one test' do
+    let(:authorization) do
+      JrcCampaigns::TestAuthorization.create!(
+        account: account, inbox: inbox, recorded_by: admin, phone_number: contact.phone_number,
+        evidence: 'Synthetic holder authorizes one individual test, no campaigns.', granted_at: Time.current,
+        connector_snapshot: connector.public_configuration.slice(*JrcCampaigns::TestAuthorization::IDENTITY_FIELDS)
+      )
+    end
+
+    before do
+      JrcCampaigns::Consent.find_by!(account: account, phone_number: contact.phone_number).update!(purpose: nil)
+      authorization
+    end
+
+    it 'sends once without granting campaign eligibility or changing historical consent' do
+      consent = JrcCampaigns::Consent.find_by!(account: account, phone_number: contact.phone_number)
+      historical_attributes = consent.attributes
+      first = JrcCampaigns::TestMessageService.new(**test_options).perform
+      expect(first[:status]).to eq('sent')
+      expect(authorization.reload).to have_attributes(test_delivery_id: first[:test_delivery_id], consumed_at: Time.current)
+      expect(consent.reload.attributes).to eq(historical_attributes)
+      expect(JrcCampaigns::AudienceResolver.new(campaign).preview[:rejections].sole[:reason]).to match(/finalidade/)
+      expect(JrcCampaigns::TestMessageService.new(**test_options).perform[:test_delivery_id]).to eq(first[:test_delivery_id])
+      expect do
+        JrcCampaigns::TestMessageService.new(**test_options.merge(idempotency_key: SecureRandom.uuid)).perform
+      end.to raise_error(ArgumentError, /finalidade/)
+      expect(a_request(:post, send_url)).to have_been_made.once
+    end
+
+    it 'consumes an unknown attempt and never automatically sends again' do
+      stub_request(:post, send_url).to_timeout
+      expect(JrcCampaigns::TestMessageService.new(**test_options).perform[:status]).to eq('unknown')
+      expect(authorization.reload.consumed_at).to be_present
+      expect(JrcCampaigns::TestMessageService.new(**test_options).perform[:status]).to eq('unknown')
+      expect do
+        JrcCampaigns::TestMessageService.new(**test_options.merge(idempotency_key: SecureRandom.uuid)).perform
+      end.to raise_error(ArgumentError, /finalidade/)
+      expect(a_request(:post, send_url)).to have_been_made.once
+    end
+
+    it 'consumes a provider rejection without permitting another request' do
+      stub_request(:post, send_url).to_return(status: 429)
+      expect(JrcCampaigns::TestMessageService.new(**test_options).perform[:status]).to eq('failed')
+      expect(authorization.reload.consumed_at).to be_present
+      expect do
+        JrcCampaigns::TestMessageService.new(**test_options.merge(idempotency_key: SecureRandom.uuid)).perform
+      end.to raise_error(ArgumentError)
+      expect(a_request(:post, send_url)).to have_been_made.once
+    end
+
+    it 'does not use revoked authorization' do
+      authorization.update!(revoked_at: Time.current)
+      expect { JrcCampaigns::TestMessageService.new(**test_options).perform }.to raise_error(ArgumentError)
+      expect(authorization.reload.consumed_at).to be_nil
+      expect(a_request(:post, send_url)).not_to have_been_made
+    end
+
+    it 'rechecks revocation after sender preflight' do
+      allow_any_instance_of(JrcCampaigns::EvolutionClient).to receive(:verify_sender!) { authorization.update!(revoked_at: Time.current) }
+      expect(JrcCampaigns::TestMessageService.new(**test_options).perform[:status]).to eq('failed')
+      expect(authorization.reload.consumed_at).to be_present
+      expect(a_request(:post, send_url)).not_to have_been_made
+    end
+
+    it 'keeps blacklist protection for a separately authorized test' do
+      account.jrc_campaign_blacklists.create!(phone_number: contact.phone_number, reason: 'QA blacklist')
+      expect { JrcCampaigns::TestMessageService.new(**test_options).perform }.to raise_error(ArgumentError, /blacklist/)
+      expect(authorization.reload.consumed_at).to be_nil
+      expect(a_request(:post, send_url)).not_to have_been_made
+    end
+
+    it 'keeps blocked contact protection for a separately authorized test' do
+      contact.update!(blocked: true)
+      expect { JrcCampaigns::TestMessageService.new(**test_options).perform }.to raise_error(ArgumentError, /bloqueado/)
+      expect(authorization.reload.consumed_at).to be_nil
+    end
+
+    it 'does not use a different destination authorization' do
+      expect do
+        JrcCampaigns::TestMessageService.new(**test_options.merge(phone_number: '+5511999999001')).perform
+      end.to raise_error(ArgumentError)
+      expect(authorization.reload.consumed_at).to be_nil
+      expect(a_request(:post, send_url)).not_to have_been_made
+    end
+
+    it 'does not reuse authorization for a changed sender' do
+      with_modified_env('JRC_CAMPAIGNS_EVOLUTION_CONNECTORS' => [configuration.merge(sender_number: '551155550001')].to_json) do
+        expect { JrcCampaigns::TestMessageService.new(**test_options).perform }.to raise_error(ArgumentError, /remetente/)
+      end
+      expect(authorization.reload.consumed_at).to be_nil
+      expect(a_request(:post, send_url)).not_to have_been_made
+    end
+
+    it 'keeps a worker claim consumed after a restart without calling the provider' do
+      payload_digest = Digest::SHA256.hexdigest([inbox.id, contact.phone_number, { 'kind' => 'text', 'body' => 'Homologação', 'media_url' => nil, 'file_name' => nil }.to_json].to_json)
+      claimed = JrcCampaigns::TestDelivery.create!(account: account, inbox: inbox, requested_by: admin,
+                                                  idempotency_key: test_idempotency_key, phone_number: contact.phone_number, payload_digest: payload_digest)
+      authorization.update!(consumed_at: Time.current, test_delivery: claimed)
+      expect(JrcCampaigns::TestMessageService.new(**test_options).perform[:status]).to eq('unknown')
+      expect(a_request(:post, send_url)).not_to have_been_made
+      expect do
+        JrcCampaigns::TestMessageService.new(**test_options.merge(idempotency_key: SecureRandom.uuid)).perform
+      end.to raise_error(ArgumentError)
+    end
+
+    it 'returns existing history after authorization revocation without resending' do
+      first = JrcCampaigns::TestMessageService.new(**test_options).perform
+      authorization.update!(revoked_at: Time.current)
+      expect(JrcCampaigns::TestMessageService.new(**test_options).perform[:test_delivery_id]).to eq(first[:test_delivery_id])
+      expect(a_request(:post, send_url)).to have_been_made.once
+    end
+  end
+
   it 'does not invent campaign purpose for historical consent evidence' do
     JrcCampaigns::Consent.find_by!(account: account, phone_number: contact.phone_number).update!(purpose: nil)
     expect { JrcCampaigns::TestMessageService.new(**test_options).perform }.to raise_error(ArgumentError, /finalidade/)
