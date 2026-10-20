@@ -260,6 +260,10 @@ RSpec.describe 'Evolution campaign integration', type: :request do
   %w[image document video audio].each do |kind|
     it "uses the existing instance for #{kind} without a second webhook send" do
       endpoint = kind == 'audio' ? 'sendWhatsAppAudio' : 'sendMedia'
+      allow(Resolv).to receive(:getaddresses).with('media.example.test').and_return(['93.184.216.34'])
+      stub_request(:get, 'https://media.example.test/file').to_return(
+        headers: { 'Content-Type' => kind == 'document' ? 'application/pdf' : "#{kind}/test" }, body: 'isolated-media-fixture'
+      )
       stub_request(:post, "https://evolution.example.test/message/#{endpoint}/demo").to_return(
         status: 201, headers: { 'Content-Type' => 'application/json' },
         body: { key: { id: "qa-#{kind}", fromMe: true, remoteJid: '5511999999000@s.whatsapp.net' } }.to_json
@@ -267,8 +271,44 @@ RSpec.describe 'Evolution campaign integration', type: :request do
       result = JrcCampaigns::TestMessageService.new(**test_options.merge(step: { kind: kind, media_url: 'https://media.example.test/file', body: '' })).perform
       expect(result[:message_id]).to eq("qa-#{kind}")
       expect(result[:delivery_confirmed]).to be(false)
+      expect(a_request(:post, "https://evolution.example.test/message/#{endpoint}/demo").with do |request|
+        payload = JSON.parse(request.body)
+        encoded = payload[kind == 'audio' ? 'audio' : 'media'] == Base64.strict_encode64('isolated-media-fixture')
+        encoded && (kind == 'audio' || (payload['fileName'].present? && payload['mimetype'].present?))
+      end).to have_been_made.once
       expect(Message.find(JrcCampaigns::TestDelivery.find(result[:test_delivery_id]).metadata['message_id']).attachments.count).to eq(1)
     end
+  end
+
+  it 'does not expose the Evolution internal network through a media URL' do
+    allow(Resolv).to receive(:getaddresses).with('internal.example.test').and_return(['127.0.0.1'])
+    result = JrcCampaigns::TestMessageService.new(**test_options.merge(step: { kind: 'image', media_url: 'https://internal.example.test/secret' })).perform
+    expect(result[:status]).to eq('failed')
+    expect(a_request(:post, 'https://evolution.example.test/message/sendMedia/demo')).not_to have_been_made
+  end
+
+  it 'does not request a provider send after a media download times out' do
+    allow(Resolv).to receive(:getaddresses).with('media.example.test').and_return(['93.184.216.34'])
+    stub_request(:get, 'https://media.example.test/file').to_timeout
+    result = JrcCampaigns::TestMessageService.new(**test_options.merge(step: { kind: 'image', media_url: 'https://media.example.test/file' })).perform
+    expect(result[:status]).to eq('failed')
+    expect(a_request(:post, 'https://evolution.example.test/message/sendMedia/demo')).not_to have_been_made
+  end
+
+  it 'rejects media whose response type differs from the selected kind' do
+    allow(Resolv).to receive(:getaddresses).with('media.example.test').and_return(['93.184.216.34'])
+    stub_request(:get, 'https://media.example.test/file').to_return(headers: { 'Content-Type' => 'text/html' }, body: '<html>not an image</html>')
+    result = JrcCampaigns::TestMessageService.new(**test_options.merge(step: { kind: 'image', media_url: 'https://media.example.test/file' })).perform
+    expect(result[:status]).to eq('failed')
+    expect(a_request(:post, 'https://evolution.example.test/message/sendMedia/demo')).not_to have_been_made
+  end
+
+  it 'rejects media above the conservative size limit before requesting the provider' do
+    allow(Resolv).to receive(:getaddresses).with('media.example.test').and_return(['93.184.216.34'])
+    stub_request(:get, 'https://media.example.test/file').to_return(headers: { 'Content-Type' => 'image/png' }, body: 'x' * (10.megabytes + 1))
+    result = JrcCampaigns::TestMessageService.new(**test_options.merge(step: { kind: 'image', media_url: 'https://media.example.test/file' })).perform
+    expect(result[:status]).to eq('failed')
+    expect(a_request(:post, 'https://evolution.example.test/message/sendMedia/demo')).not_to have_been_made
   end
 
   it 'exposes only the explicitly configured API inbox, without its credential' do

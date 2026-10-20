@@ -1,3 +1,5 @@
+require 'base64'
+
 class JrcCampaigns::EvolutionClient
   class Rejected < StandardError; end
   class UnknownResult < StandardError; end
@@ -27,9 +29,11 @@ class JrcCampaigns::EvolutionClient
                     when 'text'
                       ['/message/sendText', { number: number, text: body, linkPreview: false }]
                     when 'image', 'document', 'video'
-                      ['/message/sendMedia', { number: number, mediatype: kind, media: media_url, caption: body, fileName: file_name }]
+                      content = media_content(media_url, kind)
+                      payload = content.merge(number: number, mediatype: kind, caption: body, fileName: file_name.presence || content[:fileName])
+                      ['/message/sendMedia', payload]
                     when 'audio'
-                      ['/message/sendWhatsAppAudio', { number: number, audio: media_url }]
+                      ['/message/sendWhatsAppAudio', { number: number, audio: media_content(media_url, kind).fetch(:media) }]
                     else
                       raise Rejected, 'Tipo de mensagem não suportado pela Evolution; templates Meta exigem caixa oficial.'
                     end
@@ -60,6 +64,18 @@ class JrcCampaigns::EvolutionClient
   private
 
   attr_reader :connector
+
+  def media_content(url, kind)
+    # Download through the application's SSRF guard, then send bytes. Passing the
+    # URL to Evolution would let an account operator request its internal network.
+    prefixes = kind == 'document' ? ['application/'] : ["#{kind}/"]
+    SafeFetch.fetch(url, max_bytes: 10.megabytes, open_timeout: 5, read_timeout: 20,
+                    allowed_content_type_prefixes: prefixes, allowed_content_types: kind == 'document' ? ['text/plain'] : []) do |result|
+      { media: Base64.strict_encode64(result.tempfile.read), mimetype: result.content_type, fileName: result.filename }
+    end
+  rescue SafeFetch::Error, Timeout::Error
+    raise Rejected, 'Não foi possível obter a mídia pública no tipo esperado e no limite de 10 MB. Nenhum envio foi solicitado à Evolution.'
+  end
 
   def request(method, path, payload = nil)
     SafeFetch.fetch(
