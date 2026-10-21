@@ -1,9 +1,9 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import JrcCampaignsAPI from 'dashboard/api/jrcCampaigns';
 
-const emit = defineEmits(['imported']);
+const emit = defineEmits(['imported', 'close', 'busyChange']);
 const { t } = useI18n();
 const csv = ref('');
 const preview = ref(null);
@@ -11,6 +11,9 @@ const confirmed = ref(false);
 const busy = ref(false);
 const error = ref('');
 const result = ref(null);
+const fileInput = ref(null);
+const fileName = ref('');
+watch(busy, value => emit('busyChange', value));
 const canImport = computed(
   () =>
     !busy.value &&
@@ -30,6 +33,7 @@ const selectFile = async event => {
   error.value = '';
   result.value = null;
   const file = event.target.files?.[0];
+  fileName.value = file?.name || '';
   if (!file) return;
   if (file.size > 1024 * 1024) {
     error.value = t('JRC_CAMPAIGNS.CONSENT_IMPORT.SIZE_ERROR');
@@ -82,37 +86,92 @@ const downloadTemplate = () => {
 </script>
 
 <template>
-  <section class="mt-6 space-y-4 rounded-xl border border-n-weak p-5">
-    <h2 class="text-xl font-semibold text-n-slate-12">
-      {{ t('JRC_CAMPAIGNS.CONSENT_IMPORT.TITLE') }}
-    </h2>
+  <section class="space-y-4 rounded-xl border border-n-weak bg-n-alpha-1 p-5">
+    <header class="flex items-center justify-between gap-3">
+      <h3 class="font-semibold text-n-slate-12">
+        {{ t('JRC_CAMPAIGNS.CONSENT_SCREEN.IMPORT') }}
+      </h3>
+      <button
+        type="button"
+        :disabled="busy"
+        class="rounded-lg px-3 py-1 text-sm text-n-slate-11 disabled:opacity-40"
+        @click="emit('close')"
+      >
+        {{ t('JRC_CAMPAIGNS.CONSENT_SCREEN.CLOSE') }}
+      </button>
+    </header>
     <p class="text-sm text-n-slate-11">
       {{ t('JRC_CAMPAIGNS.CONSENT_IMPORT.HELP') }}
     </p>
-    <p class="text-sm text-n-slate-11">
-      {{ t('JRC_CAMPAIGNS.CONSENT_IMPORT.FORMAT') }}
-    </p>
-    <button
-      type="button"
-      class="rounded-lg border border-n-strong px-3 py-2 text-n-slate-12"
-      @click="downloadTemplate"
-    >
-      {{ t('JRC_CAMPAIGNS.CONSENT_IMPORT.TEMPLATE') }}
-    </button>
-    <label class="flex flex-col gap-2 text-sm text-n-slate-12">
-      {{ t('JRC_CAMPAIGNS.CONSENT_IMPORT.FILE') }}
-      <input
-        type="file"
-        accept=".csv,text/csv"
-        :disabled="busy"
-        @change="selectFile"
-      />
-    </label>
+    <div class="grid gap-3 md:grid-cols-2">
+      <div
+        class="space-y-3 rounded-lg border border-n-weak bg-n-background p-4"
+      >
+        <h4 class="text-sm font-medium text-n-slate-12">
+          {{ t('JRC_CAMPAIGNS.CONSENT_SCREEN.STEP_MODEL') }}
+        </h4>
+        <p class="text-xs text-n-slate-11">
+          {{ t('JRC_CAMPAIGNS.CONSENT_SCREEN.MODEL_HELP') }}
+        </p>
+        <button
+          type="button"
+          class="inline-flex items-center gap-2 rounded-lg border border-n-strong px-3 py-2 text-sm text-n-slate-12"
+          @click="downloadTemplate"
+        >
+          <span class="i-lucide-download size-4" />{{
+            t('JRC_CAMPAIGNS.CONSENT_IMPORT.TEMPLATE')
+          }}
+        </button>
+      </div>
+      <div
+        class="space-y-3 rounded-lg border border-n-weak bg-n-background p-4"
+      >
+        <h4 class="text-sm font-medium text-n-slate-12">
+          {{ t('JRC_CAMPAIGNS.CONSENT_SCREEN.STEP_FILE') }}
+        </h4>
+        <p class="text-xs text-n-slate-11">
+          {{ t('JRC_CAMPAIGNS.CONSENT_SCREEN.FILE_LIMIT') }}
+        </p>
+        <input
+          ref="fileInput"
+          type="file"
+          class="sr-only"
+          accept=".csv,text/csv"
+          :aria-label="t('JRC_CAMPAIGNS.CONSENT_IMPORT.FILE')"
+          :disabled="busy"
+          @change="selectFile"
+        />
+        <button
+          type="button"
+          :disabled="busy"
+          class="inline-flex items-center gap-2 rounded-lg border border-n-strong px-3 py-2 text-sm text-n-slate-12 disabled:opacity-40"
+          @click="fileInput.click()"
+        >
+          <span class="i-lucide-upload size-4" />{{
+            t('JRC_CAMPAIGNS.CONSENT_SCREEN.SELECT_FILE')
+          }}
+        </button>
+        <p v-if="fileName" class="break-all text-xs text-n-slate-11">
+          {{ fileName }}
+        </p>
+      </div>
+    </div>
+    <details>
+      <summary class="w-fit cursor-pointer text-xs text-n-slate-11">
+        {{ t('JRC_CAMPAIGNS.CONSENT_SCREEN.FORMAT_HELP') }}
+      </summary>
+      <p class="mt-2 text-xs leading-5 text-n-slate-11">
+        {{ t('JRC_CAMPAIGNS.CONSENT_IMPORT.FORMAT') }}
+      </p>
+    </details>
     <p v-if="error" role="alert" class="text-sm text-n-ruby-11">{{ error }}</p>
     <p v-if="result" role="status" class="text-sm text-n-teal-11">
       {{ t('JRC_CAMPAIGNS.CONSENT_IMPORT.RESULT', result) }}
     </p>
     <template v-if="preview">
+      <h4 class="text-sm font-medium text-n-slate-12">
+        {{ t('JRC_CAMPAIGNS.CONSENT_SCREEN.STEP_REVIEW') }}
+      </h4>
       <p role="status" class="text-sm text-n-slate-12">
         {{ t('JRC_CAMPAIGNS.CONSENT_IMPORT.SUMMARY', preview) }}
       </p>
