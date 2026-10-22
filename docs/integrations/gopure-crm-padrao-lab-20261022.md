@@ -15,7 +15,7 @@
 - Clientes já existe no código consolidado: Empresas, Contatos, Segmentos, Grupos, Importações e Contatos ativos. O menu depende de `jrc_customer_master`; rotas e API mantêm permissões e isolamento por conta. Não habilitamos a flag nem alteramos o banco de produção.
 - O fluxo oficial de ativação exige revisão de backfill e homologação, conforme `lib/tasks/jrc_customer_master.rake`. Não substituir isso por habilitação automática nem recriar contatos.
 - Novo Negócio já usa o componente oficial `crm/views/deals/DealsIndex.vue`, com Informações, Produtos e valores e Próxima ação. A GoPure preserva o seletor paginado para contas sem Cadastro Mestre e usa os seletores oficiais de empresa/contato quando habilitado. Preços, rascunhos e controles de permissão da integração anterior permanecem.
-- `LeadCreateModal.vue` é idêntico ao LAB de Projetos. O campo Canal ou origem é texto livre também no LAB; não há cadastro/API de origens de lead nessa referência. Novo Negócio possui opções fixas herdadas do LAB. Não foi inventado um cadastro, uma API ou valores de origem para simular a correção. Solicitada a localização do cadastro real ao usuário; integração desse campo permanece pendente dessa referência.
+- `LeadCreateModal.vue` é idêntico ao LAB de Projetos. O campo Canal ou origem é texto livre também no LAB; não há cadastro/API de origens de lead nessa referência. Novo Negócio possui opções fixas herdadas do LAB. Não foi inventado um cadastro, uma API ou valores de origem para simular a correção. O usuário confirmou que esse cadastro ainda inexistente deve ser tratado como evolução futura separada, sem bloquear a consolidação nem a imagem. Manter Canal ou origem compatível com os leads e negócios existentes.
 
 ## Alterações desta consolidação
 
@@ -33,3 +33,17 @@
 - Não houve envio real, deploy ou publicação de runtime NICO nesta etapa.
 - A ativação do Cadastro Mestre, validação dos contatos existentes e verificação das telas no ambiente GoPure exigem homologação separada com backup e os procedimentos oficiais.
 - Commit, CI e nova imagem devem ser confirmados após sua conclusão; este documento não declara publicação antecipadamente.
+
+## Evolução futura separada — Origens de Lead
+
+- Criar em Configurações Comerciais um cadastro de Origens de Lead, com API e seleção dinâmica, em tarefa posterior.
+- Usar somente origens realmente cadastradas e autorizadas para a conta; preservar valores históricos e isolamento entre contas.
+- Não faz parte desta consolidação e não é condição para publicar a imagem atual, conforme orientação explícita do usuário.
+
+## Verificações locais
+
+- 195 testes comerciais passaram; 177 de Campanhas passaram após isolar mocks entre casos.
+- 31 testes oficiais de criação, rascunhos e Cadastro Mestre passaram.
+- 7 testes de integração da interface de Projetos e 12 testes de projeções passaram.
+- ESLint dos arquivos JavaScript/Vue incorporados e actionlint do workflow passaram.
+- Ruby, PostgreSQL e compilação consolidada continuam sujeitos à CI obrigatória; não substituídos por mocks locais.
