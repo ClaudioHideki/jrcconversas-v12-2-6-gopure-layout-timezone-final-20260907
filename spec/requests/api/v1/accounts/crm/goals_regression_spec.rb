@@ -6,8 +6,9 @@ RSpec.describe 'CRM goals dashboard criteria', type: :request do
   let(:agent) { create(:user, account: account, role: :agent) }
   let(:url) { "/api/v1/accounts/#{account.id}/crm/goals/dashboard" }
   let(:period) { { period_start: Date.new(2026, 9, 1), period_end: Date.new(2026, 9, 30) } }
+  let(:team) { create(:team, account: account).tap { |row| row.members << agent; row.members << admin } }
   let(:goal) do
-    JrcCrm::SalesGoal.create!(account: account, status: 'active', metric: 'revenue', scope_kind: 'team',
+    JrcCrm::SalesGoal.create!(account: account, status: 'active', metric: 'revenue', scope_kind: 'team', team: team,
       target_cents: 30_000, allocations: [{ user_id: agent.id, target_cents: 10_000 }, { user_id: admin.id, target_cents: 20_000 }], **period)
   end
 

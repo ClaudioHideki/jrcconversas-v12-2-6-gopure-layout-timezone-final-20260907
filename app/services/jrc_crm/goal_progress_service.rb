@@ -9,10 +9,11 @@ module JrcCrm
 
     attr_reader :goal
 
-    def initialize(goal:, user_id: nil, actor: nil)
+    def initialize(goal:, user_id: nil, actor: nil, as_of: nil)
       @goal = goal
       @user_id = user_id
       @actor = actor
+      @as_of = as_of
     end
 
     def call
@@ -34,6 +35,10 @@ module JrcCrm
       call[:attainment]
     end
 
+    def realized_through(date)
+      self.class.new(goal: goal, user_id: @user_id, actor: @actor, as_of: date).send(:realized_value)
+    end
+
     def product_results
       rows = Array(goal.product_targets)
       return [] if rows.empty?
@@ -51,6 +56,10 @@ module JrcCrm
     end
 
     private
+
+    def period_end
+      [goal.period_end, @as_of].compact.min.end_of_day
+    end
 
     def monetary?
       MONETARY_METRICS.include?(goal.metric)
@@ -123,7 +132,7 @@ module JrcCrm
     def order_scope_for(product_id: nil)
       scope = goal.account.jrc_crm_sales_orders
       date_sql = 'COALESCE(jrc_crm_sales_orders.sold_at, jrc_crm_sales_orders.closed_at, jrc_crm_sales_orders.created_at) BETWEEN ? AND ?'
-      scope = scope.where(date_sql, goal.period_start.beginning_of_day, goal.period_end.end_of_day)
+      scope = scope.where(date_sql, goal.period_start.beginning_of_day, period_end)
       scope = scoped_responsibility(scope)
       statuses = ORDER_STATUSES.fetch(goal.calculation_method.to_s, ORDER_STATUSES['approved_orders'])
       scope = scope.where(status: statuses)
@@ -178,7 +187,7 @@ module JrcCrm
 
     def contract_scope
       scope = scoped_responsibility(goal.account.jrc_crm_contracts)
-              .where(created_at: goal.period_start.beginning_of_day..goal.period_end.end_of_day)
+              .where(created_at: goal.period_start.beginning_of_day..period_end)
       ids = product_filter_ids
       if ids.any?
         scope = scope.where(id: JrcCrm::ContractItem.where(product_id: ids).select(:contract_id))
@@ -188,7 +197,7 @@ module JrcCrm
 
     def period_deals
       scope = scoped_responsibility(goal.account.jrc_crm_deals)
-              .where(updated_at: goal.period_start.beginning_of_day..goal.period_end.end_of_day)
+              .where(updated_at: goal.period_start.beginning_of_day..period_end)
       ids = product_filter_ids
       if ids.any?
         scope = scope.where(id: JrcCrm::DealProduct.where(product_id: ids).select(:deal_id))
@@ -233,10 +242,14 @@ module JrcCrm
     end
 
     def effective_criteria
+      settings = (goal.settings || {}).with_indifferent_access
+      statuses = ORDER_STATUSES.fetch(goal.calculation_method.to_s, ORDER_STATUSES['approved_orders'])
+      requested = settings[:statuses].presence || settings[:order_statuses].presence
+      statuses &= Array(requested).map(&:to_s) if requested.present?
       { metric: goal.metric, period_start: goal.period_start, period_end: goal.period_end,
         user_id: @user_id.presence || goal.user_id, goal_user_id: goal.user_id, team_id: goal.team_id,
         team_basis: 'current_account_team_membership', business_unit_id: goal.business_unit_id,
-        product_id: goal.product_id, eligible_product_ids: product_filter_ids, settings: goal.settings || {} }
+        product_id: goal.product_id, eligible_product_ids: product_filter_ids, order_statuses: statuses, settings: goal.settings || {} }
     end
 
     def percent(value, target)

@@ -43,7 +43,7 @@ RSpec.describe JrcCrm::GoalProgressService do
     second = JrcCrm::SalesOrder.create!(account: account, owner: owner, source_type: 'manual', status: 'completed',
       sold_at: order.sold_at, total_cents: 20_000)
     second.order_items.create!(product: product, name: 'Produto', quantity: 1, one_time_cents: 20_000)
-    expect(described_class.new(goal: goal).call[:realized]).to eq(40_000)
+    expect(described_class.new(goal: goal).call[:realized]).to eq(30_000)
     goal.update!(metric: 'quantity')
     expect(described_class.new(goal: goal).call[:realized]).to eq(5)
   end

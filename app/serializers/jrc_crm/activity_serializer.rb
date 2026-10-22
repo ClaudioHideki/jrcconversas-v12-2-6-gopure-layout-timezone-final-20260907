@@ -20,9 +20,10 @@ module JrcCrm
         deal: serialize_deal,
         lead_id: @activity.lead_id,
         lead: serialize_lead,
+        sales_order_id: @activity.sales_order_id,
         contact: serialize_contact,
         related_type: related_type,
-        related_id: @activity.deal_id || @activity.lead_id || @activity.contact_id || @activity.company_id,
+        related_id: @activity.deal_id || @activity.lead_id || @activity.sales_order_id || @activity.contact_id || @activity.company_id,
         related_label: related_label,
         overdue: @activity.overdue?,
         created_at: @activity.created_at,
@@ -35,7 +36,7 @@ module JrcCrm
     private
 
     def serialize_contact
-      contact = @activity.contact || @activity.deal&.contact || @activity.lead&.contact
+      contact = @activity.contact || @activity.deal&.contact || @activity.lead&.contact || @activity.sales_order&.contact
       return nil unless contact
 
       { id: contact.id, name: contact.name, phone_number: contact.phone_number, email: contact.email }
@@ -56,6 +57,7 @@ module JrcCrm
     def related_label
       return prefixed_label('Negócio', @activity.deal.title) if @activity.deal
       return prefixed_label('Lead', @activity.lead.name) if @activity.lead
+      return prefixed_label('Pedido', @activity.sales_order.order_number) if @activity.sales_order
       return @activity.contact.name if @activity.contact
       return @activity.company.name if @activity.company
 
@@ -65,6 +67,7 @@ module JrcCrm
     def related_type
       return 'deal' if @activity.deal_id
       return 'lead' if @activity.lead_id
+      return 'sales_order' if @activity.sales_order_id
       return 'contact' if @activity.contact_id
       return 'company' if @activity.company_id
 

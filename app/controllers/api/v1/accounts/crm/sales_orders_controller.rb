@@ -258,12 +258,22 @@ module Api::V1::Accounts::Crm
         row = item.respond_to?(:to_unsafe_h) ? item.to_unsafe_h : item.to_h
         unit_id = params.dig(:sales_order, :business_unit_id).presence || @order&.business_unit_id
         unit = crm_scope.jrc_crm_business_units.find(unit_id) if unit_id
-        JrcCrm::CorporateIssuer.product!(account: crm_scope, user: Current.user, id: row['product_id'], unit: unit) if row['product_id'].present?
+        if row['product_id'].present?
+          product = JrcCrm::CorporateIssuer.product!(account: crm_scope, user: Current.user, id: row['product_id'], unit: unit)
+          existing = @order&.order_items&.find_by(id: row['id']) if row['id'].present?
+          row['name'] = product.name if row['name'].blank?
+          row['snapshot'] = { 'billing_model' => product.billing_model, 'setup_fee_cents' => product.setup_fee_cents,
+                              'contract_term_months' => product.contract_term_months, 'unit_name' => product.sales_unit }
+                            .merge((row['snapshot'] || {}).to_h)
+          row['snapshot']['requires_implementation'] = existing && existing.product_id == product.id ?
+            ActiveModel::Type::Boolean.new.cast(existing.snapshot['requires_implementation']) : product.requires_implementation
+        end
         row
       end
     end
 
     def sync_downstream!(order)
+      order.validate_implementation! unless order.draft? || order.canceled?
       JrcCrm::OrderWorkflowSyncService.new(order: order.reload, actor: Current.user).call
     end
 
@@ -346,8 +356,8 @@ module Api::V1::Accounts::Crm
 
       company = contact.company_id.present? ? JrcCustomers::Company.where(account_id: crm_scope.id).find_by(id: contact.company_id) : nil
       { id: contact.id, name: contact.name, email: contact.email, phone_number: contact.phone_number, identifier: contact.identifier,
-        company_id: company&.id, company_name: company&.name, trade_name: company&.respond_to?(:trade_name) ? company.trade_name : nil,
-        tax_id: company&.respond_to?(:tax_id) ? company.tax_id : nil, customer_code: company&.respond_to?(:customer_code) ? company.customer_code : nil }
+        company_id: company&.id, company_name: company&.name, trade_name: company.respond_to?(:trade_name) ? company.trade_name : nil,
+        tax_id: company.respond_to?(:tax_id) ? company.tax_id : nil, customer_code: company.respond_to?(:customer_code) ? company.customer_code : nil }
     end
 
     def serialize_selection_deal(deal)

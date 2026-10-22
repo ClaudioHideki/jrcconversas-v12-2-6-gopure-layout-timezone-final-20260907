@@ -226,6 +226,15 @@ class JrcNico::OperatorSession
                                                .where.not(source_notice_id: nil).select(:source_notice_id)).includes(:commands, :conversation)
       allowed &&= notices.all? { |notice| notice.visible_to?(access) }
     end
+    if allowed
+      allowed = session.commands.where('created_at >= ?', session.context['visible_since'])
+                       .where(tool: 'prepare_closed_case_knowledge', status: 'succeeded').all? do |command|
+        JrcNico::Helpdesk::GroupDraftActions.new(access, command).history_resources
+        true
+      rescue Pundit::NotAuthorizedError, ActiveRecord::RecordNotFound
+        false
+      end
+    end
     return if allowed
 
     session.with_lock do

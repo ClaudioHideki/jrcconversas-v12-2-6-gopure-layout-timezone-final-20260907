@@ -11,8 +11,8 @@ RSpec.describe 'Commercial orders, contacts and isolation', type: :request do
 
   it 'keeps direct 100x20 and monthly 30 financials identical in preview, save, reload and PDF' do
     scenarios = [
-      { billing: 'one_time', quantity: 100, price: 2000, initial: 200_000, mrr: 0, contract: nil, pdf: 'R$ 2.000,00' },
-      { billing: 'monthly', quantity: 1, price: 3000, initial: 0, mrr: 3000, contract: 36_000, pdf: 'R$ 360,00' }
+      { billing: 'one_time', quantity: 100, price: 2000, initial: 200_000, mrr: 0, contract: 200_000, pdf: 'R$ 2.000,00' },
+      { billing: 'monthly', quantity: 1, price: 3000, initial: 3000, mrr: 3000, contract: 3000, pdf: 'R$ 30,00' }
     ]
     scenarios.each do |scenario|
       product = create(:jrc_crm_product, account: account, sku: scenario[:billing], billing_model: scenario[:billing],
@@ -25,7 +25,7 @@ RSpec.describe 'Commercial orders, contacts and isolation', type: :request do
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to include(expected.merge('contract_total_cents' => scenario[:contract]))
       post "#{base}/crm/sales_orders", headers: headers, as: :json, params: payload
-      expect(response).to have_http_status(:created)
+      expect(response).to have_http_status(:created), response.body
       id = response.parsed_body.fetch('id')
       expect(response.parsed_body).to include(expected)
       expect(JrcCrm::SalesOrder.find(id).implementation_items).to be_empty
@@ -53,7 +53,7 @@ RSpec.describe 'Commercial orders, contacts and isolation', type: :request do
       total_cents: 1, snapshot: { taxes_percent: 10, surcharge_cents: 500 },
       items: [{ name: 'Produto', quantity: 100, unit_cents: 2500, snapshot: { billing_model: 'one_time' } }]
     } }
-    expect(response).to have_http_status(:created)
+    expect(response).to have_http_status(:created), response.body
     id = response.parsed_body.fetch('id')
     expect(response.parsed_body).to include('total_cents' => 264_500, 'monthly_cents' => 0)
     get "#{base}/crm/sales_orders/#{id}", headers: headers
@@ -77,12 +77,12 @@ RSpec.describe 'Commercial orders, contacts and isolation', type: :request do
     post "#{base}/crm/sales_orders", headers: agent_headers, as: :json, params: { sales_order: {
       contact_id: contact.id, items: [{ name: 'Produto', quantity: 100, unit_cents: 2000 }]
     } }
-    expect(response).to have_http_status(:created)
+    expect(response).to have_http_status(:created), response.body
     order_id = response.parsed_body.fetch('id')
     post "#{base}/crm/activities", headers: agent_headers, as: :json, params: { activity: {
       sales_order_id: order_id, title: 'Retorno', activity_type: 'follow_up', due_at: 1.day.from_now.iso8601
     } }
-    expect(response).to have_http_status(:created)
+    expect(response).to have_http_status(:created), response.body
     id = response.parsed_body.fetch('id')
     post "#{base}/crm/activities/#{id}/complete", headers: agent_headers
     expect(response).to have_http_status(:ok)
@@ -161,11 +161,12 @@ RSpec.describe 'Commercial orders, contacts and isolation', type: :request do
     items[0][:snapshot] = { implementation_owner: admin.name, implementation_date: Date.tomorrow.iso8601 }
     post "#{base}/crm/sales_orders", headers: headers, as: :json,
          params: { sales_order: { contact_id: contact.id, status: 'approved', items: items } }
-    expect(response).to have_http_status(:created)
-    expect(response.parsed_body).to include('total_cents' => 300_000, 'monthly_cents' => 78_000)
+    expect(response).to have_http_status(:created), response.body
+    expect(response.parsed_body).to include('total_cents' => 283_000, 'monthly_cents' => 78_000)
     order = JrcCrm::SalesOrder.find(response.parsed_body['id'])
-    expect(order.backoffice_requests.sole.metadata['implementation_item_ids']).to eq([order.order_items.find_by!(product: product).id])
-    expect(order.snapshot['contract_total_cents']).to eq(1_236_000)
+    JrcCrm::OrderApprovalService.new(order: order, actor: admin).decide!(request: order.backoffice_requests.find_by!(request_kind: 'approval'), decision: 'approved')
+    expect(order.backoffice_requests.find_by!(request_kind: 'fulfillment').metadata['implementation_item_ids']).to eq([order.order_items.find_by!(product: product).id])
+    expect(order.financial_summary[:contract_total_cents]).to eq(283_000)
   end
 
   it 'keeps product recurrence and implementation independent and does not invent a term' do
@@ -174,7 +175,7 @@ RSpec.describe 'Commercial orders, contacts and isolation', type: :request do
         name: "Produto #{billing}", sku: "NEW-#{index}", billing_model: billing, unit_price_cents: 2000,
         requires_implementation: index == 1, contract_term_months: nil
       } }
-      expect(response).to have_http_status(:created)
+      expect(response).to have_http_status(:created), response.body
       expect(response.parsed_body).to include('requires_implementation' => (index == 1), 'contract_term_months' => nil)
     end
   end
@@ -199,7 +200,7 @@ RSpec.describe 'Commercial orders, contacts and isolation', type: :request do
 
   it 'allows administrator funnel CRUD and reorder but refuses deletion in use or foreign stages' do
     post "#{base}/crm/pipelines", headers: headers, as: :json, params: { pipeline: { name: 'Novo Funil', key: 'novo' } }
-    expect(response).to have_http_status(:created)
+    expect(response).to have_http_status(:created), response.body
     pipeline = account.jrc_crm_pipelines.find(response.parsed_body['id'])
     stages = [1, 2].map { |position| create(:jrc_crm_stage, account: account, pipeline: pipeline, position: position) }
     post "#{base}/crm/stages/reorder", headers: headers, as: :json,
@@ -227,18 +228,18 @@ RSpec.describe 'Commercial orders, contacts and isolation', type: :request do
         { name: 'Consultoria', quantity: 5, unit_cents: 15000, snapshot: { billing_model: 'one_time' } }
       ]
     } }
-    expect(response).to have_http_status(:created)
+    expect(response).to have_http_status(:created), response.body
     order = response.parsed_body
-    expect(order).to include('total_cents' => 375_000, 'monthly_cents' => 78_000)
-    expect(order.dig('snapshot', 'contract_total_cents')).to be_nil
+    expect(order).to include('total_cents' => 358_000, 'monthly_cents' => 78_000)
+    expect(order.dig('snapshot', 'financials', 'contract_total_cents')).to eq(358_000)
     get "#{base}/crm/sales_orders/#{order['id']}", headers: headers
-    expect(response.parsed_body).to include('total_cents' => 375_000, 'monthly_cents' => 78_000)
+    expect(response.parsed_body).to include('total_cents' => 358_000, 'monthly_cents' => 78_000)
     patch "#{base}/crm/sales_orders/#{order['id']}", headers: headers, as: :json, params: { sales_order: {
-      discount_cents: 20000, shipping_cents: 10000, snapshot: { discount_percent: nil, taxes_percent: 10, surcharge_cents: 500 }
+      discount_cents: 20000, shipping_cents: 10000, snapshot: { shipping_mode: 'separate', discount_percent: nil, taxes_percent: 10, surcharge_cents: 500 }
     } }
     expect(response).to have_http_status(:ok)
-    expect(response.parsed_body).to include('total_cents' => 402_000, 'monthly_cents' => 78_000)
-    expect(response.parsed_body.dig('snapshot', 'installments').sum { |row| row['value'] }).to eq(402_000)
+    expect(response.parsed_body).to include('total_cents' => 383_300, 'monthly_cents' => 78_000)
+    expect(response.parsed_body.dig('snapshot', 'payments').sum { |row| row['value'] }).to eq(383_300)
   end
 
   it 'refuses forged implementation flags and preserves existing items after a failed update' do
@@ -247,7 +248,7 @@ RSpec.describe 'Commercial orders, contacts and isolation', type: :request do
       contact_id: contact.id, status: 'draft', items: [{ product_id: product.id, quantity: 1, unit_cents: 2000,
                                                        snapshot: { requires_implementation: false } }]
     } }
-    expect(response).to have_http_status(:created)
+    expect(response).to have_http_status(:created), response.body
     order = response.parsed_body
     expect(order['items'].first.dig('snapshot', 'requires_implementation')).to be(true)
     patch "#{base}/crm/sales_orders/#{order['id']}", headers: headers, as: :json,

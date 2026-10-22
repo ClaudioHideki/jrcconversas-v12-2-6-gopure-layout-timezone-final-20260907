@@ -196,7 +196,7 @@ RSpec.describe 'CRM proposal delivery to a selected recipient', type: :request d
 
     it 'sends a free-form proposal within an existing technical reply window' do
       conversation = create(:conversation, account: account, inbox: inbox, contact: recipient, assignee: agent)
-      create(:message, conversation: conversation, account: account, message_type: :incoming)
+      create(:message, conversation: conversation, account: account, sender: recipient, message_type: :incoming, source_id: "wamid.qa-#{SecureRandom.hex(8)}")
       expect { post url, params: payload, headers: headers, as: :json }.to change(Message, :count).by(1)
       expect(response).to have_http_status(:ok), response.body
       expect(proposal.reload.last_sent_conversation_id).to eq(conversation.id)

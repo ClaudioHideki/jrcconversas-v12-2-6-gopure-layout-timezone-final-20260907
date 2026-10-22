@@ -84,9 +84,9 @@ module JrcCrm
       metadata = existing_metadata.to_h.merge(
         'order_total_cents' => @order.total_cents,
         'monthly_cents' => @order.monthly_cents,
-        'implementation_required' => existing_metadata.fetch(:implementation_required) do
-          ActiveModel::Type::Boolean.new.cast(snap[:send_to_implementation]) || ActiveModel::Type::Boolean.new.cast(snap[:create_implementation_project]) || implementation_checklist.any?
-        end,
+        'implementation_required' => @order.implementation_items.any? || ActiveModel::Type::Boolean.new.cast(snap[:send_to_implementation]) ||
+                                     ActiveModel::Type::Boolean.new.cast(snap[:create_implementation_project]) || existing_metadata[:implementation_required] == true,
+        'implementation_item_ids' => @order.implementation_items.map(&:id),
         'implementation_checklist' => implementation_checklist,
         'finance_required' => existing_metadata.fetch(:finance_required, true),
         'required_documents' => existing_metadata.fetch(:required_documents, Array(snap[:required_documents])),

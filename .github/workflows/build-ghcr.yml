@@ -37,7 +37,7 @@ jobs:
       REDIS_URL: redis://127.0.0.1:6379/0
       SECRET_KEY_BASE: isolated-gopure-nico-ci-secret-not-for-production
       NICO_MODE: fixture
-      FRONTEND_URL: http://localhost:3000
+      FRONTEND_URL: https://gopure-ci.example
     services:
       postgres:
         image: pgvector/pgvector:pg16

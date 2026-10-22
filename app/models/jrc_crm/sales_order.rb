@@ -60,6 +60,7 @@ module JrcCrm
     belongs_to :owner, class_name: 'User'
     belongs_to :created_by, class_name: 'User', optional: true
     has_many :order_items, class_name: 'JrcCrm::OrderItem', dependent: :destroy
+    has_many :activities, class_name: 'JrcCrm::Activity', dependent: :restrict_with_error
     has_many_attached :attachments
     has_many :contracts, class_name: 'JrcCrm::Contract', dependent: :restrict_with_error
     has_many :commissions, class_name: 'JrcCrm::SalesCommission', dependent: :destroy
@@ -129,6 +130,19 @@ module JrcCrm
       return LegacyOrderTerms.new(self).call if LegacyOrderTerms.applicable?(self)
 
       OrderFinancials.new(attributes: attributes, items: order_items.order(:id).map(&:attributes)).call
+    end
+
+    def implementation_items
+      order_items.select { |item| ActiveModel::Type::Boolean.new.cast(item.snapshot['requires_implementation']) }
+    end
+
+    def validate_implementation!
+      implementation_items.each do |item|
+        next if item.snapshot['implementation_owner'].present? && item.snapshot['implementation_date'].present?
+
+        errors.add(:base, "Informe responsável e data de implantação para #{item.name}.")
+      end
+      raise ActiveRecord::RecordInvalid, self if errors.any?
     end
 
     def commercial_link_integrity

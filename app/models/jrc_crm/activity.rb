@@ -52,6 +52,7 @@ module JrcCrm
     belongs_to :user
     belongs_to :deal, class_name: 'JrcCrm::Deal', optional: true
     belongs_to :lead, class_name: 'JrcCrm::Lead', optional: true
+    belongs_to :sales_order, class_name: 'JrcCrm::SalesOrder', optional: true
     belongs_to :contact, optional: true
     belongs_to :company, class_name: 'JrcCustomers::Company', optional: true
     belongs_to :business_unit, class_name: 'JrcCrm::BusinessUnit', optional: true
@@ -77,7 +78,7 @@ module JrcCrm
     end
 
     def related_record
-      deal || lead || contact || company
+      deal || lead || sales_order || contact || company
     end
     
     private
@@ -102,7 +103,7 @@ module JrcCrm
     def must_have_resource
       relationship_origin = metadata&.dig('relationship_assignment_id').present? && (persisted? || account&.feature_enabled?('jrc_relationship'))
       backoffice_origin = metadata&.dig('backoffice_request_id').present? && backoffice_source
-      if deal_id.blank? && lead_id.blank? && !((relationship_origin || backoffice_origin) && (contact_id.present? || company_id.present?))
+      if deal_id.blank? && lead_id.blank? && sales_order_id.blank? && !((relationship_origin || backoffice_origin) && (contact_id.present? || company_id.present?))
         errors.add(:base, 'Activity must belong to a deal or a lead')
       end
     end
@@ -115,6 +116,7 @@ module JrcCrm
       errors.add(:user, 'must belong to account') if user && !account.users.exists?(user.id)
       errors.add(:deal, 'must belong to account') if deal && deal.account_id != account_id
       errors.add(:lead, 'must belong to account') if lead && lead.account_id != account_id
+      errors.add(:sales_order, 'must belong to account') if sales_order && sales_order.account_id != account_id
       errors.add(:company, 'must belong to account') if company && company.account_id != account_id
       if metadata&.dig('relationship_assignment_id').present?
         identity = JrcRelationship::Assignment.where(account_id: account_id).find_by(id: metadata['relationship_assignment_id'])

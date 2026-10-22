@@ -40,6 +40,12 @@ module JrcCrm
     has_many :deals
     
     validates :name, :key, :position, presence: true
+    validates :position, numericality: { only_integer: true, greater_than: 0 }
+    validates :probability, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }, allow_nil: true
+    validate do
+      errors.add(:pipeline_id, 'não pode mudar enquanto a etapa possui negócios') if persisted? && will_save_change_to_pipeline_id? && deals.exists?
+      errors.add(:base, 'Etapa não pode ser ganha e perdida simultaneamente') if is_won && is_lost
+    end
     validates :key, uniqueness: { scope: [:account_id, :pipeline_id] }
     
     scope :active, -> { where(active: true) }

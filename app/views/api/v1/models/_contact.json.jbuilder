@@ -5,6 +5,8 @@ json.id resource.id
 json.name resource.name
 json.phone_number resource.phone_number
 json.blocked resource.blocked
+json.contact_type resource.contact_type
+json.crm_owners @relationship_owners[resource.id] if @relationship_owners
 json.identifier resource.identifier
 json.company_id resource.company_id if Current.account&.feature_enabled?('companies') || Current.account&.feature_enabled?('jrc_customer_master')
 json.thumbnail resource.avatar_url

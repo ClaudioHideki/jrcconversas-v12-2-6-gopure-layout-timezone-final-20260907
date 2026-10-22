@@ -61,6 +61,12 @@ module JrcCrm
     def normalize_item(raw)
       item = self.class.symbolize(raw.to_h)
       snapshot = self.class.symbolize((item[:snapshot] || {}).to_h)
+      if snapshot[:contract_term_months].present?
+        term = BigDecimal(snapshot[:contract_term_months].to_s)
+        raise InvalidTerms, 'Prazo contratual deve ser um inteiro positivo.' unless term.finite? && term.positive? && term == term.round(0)
+
+        snapshot[:contract_term_months] = term.to_i
+      end
       quantity = BigDecimal((item[:quantity] || 1).to_s)
       raise InvalidTerms, 'Quantidade deve ser positiva e finita.' unless quantity.finite? && quantity.positive?
       raise InvalidTerms, 'Quantidade aceita no maximo tres casas decimais.' unless quantity == quantity.round(3)
@@ -117,7 +123,8 @@ module JrcCrm
       shipping = shipping_mode == 'separate' ? self.class.money(@attributes[:shipping_cents]) : 0
       shipping_in_installments = self.class.boolean(setting(:shipping_in_installments, true))
       taxes = percentage(products - discount + shipping, @snapshot[:taxes_percent] || 0)
-      total = products - discount + shipping + taxes
+      surcharge = self.class.money(@snapshot[:surcharge_cents])
+      total = products - discount + shipping + taxes + surcharge
       monthly = monthly_enabled? ? items.sum { |item| item[:recurring_cents] } : 0
       monthly = self.class.money(@attributes[:monthly_cents]) if monthly_enabled? && items.empty?
       condition = setting(:payment_condition, 'cash').to_s
@@ -145,7 +152,7 @@ module JrcCrm
         products_cents: products, item_discount_cents: item_discount, discount_cents: discount,
         total_discount_cents: item_discount + discount, shipping_cents: shipping,
         shipping_mode: shipping_mode, shipping_in_installments: shipping_in_installments,
-        taxes_cents: taxes, taxes_percent: BigDecimal((@snapshot[:taxes_percent] || 0).to_s).to_s('F'), total_cents: total, contract_total_cents: total,
+        taxes_cents: taxes, surcharge_cents: surcharge, taxes_percent: BigDecimal((@snapshot[:taxes_percent] || 0).to_s).to_s('F'), total_cents: total, contract_total_cents: total,
         monthly_cents: monthly, has_monthly_fee: monthly_enabled?, payment_condition: condition,
         payment_method: @attributes[:payment_method], down_payment_cents: down,
         payable_base_cents: payable, balance_cents: balance, upfront_shipping_cents: upfront_shipping,
