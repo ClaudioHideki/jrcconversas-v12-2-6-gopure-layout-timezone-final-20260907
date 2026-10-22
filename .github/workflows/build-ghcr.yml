@@ -110,6 +110,8 @@ jobs:
           app/javascript/dashboard/routes/dashboard/crm/helpers/spec
           app/javascript/dashboard/routes/dashboard/crm/views/leads/spec
           app/javascript/dashboard/routes/dashboard/jrcCustomers
+          app/javascript/dashboard/components-next/sidebar/specs/sections.spec.js
+          app/javascript/dashboard/components-next/sidebar/specs/ServiceDeskNavigation.spec.js
           --maxWorkers=1 --minWorkers=1
       - name: Testar selecao Evolution e confirmacao de testes
         run: pnpm exec vitest run --config vitest.campaigns.config.ts
