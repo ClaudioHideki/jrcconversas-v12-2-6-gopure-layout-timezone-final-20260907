@@ -88,6 +88,10 @@ jobs:
           spec/requests/api/v1/accounts/jrc_campaigns
           spec/requests/api/v1/accounts/crm
           spec/models/jrc_crm spec/services/jrc_crm spec/policies/jrc_crm
+          spec/models/jrc_customers spec/services/jrc_customers
+          spec/requests/api/v1/accounts/customer_relationships_spec.rb
+          spec/requests/api/v1/accounts/jrc_operations
+          spec/services/jrc_projects spec/services/jrc_operations
           spec/requests/api/v1/accounts/contacts_pagination_spec.rb
           spec/controllers/api_controller_spec.rb
           spec/controllers/super_admin/accounts_controller_spec.rb
@@ -101,6 +105,11 @@ jobs:
         run: pnpm exec vitest run --config vitest.commercial.config.ts
       - name: Testar selecao Evolution e confirmacao de testes
         run: pnpm exec vitest run --config vitest.campaigns.config.ts
+      - name: Testar interfaces e projeções de Projetos
+        run: |
+          node test/jrc_operations/project_task_board_test.mjs
+          node test/jrc_operations/project_planning_projection_test.mjs
+          pnpm exec vitest run --config vitest.projects.config.ts
       - name: Verificar inicializacao Rails e Sidekiq
         run: bundle exec rails runner 'require "sidekiq"; Rails.application.eager_load!; abort "missing job" unless JrcCampaigns::DispatchStepJob < ApplicationJob; puts "Rails and Sidekiq loaded"'
       - name: Compilar e testar runtime

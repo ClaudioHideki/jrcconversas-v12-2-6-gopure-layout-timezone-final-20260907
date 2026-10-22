@@ -6,6 +6,8 @@ export default mergeConfig(
   defineConfig({
     test: {
       environment: 'jsdom',
+      mockReset: true,
+      clearMocks: true,
       include: [
         'app/javascript/dashboard/routes/dashboard/jrcCampaigns/specs/*.spec.js',
       ],
