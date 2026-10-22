@@ -47,3 +47,10 @@
 - 7 testes de integração da interface de Projetos e 12 testes de projeções passaram.
 - ESLint dos arquivos JavaScript/Vue incorporados e actionlint do workflow passaram.
 - Ruby, PostgreSQL e compilação consolidada continuam sujeitos à CI obrigatória; não substituídos por mocks locais.
+
+## Compatibilidade dos testes com a suíte consolidada
+
+- A primeira validação ampliada executou 1.272 exemplos Rails e encontrou três falhas de compatibilidade dos testes. A publicação permaneceu bloqueada.
+- O teste de contrato da API do Cadastro Mestre agora usa o modo Rails `:rescuable` somente durante seus exemplos e restaura a configuração ao terminar. As respostas HTTP 400 e a preservação dos registros continuam obrigatórias; nenhuma configuração de produção foi alterada.
+- O teste das três migrations originais de Projetos agora reproduz o ponto inicial R2 em um schema temporário dentro de um savepoint. Ele aplica, reverte e reaplica essas migrations sem tentar remover tabelas usadas por módulos posteriores. Nenhuma migration de produção foi alterada e não foi utilizado `CASCADE`.
+- Os dois arquivos corrigidos passaram em PostgreSQL real no Docker descartável: 10 exemplos, zero falhas. A CI completa continua obrigatória antes da imagem.
