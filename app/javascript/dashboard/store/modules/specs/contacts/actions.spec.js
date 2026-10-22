@@ -26,6 +26,55 @@ global.axios = axios;
 vi.mock('axios');
 
 describe('#actions', () => {
+  it.each(['get', 'search', 'active', 'filter'])(
+    'passes the directory view through the %s action without rewriting the native payload',
+    async action => {
+      const data = { payload: [], meta: { count: 0, current_page: 2 } };
+      axios.get.mockResolvedValue({ data });
+      axios.post.mockResolvedValue({ data });
+      const params = {
+        directoryView: 'duplicates',
+        page: 2,
+        sortAttr: 'name',
+        search: 'Ana',
+        queryPayload: filterQueryData,
+      };
+      await actions[action]({ commit }, params);
+      const calls =
+        action === 'filter' ? axios.post.mock.calls : axios.get.mock.calls;
+      expect(calls.at(-1)[0]).toContain('directory_view=duplicates');
+      expect(calls.at(-1)[0]).toContain('page=2');
+      if (action === 'filter') expect(calls.at(-1)[1]).toEqual(filterQueryData);
+    }
+  );
+
+  describe('#search continuation', () => {
+    it('reports success only after appending records and updating pagination', async () => {
+      const meta = { current_page: 2, has_more: true };
+      axios.get.mockResolvedValue({ data: { payload: contactList, meta } });
+      const success = await actions.search(
+        { commit },
+        { search: 'Cliente', page: 2, append: true }
+      );
+      expect(success).toBe(true);
+      expect(commit).toHaveBeenCalledWith(types.APPEND_CONTACTS, contactList);
+      expect(commit).toHaveBeenCalledWith(types.SET_CONTACT_META, meta);
+      expect(commit).not.toHaveBeenCalledWith(types.CLEAR_CONTACTS);
+    });
+
+    it('reports failure without advancing metadata or clearing previous results', async () => {
+      axios.get.mockRejectedValue(new Error('network'));
+      const success = await actions.search(
+        { commit },
+        { search: 'Cliente', page: 2, append: true }
+      );
+      expect(success).toBe(false);
+      expect(commit.mock.calls).toEqual([
+        [types.SET_CONTACT_UI_FLAG, { isFetching: true }],
+        [types.SET_CONTACT_UI_FLAG, { isFetching: false }],
+      ]);
+    });
+  });
   describe('#get', () => {
     it('sends correct mutations if API is success', async () => {
       axios.get.mockResolvedValue({

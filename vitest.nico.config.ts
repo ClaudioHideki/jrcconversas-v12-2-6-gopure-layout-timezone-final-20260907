@@ -4,7 +4,6 @@ import { fileURLToPath, URL } from 'node:url';
 
 // Pure request-session tests do not require the dashboard-wide store fixtures.
 export default defineConfig({
-  cacheDir: './tmp/vitest-nico',
   plugins: [vue()],
   resolve: {
     alias: {

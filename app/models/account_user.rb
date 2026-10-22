@@ -33,11 +33,7 @@ class AccountUser < ApplicationRecord
   belongs_to :inviter, class_name: 'User', optional: true
 
   enum role: { agent: 0, administrator: 1 }
-  enum availability: {
-    online: 0, offline: 1, busy: 2,
-    meeting: 3, feedback: 4, end_shift: 5,
-    training: 6, bathroom_break: 7, lunch_break: 8, manual_call: 9
-  }
+  enum availability: { online: 0, offline: 1, busy: 2, meeting: 3, feedback: 4, end_shift: 5, training: 6, bathroom_break: 7, lunch_break: 8, manual_call: 9 }
 
   accepts_nested_attributes_for :account
 

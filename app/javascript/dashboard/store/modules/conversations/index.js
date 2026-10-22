@@ -12,6 +12,7 @@ const state = {
   allConversations: [],
   attachments: {},
   listLoadingStatus: true,
+  listErrorStatus: false,
   chatStatusFilter: wootConstants.STATUS_TYPE.OPEN,
   chatSortFilter: wootConstants.SORT_BY_TYPE.LATEST,
   currentInbox: null,
@@ -269,6 +270,11 @@ export const mutations = {
 
   [types.SET_LIST_LOADING_STATUS](_state) {
     _state.listLoadingStatus = true;
+    _state.listErrorStatus = false;
+  },
+
+  [types.SET_LIST_ERROR_STATUS](_state) {
+    _state.listErrorStatus = true;
   },
 
   [types.CLEAR_LIST_LOADING_STATUS](_state) {
@@ -329,7 +335,10 @@ export const mutations = {
     _state.currentInbox = inboxId ? parseInt(inboxId, 10) : null;
   },
 
-  [types.SET_CONVERSATION_CAN_REPLY](_state, { conversationId, canReply, whatsappWindow }) {
+  [types.SET_CONVERSATION_CAN_REPLY](
+    _state,
+    { conversationId, canReply, whatsappWindow }
+  ) {
     const [chat] = _state.allConversations.filter(c => c.id === conversationId);
     if (chat) {
       chat.can_reply = canReply;

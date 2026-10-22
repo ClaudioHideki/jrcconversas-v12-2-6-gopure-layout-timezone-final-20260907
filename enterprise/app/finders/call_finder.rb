@@ -11,28 +11,16 @@ class CallFinder
     @calls = @current_account.calls
     filter_by_visibility
     filter_by_provider
+    filter_by_status
+    filter_by_direction
     filter_by_inbox
     filter_by_agent
     filter_by_date_range
 
-    summary = call_summary(@calls)
-
-    filter_by_status
-    filter_by_direction
-
-    { calls: paginated_calls, count: @calls.count, summary: summary }
+    { calls: paginated_calls, count: @calls.count }
   end
 
   private
-
-  def call_summary(scope)
-    {
-      total: scope.count,
-      answered: scope.where(status: 'completed').count,
-      missed: scope.where(status: 'no_answer', direction: Call.directions[:incoming]).count,
-      no_reply: scope.where(status: 'no_answer', direction: Call.directions[:outgoing]).count
-    }
-  end
 
   # Admins and report managers see the whole account; everyone else only sees
   # calls they handled within conversations they can still access.

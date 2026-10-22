@@ -122,6 +122,10 @@ const choose = async () => {
 
     form.one_time_cents =
       data.one_time_cents || data.total_cents || 0;
+    const suggestion = (await contractTemplatesAPI.list({ order_id: data.id })).data;
+    templates.value = (suggestion.templates || []).filter(template => template.active);
+    form.contract_template_id = suggestion.suggested_template_id || '';
+    if (suggestion.warning) useAlert(suggestion.warning);
   } catch (error) {
     // Os dados obtidos na listagem continuam disponíveis.
   }
@@ -136,14 +140,13 @@ onMounted(async () => {
       contractTemplatesAPI.list(),
     ]);
 
-    orders.value = orderResponse.data || [];
+    orders.value = (orderResponse.data || []).filter(item => ['approved','separating','invoiced','shipped','completed'].includes(item.status));
 
     templates.value = (templateResponse.data || []).filter(
       template => template.active
     );
 
-    form.contract_template_id =
-      templates.value[0]?.id || '';
+    form.contract_template_id = '';
 
     if (route.query.orderId) {
       form.sales_order_id = route.query.orderId;
@@ -268,9 +271,9 @@ const next = () => {
 </script>
 
 <template>
-  <div class="h-full overflow-auto bg-[#f6f8fc] dark:bg-n-background">
+  <div class="h-full overflow-auto bg-n-background dark:bg-n-background">
     <!-- CABEÇALHO -->
-    <header class="border-b border-slate-200 bg-white px-5 py-5 sm:px-6">
+    <header class="border-b border-slate-200 bg-n-solid-2 px-5 py-5 sm:px-6">
       <div
         class="mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-4"
       >
@@ -291,11 +294,11 @@ const next = () => {
               Contratos
             </button>
 
-            <h2 class="text-2xl font-bold text-slate-900">
+            <h2 class="text-2xl font-bold text-n-slate-12">
               Novo Contrato
             </h2>
 
-            <p class="mt-1 text-sm text-slate-500">
+            <p class="mt-1 text-sm text-n-slate-11">
               Crie um contrato a partir de uma venda e acompanhe todo o
               processo até a assinatura.
             </p>
@@ -304,7 +307,7 @@ const next = () => {
 
         <button
           type="button"
-          class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+          class="flex items-center gap-2 rounded-xl border border-slate-200 bg-n-solid-2 px-4 py-2.5 text-sm font-semibold text-n-slate-12 shadow-sm transition hover:bg-n-slate-2"
           @click="router.push({ name: 'crm_contracts' })"
         >
           <i class="i-lucide-arrow-left size-4" />
@@ -316,7 +319,7 @@ const next = () => {
     <main class="mx-auto max-w-[1500px] p-5 sm:p-6">
       <!-- STEPPER -->
       <section
-        class="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+        class="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-n-solid-2 shadow-sm"
       >
         <div class="grid md:grid-cols-4">
           <div
@@ -328,7 +331,7 @@ const next = () => {
                 ? 'bg-blue-50'
                 : step > index + 1
                   ? 'bg-emerald-50/50'
-                  : 'bg-white'
+                  : 'bg-n-solid-2'
             "
           >
             <span
@@ -338,7 +341,7 @@ const next = () => {
                   ? 'bg-emerald-600 text-white'
                   : step === index + 1
                     ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
-                    : 'bg-slate-100 text-slate-500'
+                    : 'bg-n-slate-3 text-n-slate-11'
               "
             >
               <i
@@ -361,17 +364,17 @@ const next = () => {
                     ? 'text-blue-600'
                     : step > index + 1
                       ? 'text-emerald-600'
-                      : 'text-slate-400'
+                      : 'text-n-slate-11'
                 "
               >
                 ETAPA {{ index + 1 }}
               </p>
 
-              <strong class="text-sm text-slate-900">
+              <strong class="text-sm text-n-slate-12">
                 {{ item.title }}
               </strong>
 
-              <p class="text-xs text-slate-500">
+              <p class="text-xs text-n-slate-11">
                 {{ item.description }}
               </p>
             </div>
@@ -382,7 +385,7 @@ const next = () => {
       <!-- LOADING -->
       <section
         v-if="loading"
-        class="rounded-2xl border border-slate-200 bg-white p-16 text-center shadow-sm"
+        class="rounded-2xl border border-slate-200 bg-n-solid-2 p-16 text-center shadow-sm"
       >
         <span
           class="mx-auto grid size-14 place-content-center rounded-2xl bg-blue-50 text-blue-600"
@@ -390,7 +393,7 @@ const next = () => {
           <i class="i-lucide-loader-circle size-7 animate-spin" />
         </span>
 
-        <p class="mt-4 font-semibold text-slate-700">
+        <p class="mt-4 font-semibold text-n-slate-12">
           Carregando dados comerciais...
         </p>
       </section>
@@ -403,7 +406,7 @@ const next = () => {
         <main class="space-y-5">
           <!-- ORIGEM -->
           <section
-            class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+            class="overflow-hidden rounded-2xl border border-slate-200 bg-n-solid-2 shadow-sm"
           >
             <header
               class="flex items-center gap-3 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-white px-5 py-4"
@@ -415,24 +418,24 @@ const next = () => {
               </span>
 
               <div>
-                <h3 class="font-bold text-slate-900">
+                <h3 class="font-bold text-n-slate-12">
                   Cliente e origem
                 </h3>
 
-                <p class="text-xs text-slate-500">
+                <p class="text-xs text-n-slate-11">
                   Selecione a venda que dará origem ao contrato.
                 </p>
               </div>
             </header>
 
             <div class="p-5">
-              <label class="text-sm font-semibold text-slate-700">
+              <label class="text-sm font-semibold text-n-slate-12">
                 Pedido / Venda de origem *
               </label>
 
               <select
                 v-model="form.sales_order_id"
-                class="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                class="mt-2 w-full rounded-xl border border-slate-200 bg-n-solid-2 p-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 @change="choose"
               >
                 <option value="">
@@ -458,7 +461,7 @@ const next = () => {
                   <p class="text-xs font-medium text-blue-600">
                     Cliente
                   </p>
-                  <strong class="text-sm text-slate-900">
+                  <strong class="text-sm text-n-slate-12">
                     {{ order.contact?.name || order.deal?.title || '—' }}
                   </strong>
                 </div>
@@ -467,7 +470,7 @@ const next = () => {
                   <p class="text-xs font-medium text-blue-600">
                     Negócio
                   </p>
-                  <strong class="text-sm text-slate-900">
+                  <strong class="text-sm text-n-slate-12">
                     {{ order.deal?.title || '—' }}
                   </strong>
                 </div>
@@ -476,7 +479,7 @@ const next = () => {
                   <p class="text-xs font-medium text-blue-600">
                     Pedido
                   </p>
-                  <strong class="text-sm text-slate-900">
+                  <strong class="text-sm text-n-slate-12">
                     {{ order.order_number }}
                   </strong>
                 </div>
@@ -486,7 +489,7 @@ const next = () => {
 
           <!-- CONFIGURAÇÃO -->
           <section
-            class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+            class="overflow-hidden rounded-2xl border border-slate-200 bg-n-solid-2 shadow-sm"
           >
             <header
               class="flex items-center gap-3 border-b border-slate-100 bg-gradient-to-r from-violet-50 to-white px-5 py-4"
@@ -498,23 +501,23 @@ const next = () => {
               </span>
 
               <div>
-                <h3 class="font-bold text-slate-900">
+                <h3 class="font-bold text-n-slate-12">
                   Configuração do contrato
                 </h3>
 
-                <p class="text-xs text-slate-500">
+                <p class="text-xs text-n-slate-11">
                   Defina o tipo e o modelo do documento.
                 </p>
               </div>
             </header>
 
             <div class="grid gap-4 p-5 md:grid-cols-2">
-              <label class="text-sm font-medium text-slate-700">
+              <label class="text-sm font-medium text-n-slate-12">
                 Tipo de contrato
 
                 <select
                   v-model="form.contract_type"
-                  class="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 outline-none focus:border-violet-400"
+                  class="mt-2 w-full rounded-xl border border-slate-200 bg-n-solid-2 p-3 outline-none focus:border-violet-400"
                 >
                   <option value="service">
                     Prestação de Serviços
@@ -531,12 +534,12 @@ const next = () => {
                 </select>
               </label>
 
-              <label class="text-sm font-medium text-slate-700">
+              <label class="text-sm font-medium text-n-slate-12">
                 Modelo
 
                 <select
                   v-model="form.contract_template_id"
-                  class="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 outline-none focus:border-violet-400"
+                  class="mt-2 w-full rounded-xl border border-slate-200 bg-n-solid-2 p-3 outline-none focus:border-violet-400"
                 >
                   <option value="">
                     Sem modelo
@@ -569,7 +572,7 @@ const next = () => {
 
         <!-- RESUMO -->
         <aside
-          class="h-fit overflow-hidden rounded-2xl border border-indigo-100 bg-white shadow-sm"
+          class="h-fit overflow-hidden rounded-2xl border border-indigo-100 bg-n-solid-2 shadow-sm"
         >
           <div
             class="bg-gradient-to-br from-indigo-600 to-blue-600 p-5 text-white"
@@ -591,37 +594,37 @@ const next = () => {
 
           <dl class="space-y-4 p-5 text-sm">
             <div>
-              <dt class="text-slate-500">
+              <dt class="text-n-slate-11">
                 Cliente
               </dt>
-              <dd class="mt-1 font-semibold text-slate-900">
+              <dd class="mt-1 font-semibold text-n-slate-12">
                 {{ order?.contact?.name || '—' }}
               </dd>
             </div>
 
             <div>
-              <dt class="text-slate-500">
+              <dt class="text-n-slate-11">
                 Origem
               </dt>
-              <dd class="mt-1 font-semibold text-slate-900">
+              <dd class="mt-1 font-semibold text-n-slate-12">
                 {{ order?.order_number || '—' }}
               </dd>
             </div>
 
             <div>
-              <dt class="text-slate-500">
+              <dt class="text-n-slate-11">
                 Tipo
               </dt>
-              <dd class="mt-1 font-semibold text-slate-900">
+              <dd class="mt-1 font-semibold text-n-slate-12">
                 {{ contractTypeLabel }}
               </dd>
             </div>
 
             <div>
-              <dt class="text-slate-500">
+              <dt class="text-n-slate-11">
                 Modelo
               </dt>
-              <dd class="mt-1 font-semibold text-slate-900">
+              <dd class="mt-1 font-semibold text-n-slate-12">
                 {{ selectedTemplate?.name || 'Sem modelo' }}
               </dd>
             </div>
@@ -643,7 +646,7 @@ const next = () => {
       <!-- ETAPA 2 -->
       <section
         v-else-if="step === 2"
-        class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+        class="overflow-hidden rounded-2xl border border-slate-200 bg-n-solid-2 shadow-sm"
       >
         <header
           class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-violet-50 to-white p-5"
@@ -656,11 +659,11 @@ const next = () => {
             </span>
 
             <div>
-              <h3 class="text-lg font-bold text-slate-900">
+              <h3 class="text-lg font-bold text-n-slate-12">
                 Produtos e serviços
               </h3>
 
-              <p class="text-sm text-slate-500">
+              <p class="text-sm text-n-slate-11">
                 Itens importados automaticamente do pedido selecionado.
               </p>
             </div>
@@ -676,7 +679,7 @@ const next = () => {
         <div class="overflow-x-auto">
           <table class="w-full min-w-[760px] text-sm">
             <thead
-              class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"
+              class="bg-n-slate-2 text-left text-xs uppercase tracking-wide text-n-slate-11"
             >
               <tr>
                 <th class="p-4">
@@ -708,7 +711,7 @@ const next = () => {
                       <i class="i-lucide-box size-4" />
                     </span>
 
-                    <strong class="text-slate-900">
+                    <strong class="text-n-slate-12">
                       {{
                         item.name_snapshot ||
                         item.name ||
@@ -755,11 +758,11 @@ const next = () => {
                     <i class="i-lucide-package-search size-7" />
                   </span>
 
-                  <h4 class="mt-4 font-bold text-slate-900">
+                  <h4 class="mt-4 font-bold text-n-slate-12">
                     Itens vinculados ao pedido
                   </h4>
 
-                  <p class="mt-1 text-sm text-slate-500">
+                  <p class="mt-1 text-sm text-n-slate-11">
                     Os itens serão herdados do pedido durante a geração
                     do contrato.
                   </p>
@@ -776,7 +779,7 @@ const next = () => {
         class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]"
       >
         <section
-          class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+          class="overflow-hidden rounded-2xl border border-slate-200 bg-n-solid-2 shadow-sm"
         >
           <header
             class="flex items-center gap-3 border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-white p-5"
@@ -788,18 +791,18 @@ const next = () => {
             </span>
 
             <div>
-              <h3 class="text-lg font-bold text-slate-900">
+              <h3 class="text-lg font-bold text-n-slate-12">
                 Condições financeiras e vigência
               </h3>
 
-              <p class="text-sm text-slate-500">
+              <p class="text-sm text-n-slate-11">
                 Configure valores, período, renovação e reajuste.
               </p>
             </div>
           </header>
 
           <div class="grid gap-5 p-5 md:grid-cols-2">
-            <label class="text-sm font-medium text-slate-700">
+            <label class="text-sm font-medium text-n-slate-12">
               Início
               <input
                 v-model="form.starts_on"
@@ -808,7 +811,7 @@ const next = () => {
               />
             </label>
 
-            <label class="text-sm font-medium text-slate-700">
+            <label class="text-sm font-medium text-n-slate-12">
               Fim
               <input
                 v-model="form.ends_on"
@@ -817,7 +820,7 @@ const next = () => {
               />
             </label>
 
-            <label class="text-sm font-medium text-slate-700">
+            <label class="text-sm font-medium text-n-slate-12">
               Vigência (meses)
               <input
                 v-model.number="form.term_months"
@@ -827,11 +830,11 @@ const next = () => {
               />
             </label>
 
-            <label class="text-sm font-medium text-slate-700">
+            <label class="text-sm font-medium text-n-slate-12">
               Renovação
               <select
                 v-model="form.renewal_type"
-                class="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 outline-none focus:border-emerald-400"
+                class="mt-2 w-full rounded-xl border border-slate-200 bg-n-solid-2 p-3 outline-none focus:border-emerald-400"
               >
                 <option value="automatic">
                   Automática
@@ -845,7 +848,7 @@ const next = () => {
               </select>
             </label>
 
-            <label class="text-sm font-medium text-slate-700">
+            <label class="text-sm font-medium text-n-slate-12">
               Índice de reajuste
               <input
                 v-model="form.adjustment_index"
@@ -854,18 +857,18 @@ const next = () => {
               />
             </label>
 
-            <label class="text-sm font-medium text-slate-700">
+            <label class="text-sm font-medium text-n-slate-12">
               MRR contratado (centavos)
               <input
                 v-model.number="form.monthly_cents"
                 type="number"
                 min="0"
                 class="mt-2 w-full rounded-xl border border-slate-200 p-3 outline-none focus:border-emerald-400"
-              />
+              readonly title="Valor preservado do pedido de origem" />
             </label>
 
             <label
-              class="text-sm font-medium text-slate-700 md:col-span-2"
+              class="text-sm font-medium text-n-slate-12 md:col-span-2"
             >
               Cláusulas / observações
 
@@ -910,15 +913,15 @@ const next = () => {
           </section>
 
           <section
-            class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+            class="rounded-2xl border border-slate-200 bg-n-solid-2 p-5 shadow-sm"
           >
-            <h3 class="font-bold text-slate-900">
+            <h3 class="font-bold text-n-slate-12">
               Resumo financeiro
             </h3>
 
             <dl class="mt-4 space-y-3 text-sm">
               <div class="flex justify-between gap-3">
-                <dt class="text-slate-500">
+                <dt class="text-n-slate-11">
                   Vigência
                 </dt>
                 <dd class="font-semibold">
@@ -927,7 +930,7 @@ const next = () => {
               </div>
 
               <div class="flex justify-between gap-3">
-                <dt class="text-slate-500">
+                <dt class="text-n-slate-11">
                   Renovação
                 </dt>
                 <dd class="font-semibold">
@@ -936,7 +939,7 @@ const next = () => {
               </div>
 
               <div class="flex justify-between gap-3">
-                <dt class="text-slate-500">
+                <dt class="text-n-slate-11">
                   Reajuste
                 </dt>
                 <dd class="font-semibold">
@@ -954,7 +957,7 @@ const next = () => {
         class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]"
       >
         <section
-          class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+          class="overflow-hidden rounded-2xl border border-slate-200 bg-n-solid-2 shadow-sm"
         >
           <div
             class="border-b border-emerald-100 bg-gradient-to-r from-emerald-50 to-white p-5"
@@ -997,7 +1000,7 @@ const next = () => {
                 Visualizar / baixar PDF
               </strong>
 
-              <p class="mt-1 text-xs text-slate-500">
+              <p class="mt-1 text-xs text-n-slate-11">
                 Abra o documento gerado pelo CRM para conferência.
               </p>
             </button>
@@ -1009,7 +1012,7 @@ const next = () => {
             >
               <span class="grid size-11 place-content-center rounded-xl bg-amber-100 text-amber-700"><i class="i-lucide-pen-line size-5" /></span>
               <strong class="mt-4 block text-amber-900">Preparar assinatura manual</strong>
-              <p class="mt-1 text-xs text-slate-500">Muda o contrato para aguardando assinatura, sem fingir que houve assinatura digital.</p>
+              <p class="mt-1 text-xs text-n-slate-11">Muda o contrato para aguardando assinatura, sem fingir que houve assinatura digital.</p>
             </button>
 
             <button
@@ -1019,7 +1022,7 @@ const next = () => {
             >
               <span class="grid size-11 place-content-center rounded-xl bg-indigo-100 text-indigo-700"><i class="i-lucide-cloud-cog size-5" /></span>
               <strong class="mt-4 block text-indigo-900">Assinatura por provedor</strong>
-              <p class="mt-1 text-xs text-slate-500">Use somente quando houver integração externa configurada e retorno real do provedor.</p>
+              <p class="mt-1 text-xs text-n-slate-11">Use somente quando houver integração externa configurada e retorno real do provedor.</p>
             </button>
 
             <button
@@ -1037,7 +1040,7 @@ const next = () => {
                 Voltar para Contratos
               </strong>
 
-              <p class="mt-1 text-xs text-slate-500">
+              <p class="mt-1 text-xs text-n-slate-11">
                 Acompanhe vigência, status e renovação.
               </p>
             </button>
@@ -1046,15 +1049,15 @@ const next = () => {
           <div class="mx-5 mb-5 grid gap-4 lg:grid-cols-2">
             <section class="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
               <h4 class="font-bold text-emerald-900">Registrar assinatura manual</h4>
-              <p class="mt-1 text-xs text-slate-600">Use quando o documento foi efetivamente assinado fora de um provedor digital.</p>
+              <p class="mt-1 text-xs text-n-slate-11">Use quando o documento foi efetivamente assinado fora de um provedor digital.</p>
               <label class="mt-3 block text-sm">Assinado por<input v-model="signedByName" class="mt-1 w-full rounded-lg border p-2" placeholder="Nome do signatário" /></label>
               <label class="mt-3 block text-sm">Data/hora<input v-model="signedAt" type="datetime-local" class="mt-1 w-full rounded-lg border p-2" /></label>
-              <label class="mt-3 block text-sm">Documento assinado<input type="file" accept="application/pdf,image/*" class="mt-1 w-full rounded-lg border p-2" @change="onSignedFile" /></label>
+              <label class="mt-3 block text-sm">Documento assinado<input type="file" accept="application/pdf" class="mt-1 w-full rounded-lg border p-2" @change="onSignedFile" /></label>
               <button class="mt-3 w-full rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white" :disabled="saving" @click="registerManualSignature">Confirmar assinatura manual</button>
             </section>
             <section class="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4">
               <h4 class="font-bold text-indigo-900">Integração com provedor</h4>
-              <p class="mt-1 text-xs text-slate-600">O CRM só registra o envio depois que a integração externa retornar um identificador real.</p>
+              <p class="mt-1 text-xs text-n-slate-11">O CRM só registra o envio depois que a integração externa retornar um identificador real.</p>
               <label class="mt-3 block text-sm">Provedor<select v-model="signatureProvider" class="mt-1 w-full rounded-lg border p-2"><option value="">Selecione</option><option value="clicksign">Clicksign</option><option value="docusign">DocuSign</option><option value="zoho_sign">Zoho Sign</option><option value="other">Outro</option></select></label>
               <button class="mt-3 w-full rounded-lg border border-indigo-300 px-4 py-2 font-semibold text-indigo-700" :disabled="saving || !signatureProvider" @click="prepareSignature('provider')">Preparar integração</button>
               <label class="mt-3 block text-sm">ID retornado pelo provedor<input v-model="signatureExternalId" class="mt-1 w-full rounded-lg border p-2" placeholder="Somente após envio externo real" /></label>
@@ -1082,7 +1085,7 @@ const next = () => {
         </section>
 
         <aside
-          class="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+          class="h-fit rounded-2xl border border-slate-200 bg-n-solid-2 p-5 shadow-sm"
         >
           <div class="flex items-center gap-3">
             <span
@@ -1091,32 +1094,32 @@ const next = () => {
               <i class="i-lucide-clipboard-check size-5" />
             </span>
 
-            <h3 class="font-bold text-slate-900">
+            <h3 class="font-bold text-n-slate-12">
               Resumo
             </h3>
           </div>
 
           <dl class="mt-5 space-y-4 text-sm">
             <div>
-              <dt class="text-slate-500">
+              <dt class="text-n-slate-11">
                 Cliente
               </dt>
-              <dd class="mt-1 font-semibold text-slate-900">
+              <dd class="mt-1 font-semibold text-n-slate-12">
                 {{ order?.contact?.name || '—' }}
               </dd>
             </div>
 
             <div>
-              <dt class="text-slate-500">
+              <dt class="text-n-slate-11">
                 Contrato
               </dt>
-              <dd class="mt-1 font-semibold text-slate-900">
+              <dd class="mt-1 font-semibold text-n-slate-12">
                 {{ created?.contract_number || '—' }}
               </dd>
             </div>
 
             <div>
-              <dt class="text-slate-500">
+              <dt class="text-n-slate-11">
                 MRR
               </dt>
               <dd class="mt-1 text-lg font-bold text-indigo-700">
@@ -1125,7 +1128,7 @@ const next = () => {
             </div>
 
             <div>
-              <dt class="text-slate-500">
+              <dt class="text-n-slate-11">
                 Status
               </dt>
 
@@ -1144,11 +1147,11 @@ const next = () => {
       <!-- NAVEGAÇÃO -->
       <footer
         v-if="!loading && step < 4"
-        class="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+        class="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-n-solid-2 p-4 shadow-sm"
       >
         <button
           type="button"
-          class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          class="flex items-center gap-2 rounded-xl border border-slate-200 bg-n-solid-2 px-5 py-3 text-sm font-semibold text-n-slate-12 transition hover:bg-n-slate-2"
           @click="back"
         >
           <i
@@ -1164,7 +1167,7 @@ const next = () => {
         </button>
 
         <div class="flex items-center gap-3">
-          <span class="hidden text-xs text-slate-500 sm:block">
+          <span class="hidden text-xs text-n-slate-11 sm:block">
             Etapa {{ step }} de 4
           </span>
 

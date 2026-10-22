@@ -7,10 +7,7 @@ import { useI18n } from 'vue-i18n';
 import { useAlert } from 'dashboard/composables';
 import Button from 'dashboard/components-next/button/Button.vue';
 import Auth from '../../../../api/auth';
-import {
-  AVAILABILITY_STATUSES,
-  LEGACY_BUSY_STATUS,
-} from 'dashboard/helper/availabilityStatus';
+import wootConstants from 'dashboard/constants/globals';
 
 const props = defineProps({
   id: {
@@ -41,9 +38,15 @@ const props = defineProps({
     type: Number,
     default: null,
   },
+  crmEnabled: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits(['close']);
+
+const { AVAILABILITY_STATUS_KEYS } = wootConstants;
 
 const store = useStore();
 const { t } = useI18n();
@@ -103,9 +106,20 @@ const selectedRole = computed(() =>
 );
 
 const availabilityStatuses = computed(() => [
-  ...AVAILABILITY_STATUSES,
-  ...(props.availability === 'busy' ? [LEGACY_BUSY_STATUS] : []),
-]);
+  { label: 'Disponível', value: 'online' },
+  { label: 'Indisponível', value: 'offline' },
+  { label: 'Reunião', value: 'meeting' },
+  { label: 'Feedback', value: 'feedback' },
+  { label: 'Fim do turno', value: 'end_shift' },
+  { label: 'Treinamento', value: 'training' },
+  { label: 'Pausa banheiro', value: 'bathroom_break' },
+  { label: 'Pausa almoço', value: 'lunch_break' },
+  { label: 'Chamada Manual', value: 'manual_call' },
+].filter(status => AVAILABILITY_STATUS_KEYS.includes(status.value)).map(status => ({
+  ...status,
+  disabled: props.availability === status.value,
+})));
+
 const editAgent = async () => {
   v$.value.$touch();
   if (v$.value.$invalid) return;

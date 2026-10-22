@@ -373,6 +373,7 @@
       "EMAIL_COMPLIANCE": "Os e-mails serão enviados pela caixa selecionada usando a configuração SMTP ou OAuth existente. Respostas retornam para a conversa da campanha."
     },
     "SANITIZE": {
+      "LIST_COUNTS": "{whatsapp} WhatsApp · {email} e-mail · {total} importados",
       "TITLE": "Sanitizar Lista",
       "SUBTITLE": "Importe um CSV ou cole contatos para validar telefones e e-mails, remover duplicados e respeitar a blacklist de WhatsApp.",
       "NAME": "Nome da lista",
@@ -388,7 +389,17 @@
       "VALID_PHONE": "Telefones válidos",
       "VALID_EMAIL": "E-mails válidos",
       "LISTS": "Listas sanitizadas",
-      "NO_LISTS": "Nenhuma lista sanitizada criada."
+      "NO_LISTS": "Nenhuma lista sanitizada criada.",
+      "FORMAT_HELP": "Aceita CSV com vírgula, ponto e vírgula ou tabulação, com cabeçalho nome,telefone,email opcional. Campos com separadores devem usar aspas. A validação final ocorre antes de criar a lista.",
+      "NOT_AUTHORIZATION": "Contato válido não significa envio autorizado. Para WhatsApp, registre a autorização em Consentimentos; na campanha, confira o público elegível e selecione a caixa/número remetente.",
+      "PARSED": "{count} contatos lidos. Confira os dados antes de sanitizar.",
+      "PARSE_ERROR": "Não foi possível ler a lista. Confira o separador e as aspas dos campos antes de continuar.",
+      "FILE_ERROR": "Não foi possível ler o arquivo. Escolha novamente ou cole os contatos.",
+      "USE_LIST": "Usar esta lista em uma campanha",
+      "DETAILS": "Resultado por contato (até 50 linhas)",
+      "CONTACT": "Contato",
+      "DESTINATION": "Telefone / e-mail",
+      "RESULT": "Resultado"
     },
     "BLACKLIST": {
       "TITLE": "Blacklist",
@@ -487,22 +498,11 @@
       "CONVERSATION": "Criação de conversa",
       "FOLLOW_UP": "Retorno após",
       "AUDIENCE": "Destinatários aprovados",
-      "EMPTY_AUDIENCE": "Nenhum destinatário com consentimento ativo. Registre ou importe os consentimentos em Consentimentos para campanhas e atualize o público.",
+      "EMPTY_AUDIENCE": "Nenhum destinatário com consentimento ativo. Registre o consentimento na aba Blacklist antes de revisar novamente.",
       "CONSENTS": "Consentimentos para campanhas",
-      "CONTINUOUS_TITLE": "Consentimento contínuo para testes e campanhas",
-      "CONSENT_HELP": "Cadastre uma vez por destinatário, com a evidência, origem e data da autorização do titular. O consentimento permite novos testes e campanhas WhatsApp desta conta até ser revogado; não precisa ser recriado a cada mensagem. O destinatário também precisa constar no público selecionado para receber uma campanha.",
-      "CONTINUOUS_CONFIRM": "Conferi que o titular autorizou testes e campanhas recorrentes desta conta pelo WhatsApp, até revogar a autorização.",
-      "CONTINUOUS_RECORDED": "Consentimento contínuo registrado. Nenhuma mensagem foi enviada.",
-      "CONTINUOUS_ACTIVE": "Ativo para testes e campanhas até revogação",
-      "PURPOSE_UNCONFIRMED": "Registro histórico: finalidade para campanhas ainda não confirmada",
-      "RECONFIRM": "Registrar nova autorização para este telefone",
-      "RECONFIRM_HELP": "A nova autorização substituirá o registro #{id}. Informe uma nova evidência do titular que cubra testes e campanhas. A evidência, data e autor originais serão preservados no histórico.",
-      "CANCEL_RECONFIRM": "Cancelar nova autorização",
-      "SUPERSEDED": "Substituído pelo consentimento #{id}; histórico preservado",
-      "SUPERSEDES": "Nova autorização vinculada ao registro histórico #{id}",
-      "SINGLE_TEST_OPTION": "Autorizações de teste único (opcional)",
+      "CONSENT_HELP": "Registre o opt-in de cada telefone com a origem e data da autorização. Esse registro atende contatos e listas importadas; contatos existentes não são considerados autorizados automaticamente.",
       "EVIDENCE": "Evidência do opt-in (origem, data ou referência)",
-      "RECORD_CONSENT": "Registrar consentimento contínuo",
+      "RECORD_CONSENT": "Registrar opt-in",
       "REVOKE": "Revogar",
       "REVOKED": "Revogado"
     },
@@ -564,6 +564,37 @@
       "STEP_REVIEW": "3. Confira e confirme",
       "LOAD_FAILED": "Não foi possível carregar os números. Tente novamente.",
       "RETRY": "Tentar novamente"
+    },
+    "GUIDE": {
+      "TITLE": "Como preparar e enviar sua campanha",
+      "PREPARE": "1. Organize os contatos",
+      "PREPARE_HELP": "Importe ou cole a lista para conferir telefones, e-mails, duplicados e bloqueios. Sanitizar prepara a lista; não registra autorização de envio.",
+      "AUTHORIZE": "2. Registre a autorização de WhatsApp",
+      "AUTHORIZE_HELP": "Para um número, use Adicionar número. Para vários, importe o CSV de autorizações com origem, data e evidência da permissão já obtida.",
+      "STATUS_HELP": "Autorizados: podem entrar no público. Precisa confirmar: falta comprovar a finalidade. Histórico: autorização revogada ou substituída.",
+      "SEND": "3. Escolha o remetente e revise",
+      "SEND_HELP": "Na campanha, escolha o canal, a lista, a caixa/número remetente, mensagens e horários. Confira o público final, aprove e então inicie. A autorização não envia mensagens automaticamente.",
+      "EVIDENCE_HELP": "Descreva onde e quando a pessoa autorizou mensagens de campanhas e testes WhatsApp e indique a referência do registro. Este formulário registra uma permissão existente; não envia um pedido de autorização ao cliente.",
+      "WIZARD_CONSENT_HELP": "Se faltarem autorizações, registre-as aqui sem perder a campanha. O público será atualizado após o registro. A lista sanitizada e o consentimento são etapas diferentes.",
+      "MANAGE_CONSENTS": "Gerenciar autorizações sem sair da campanha",
+      "SENDER_HELP": "Escolha a caixa e o número que enviarão as mensagens. A caixa de origem dos contatos não define o remetente. Com uma selecionada, todos os envios usam essa caixa; com várias, escolha a distribuição.",
+      "SEPARATE_SENDERS": "Use campanhas separadas para WhatsApp oficial e Evolution. Para distribuir a mesma lista entre números, selecione caixas do mesmo tipo de conexão."
+    },
+    "BROKER": {
+      "TEST_QUEUED": "Teste enfileirado no Broker. Aguarde e consulte o resultado antes de tentar outro envio.",
+      "TEST_RESULT": "Resultado do teste Broker",
+      "REFRESH_SENDERS": "Atualizar caixas e números remetentes",
+      "CONFIRM_TEST": "Confirmar teste pelo Broker? Caixa/número: {sender}. Destinatário: {recipient}. O consentimento será verificado. Aguarde o recibo antes de reenviar.",
+      "REASONS": {
+        "CONFIGURATION_REQUIRED": "Vincule esta caixa em Conectar seu WhatsApp e configure a integração do Broker nesta conta.",
+        "BROKER_UPDATE_OR_CONFIGURATION_REQUIRED": "Atualize a API e os workers do Broker para a versão compatível e confira o vínculo desta caixa em Conectar seu WhatsApp.",
+        "CAMPAIGN_BROKER_TRANSPORT_REQUIRED": "Esta caixa precisa usar o transporte WhatsApp do Broker.",
+        "CAMPAIGN_EXECUTOR_EXTERNAL_REQUIRED": "O executor desta caixa não permite campanhas externas. Revise a operação no Broker antes de habilitar campanhas.",
+        "CAMPAIGN_CALLBACK_NOT_READY": "A conexão entre o Broker e esta caixa ainda não foi validada. Confira o vínculo e o webhook.",
+        "CAMPAIGN_IDENTITY_NOT_READY": "Conecte e confirme o número desta caixa em Conectar seu WhatsApp; depois atualize os remetentes.",
+        "DIRECT_EVOLUTION_CONFIGURATION_REQUIRED": "Esta caixa usa a Evolution diretamente. Configure o remetente desta conta para campanhas ou migre a conexão pelo procedimento do Broker. O nome da caixa, sozinho, não autoriza disparos."
+      },
+      "RESULT_STATUS": "#{id} · {status}"
     }
   }
 }

@@ -1,5 +1,5 @@
 <script setup>
-import { useCrmTheme } from '../../useCrmTheme';
+import { crmControlClasses } from '../../crmControlClasses';
 /* eslint-disable vue/no-bare-strings-in-template, @intlify/vue-i18n/no-raw-text */
 import CrmStatusBadge from '../../components/shared/CrmStatusBadge.vue';
 import { formatCrmDateTime } from '../../utils/dateTime';
@@ -8,7 +8,6 @@ defineProps({
   lead: { type: Object, required: true },
   saving: { type: Boolean, default: false },
 });
-const { crmControlClasses } = useCrmTheme();
 const emit = defineEmits([
   'close',
   'status-change',

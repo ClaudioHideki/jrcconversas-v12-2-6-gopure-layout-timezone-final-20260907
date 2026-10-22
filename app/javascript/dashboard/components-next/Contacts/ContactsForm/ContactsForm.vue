@@ -1,5 +1,6 @@
 <script setup>
-import { computed, reactive, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
+import { useFormDraft } from 'dashboard/routes/dashboard/crm/helpers/useFormDraft';
 import { useI18n } from 'vue-i18n';
 import { required, email } from '@vuelidate/validators';
 import { useVuelidate } from '@vuelidate/core';
@@ -80,7 +81,7 @@ const defaultState = {
   },
 };
 
-const state = reactive({ ...defaultState });
+const state = reactive(JSON.parse(JSON.stringify(defaultState)));
 
 const validationRules = {
   firstName: { required },
@@ -251,9 +252,33 @@ const resetValidation = () => {
   v$.value.$reset();
 };
 
-const resetForm = () => {
-  Object.assign(state, defaultState);
+const resetForm = (savedDraftKey = contactDraft.key.value) => {
+  if (props.isNewContact) {
+    if (!contactDraft.complete(savedDraftKey)) return false;
+    activeDraft.value = false;
+  }
+  Object.assign(state, JSON.parse(JSON.stringify(defaultState)));
+  return true;
 };
+
+const activeDraft = ref(props.isNewContact);
+const contactDraft = useFormDraft('crm:native_contact', {
+  active: activeDraft,
+  snapshot: () => ({ ...state }),
+  restore: value => {
+    Object.assign(state, value);
+    state.additionalAttributes = {
+      ...defaultState.additionalAttributes,
+      ...value.additionalAttributes,
+      socialProfiles: {
+        ...defaultState.additionalAttributes.socialProfiles,
+        ...value.additionalAttributes?.socialProfiles,
+      },
+    };
+  },
+  reset: () => Object.assign(state, JSON.parse(JSON.stringify(defaultState))),
+});
+if (props.isNewContact) contactDraft.open();
 
 watch(
   () => props.contactData?.id,
@@ -269,12 +294,28 @@ defineExpose({
   resetValidation,
   isFormInvalid,
   resetForm,
+  draftKey: () => contactDraft.key.value,
 });
 </script>
 
 <template>
   <div class="flex flex-col gap-6">
-    <div class="flex flex-col items-start gap-2">
+    <button
+      v-if="isNewContact"
+      type="button"
+      class="self-end rounded-lg border border-n-weak px-3 py-2 text-xs text-n-slate-11 hover:bg-n-alpha-2"
+      @click="contactDraft.discard"
+    >
+      {{ t('CRM.CREATION.DISCARD') }}
+    </button>
+    <div
+      class="flex flex-col items-start gap-3"
+      :class="
+        isNewContact
+          ? 'rounded-2xl border border-n-blue-6 bg-n-blue-2/30 p-4 sm:p-5'
+          : ''
+      "
+    >
       <span class="py-1 text-sm font-medium text-n-slate-12">
         {{ t('CONTACTS_LAYOUT.CARD.EDIT_DETAILS_FORM.TITLE') }}
       </span>
@@ -329,7 +370,14 @@ defineExpose({
         </template>
       </div>
     </div>
-    <div class="flex flex-col items-start gap-2">
+    <div
+      class="flex flex-col items-start gap-3"
+      :class="
+        isNewContact
+          ? 'rounded-2xl border border-n-iris-6 bg-n-iris-2/30 p-4 sm:p-5'
+          : ''
+      "
+    >
       <span class="py-1 text-sm font-medium text-n-slate-12">
         {{ t('CONTACTS_LAYOUT.CARD.SOCIAL_MEDIA.TITLE') }}
       </span>

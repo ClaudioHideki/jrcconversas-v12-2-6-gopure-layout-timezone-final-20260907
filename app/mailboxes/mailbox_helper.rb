@@ -11,11 +11,6 @@ module MailboxHelper
     return if @conversation.messages.find_by(source_id: source_id).present?
 
     @message = @conversation.messages.create!(sanitized_message_attributes(source_id))
-    JrcCampaigns::ReplyTrackerService.call(
-      contact: @conversation.contact,
-      inbox: @conversation.inbox,
-      conversation: @conversation
-    ) if @conversation.inbox.email?
   end
 
   def add_attachments_to_message

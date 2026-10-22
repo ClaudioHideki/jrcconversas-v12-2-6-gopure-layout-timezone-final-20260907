@@ -9,12 +9,22 @@ module JrcCrm
     end
 
     def call
-      return reverse_downstream! if @order.canceled?
-      sync_follow_up! unless @order.draft?
-      return unless QUALIFYING_STATUSES.include?(@order.status)
-
-      sync_backoffice!
-      sync_commission!
+      @order.with_lock do
+        if @order.canceled?
+          reverse_downstream!
+        else
+          JrcCrm::OrderApprovalService.new(order: @order, actor: @actor).request! if @order.pending?
+          sync_follow_up! unless @order.draft?
+          if QUALIFYING_STATUSES.include?(@order.status)
+            JrcApprovals::CommercialGate.check!(resource: @order, user: @actor, key: 'crm.order_price')
+            JrcApprovals::CommercialGate.check_contracts!(order: @order, user: @actor) unless @order.status == 'approved'
+            contract = sync_contract!
+            implementation = {}
+            sync_backoffice!(contract: contract, implementation: implementation)
+            sync_commission!
+          end
+        end
+      end
     end
 
     private
@@ -25,16 +35,16 @@ module JrcCrm
 
       @order.with_lock do
         activities = @order.account.jrc_crm_activities.where(activity_type: 'follow_up')
-        return if activities.where("metadata @> ?", { sales_order_id: @order.id }.to_json).exists?
+        next if activities.where("metadata @> ?", { sales_order_id: @order.id }.to_json).exists?
 
         due_at = Time.zone.parse(snapshot[:follow_up_due_at].to_s) if snapshot[:follow_up_due_at].present?
-        unless due_at
-          @order.errors.add(:base, 'Para criar o follow-up, informe data/hora de acompanhamento.')
+        unless @order.deal && due_at
+          @order.errors.add(:base, 'Para criar o follow-up, informe negócio e data/hora de acompanhamento.')
           raise ActiveRecord::RecordInvalid, @order
         end
         activity = @order.account.jrc_crm_activities.new(
           activity_type: 'follow_up', title: "Follow-up do pedido #{@order.order_number}",
-          due_at: due_at, user: @order.owner, deal: @order.deal, contact: @order.contact, sales_order: @order,
+          due_at: due_at, user: @order.owner, deal: @order.deal, contact: @order.contact,
           metadata: { sales_order_id: @order.id }
         )
         result = JrcCrm::ActivityDispatchService.new(activity: activity, actor: @actor || @order.owner).call
@@ -43,13 +53,25 @@ module JrcCrm
     end
 
     def reverse_downstream!
-      @order.commissions.where.not(status: 'paid').find_each { |commission| commission.update!(status: 'reversed') }
+      @order.commissions.find_each do |commission|
+        commission.with_lock do
+          commission.update!(status: 'reversed') unless CommissionProtection.final?(commission.status)
+        end
+      end
       @order.backoffice_requests.where.not(status: %w[completed canceled]).find_each do |request|
         request.update!(status: 'canceled')
       end
     end
 
-    def sync_backoffice!
+    def sync_contract!
+      JrcCrm::OrderContractService.new(order: @order, actor: @actor).call
+    end
+
+    def sync_implementation_project!
+      JrcCrm::OrderImplementationProjectService.new(order: @order, actor: @actor).call
+    end
+
+    def sync_backoffice!(contract: nil, implementation: {})
       request = @order.backoffice_requests.find_or_initialize_by(request_kind: 'fulfillment')
       snap = (@order.snapshot || {}).with_indifferent_access
       existing_metadata = (request.metadata || {}).with_indifferent_access
@@ -59,23 +81,23 @@ module JrcCrm
           item.respond_to?(:to_h) ? item.to_h.deep_stringify_keys : { 'label' => item.to_s, 'done' => false }
         end
       end
-      implementation_items = @order.implementation_items
-      implementation_required = implementation_items.any?
-      # Existing orders keep their already configured workflow until explicitly edited.
-      implementation_required ||= existing_metadata[:implementation_required] == true if snap[:financial_version].to_i < 2
       metadata = existing_metadata.to_h.merge(
         'order_total_cents' => @order.total_cents,
         'monthly_cents' => @order.monthly_cents,
-        'implementation_required' => implementation_required,
-        'implementation_item_ids' => implementation_items.map(&:id),
-        'implementation_checklist' => implementation_required ? implementation_checklist : [],
+        'implementation_required' => existing_metadata.fetch(:implementation_required) do
+          ActiveModel::Type::Boolean.new.cast(snap[:send_to_implementation]) || ActiveModel::Type::Boolean.new.cast(snap[:create_implementation_project]) || implementation_checklist.any?
+        end,
+        'implementation_checklist' => implementation_checklist,
         'finance_required' => existing_metadata.fetch(:finance_required, true),
         'required_documents' => existing_metadata.fetch(:required_documents, Array(snap[:required_documents])),
-        'provisioning_required' => existing_metadata.fetch(:provisioning_required, ActiveModel::Type::Boolean.new.cast(snap[:requires_provisioning]))
+        'provisioning_required' => existing_metadata.fetch(:provisioning_required, ActiveModel::Type::Boolean.new.cast(snap[:requires_provisioning])),
+        'implementation_project_id' => implementation[:project]&.id || existing_metadata[:implementation_project_id],
+        'implementation_project_warning' => implementation[:warning].presence || existing_metadata[:implementation_project_warning]
       )
       request.assign_attributes(
         account: @order.account, business_unit: @order.business_unit, contact: @order.contact,
-        owner: @order.owner, requested_by: @actor || @order.owner, contract: @order.contracts.order(created_at: :desc).first,
+        owner: @order.owner, requested_by: @actor || @order.owner,
+        contract: contract || @order.contracts.order(created_at: :desc).first,
         title: "Processar pedido #{@order.order_number}", due_at: request.due_at || 2.days.from_now,
         metadata: metadata
       )
@@ -85,12 +107,34 @@ module JrcCrm
         request.completed_at = Time.current if request.stage == 'completed'
       end
       request.save!
+      JrcCrm::BackofficeDocumentChecklist.new(request: request, actor: @actor).sync!
+      if @event == 'contract_signed'
+        begin
+          request.advance! while %w[analysis documentation contract].include?(request.stage)
+        rescue ActiveRecord::RecordInvalid
+          # Manual documentary requirements still block the next operational stage.
+        end
+      end
+      if request.stage == 'implementation'
+        result = sync_implementation_project!
+        request.update!(metadata: request.metadata.merge('implementation_project_id' => result[:project]&.id,
+          'implementation_project_warning' => result[:warning]))
+      end
       complete_after_payment!(request) if @event == 'payment_received'
     end
 
     def sync_commission!
+      commission = @order.commissions.lock.find_or_initialize_by(user: @order.owner)
+      return if commission.persisted? && CommissionProtection.final?(commission.status)
+
       program = eligible_program
       return unless program
+      if program.rules_hash[:base].to_s == 'margin_cents' && margin_cents.nil?
+        JrcCrm::AuditEvent.create!(account_id: @order.account_id, actor_type: 'User', actor_id: @actor&.id,
+          event_type: 'commission_calculation_pending', resource_type: 'JrcCrm::SalesOrder', resource_id: @order.id,
+          from_value: {}, to_value: {}, metadata: { reason: 'margin_unavailable', commission_program_id: program.id })
+        return
+      end
 
       attainment = goal_attainment_percent(program)
       sale = {
@@ -107,7 +151,6 @@ module JrcCrm
         share_percent: share
       ).call
 
-      commission = @order.commissions.find_or_initialize_by(user: @order.owner)
       commission.assign_attributes(
         account: @order.account,
         business_unit: @order.business_unit,
@@ -117,7 +160,7 @@ module JrcCrm
         commission_cents: result[:commission_cents],
         share_percent: result[:share_percent],
         goal_attainment_percent: result[:attainment_percent],
-        calculation: result[:calculation],
+        calculation: result[:calculation].deep_stringify_keys,
         event_key: @event,
         accrued_at: Time.current,
         status: commission.new_record? ? initial_commission_status(program) : commission.status
@@ -155,6 +198,7 @@ module JrcCrm
     end
 
     def proportional_value(program, amount_cents)
+      return nil if amount_cents.nil?
       return amount_cents.to_i unless program.product_restriction?
       total = @order.total_cents.to_i
       return 0 if total <= 0
@@ -170,11 +214,7 @@ module JrcCrm
     end
 
     def margin_cents
-      snap = (@order.snapshot || {}).with_indifferent_access
-      explicit = snap[:margin_cents]
-      return explicit.to_i if explicit.present?
-
-      @order.total_cents.to_i
+      CommissionProtection.margin(@order.snapshot || {})
     end
 
     def stage_for_order(request)
@@ -187,6 +227,12 @@ module JrcCrm
 
     def complete_after_payment!(request)
       request.advance! until request.completed?
+    rescue ActiveRecord::RecordInvalid => error
+      # A payment is real even when a manual operational gate is still pending.
+      # Never mark the backoffice completed merely because payment arrived.
+      JrcCrm::AuditEvent.create!(account_id: @order.account_id, actor_type: 'User', actor_id: @actor&.id,
+        event_type: 'backoffice_payment_gate_pending', resource_type: 'JrcCrm::BackofficeRequest', resource_id: request.id,
+        from_value: {}, to_value: {}, metadata: { errors: error.record.errors.full_messages })
     end
   end
 end

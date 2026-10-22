@@ -24,6 +24,7 @@
 #
 
 class Account < ApplicationRecord
+  has_many :jrc_flows, dependent: :destroy
   has_many :sip_credentials, dependent: :destroy
   has_many :video_conference_settings, dependent: :destroy
   has_one :telephony_integration, dependent: :destroy
@@ -76,6 +77,7 @@ class Account < ApplicationRecord
   has_many :campaigns, dependent: :destroy_async
   has_many :canned_responses, dependent: :destroy_async
   has_many :categories, dependent: :destroy_async, class_name: '::Category'
+  has_many :master_companies, class_name: 'JrcCustomers::Company'
   has_many :contacts, dependent: :destroy_async
   has_many :conversations, dependent: :destroy_async
   has_many :csat_survey_responses, dependent: :destroy_async
@@ -123,6 +125,8 @@ class Account < ApplicationRecord
   has_many :jrc_crm_contracts, class_name: 'JrcCrm::Contract', dependent: :destroy_async
   has_many :jrc_crm_sales_commissions, class_name: 'JrcCrm::SalesCommission', dependent: :destroy_async
   has_many :jrc_crm_commission_programs, class_name: 'JrcCrm::CommissionProgram', dependent: :destroy_async
+  has_many :jrc_operations_queues, class_name: 'JrcOperations::Queue', dependent: :destroy_async
+  has_many :jrc_operations_sla_policies, class_name: 'JrcOperations::SlaPolicy', dependent: :destroy_async
   has_many :jrc_crm_backoffice_requests, class_name: 'JrcCrm::BackofficeRequest', dependent: :destroy_async
   has_many :jrc_crm_invoices, class_name: 'JrcCrm::Invoice', dependent: :destroy_async
   has_many :jrc_crm_payments, class_name: 'JrcCrm::Payment', dependent: :destroy_async
@@ -137,6 +141,9 @@ class Account < ApplicationRecord
   has_many :jrc_crm_custom_attribute_definitions, class_name: 'JrcCrm::CustomAttributeDefinition', dependent: :destroy_async
   has_many :jrc_crm_organizations, class_name: 'JrcCrm::Organization', dependent: :destroy_async
   has_many :jrc_crm_deal_conversations, class_name: 'JrcCrm::DealConversation', dependent: :destroy_async
+  has_many :jrc_crm_business_units, class_name: 'JrcCrm::BusinessUnit', dependent: :destroy_async
+  has_many :jrc_crm_user_business_units, class_name: 'JrcCrm::UserBusinessUnit', dependent: :destroy_async
+  has_many :jrc_crm_team_scopes, class_name: 'JrcCrm::TeamScope', dependent: :destroy_async
   has_many :jrc_campaigns, class_name: 'JrcCampaigns::Campaign', dependent: :destroy_async
   has_many :jrc_campaign_test_deliveries, class_name: 'JrcCampaigns::TestDelivery', dependent: :destroy_async
   has_many :jrc_campaign_test_authorizations, class_name: 'JrcCampaigns::TestAuthorization', dependent: :destroy_async

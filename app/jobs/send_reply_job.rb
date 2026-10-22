@@ -17,10 +17,17 @@ class SendReplyJob < ApplicationJob
 
   def perform(message_id)
     message = Message.find(message_id)
-    if message.content_attributes.to_h['nico_delegation']
-      return deliver_nico(message)
+    if message.content_attributes.to_h['service_desk_delivery_id']
+      JrcServiceDesk::NotificationExecution.new(message).perform { deliver(message) }
+    elsif JrcRelationship::SurveyMessageExecution.applies?(message)
+      JrcRelationship::SurveyMessageExecution.new(message).perform { deliver(message) }
+    elsif message.content_attributes.to_h['jrc_flow_run_id']
+      JrcFlows::Delivery.new(message).perform { deliver(message) }
+    elsif message.content_attributes.to_h['nico_delegation']
+      deliver_nico(message)
+    else
+      deliver(message)
     end
-    deliver(message)
   end
 
   def deliver(message)
@@ -62,6 +69,9 @@ class SendReplyJob < ApplicationJob
       end
       deliver(message)
       turn.update!(status: message.reload.failed? ? 'failed' : 'channel_processed')
+      if message.failed?
+        JrcNico::DelegationService.stop(message.conversation, reason: 'delivery_failed', status: 'needs_human')
+      end
     end
   rescue StandardError
     turn&.update!(status: 'unknown')

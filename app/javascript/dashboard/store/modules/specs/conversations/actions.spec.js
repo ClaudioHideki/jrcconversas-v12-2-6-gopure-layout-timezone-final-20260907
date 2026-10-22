@@ -61,7 +61,10 @@ describe('#actions', () => {
       axios.get.mockResolvedValue({
         data: { id: 1, meta: { sender: { id: 1, name: 'Contact 1' } } },
       });
-      await actions.getConversation({ commit }, 1);
+      await actions.getConversation(
+        { commit, rootGetters: { getCurrentAccountId: 1 } },
+        1
+      );
       expect(commit.mock.calls).toEqual([
         [
           types.UPDATE_CONVERSATION,
@@ -72,7 +75,10 @@ describe('#actions', () => {
     });
     it('sends correct actions if API is error', async () => {
       axios.get.mockRejectedValue({ message: 'Incorrect header' });
-      await actions.getConversation({ commit });
+      await actions.getConversation({
+        commit,
+        rootGetters: { getCurrentAccountId: 1 },
+      });
       expect(commit.mock.calls).toEqual([]);
     });
   });
@@ -84,7 +90,10 @@ describe('#actions', () => {
     });
     it('sends correct actions if API is error', async () => {
       axios.get.mockRejectedValue({ message: 'Incorrect header' });
-      await actions.getConversation({ commit });
+      await actions.getConversation({
+        commit,
+        rootGetters: { getCurrentAccountId: 1 },
+      });
       expect(commit.mock.calls).toEqual([]);
     });
   });
@@ -437,11 +446,24 @@ describe('#actions', () => {
       axios.post.mockResolvedValue({
         data: dataReceived,
       });
-      await actions.fetchFilteredConversations({ commit }, dataToSend);
-      expect(commit).toHaveBeenCalledTimes(2);
+      await actions.fetchFilteredConversations(
+        {
+          commit,
+          dispatch,
+          state: {},
+          rootGetters: { getCurrentAccountId: 1 },
+        },
+        dataToSend
+      );
+      expect(commit).toHaveBeenCalledTimes(4);
       expect(commit.mock.calls).toEqual([
         ['SET_LIST_LOADING_STATUS'],
         ['SET_ALL_CONVERSATION', dataReceived.payload],
+        [
+          'contacts/SET_CONTACTS',
+          dataReceived.payload.map(chat => chat.meta.sender),
+        ],
+        ['CLEAR_LIST_LOADING_STATUS'],
       ]);
     });
   });
@@ -797,5 +819,72 @@ describe('#addMentions', () => {
         ],
       ]);
     });
+  });
+});
+
+describe('conversation request account isolation', () => {
+  it('discards a conversation detail response from the previous account', async () => {
+    let resolveRequest;
+    axios.get.mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          resolveRequest = resolve;
+        })
+    );
+    const rootGetters = { getCurrentAccountId: 1 };
+    const request = actions.getConversation({ commit, rootGetters }, 123);
+    rootGetters.getCurrentAccountId = 2;
+    resolveRequest({ data: { id: 123, meta: { sender: { id: 9 } } } });
+    await request;
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it('discards a conversation list response from the previous account', async () => {
+    let resolveRequest;
+    axios.get.mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          resolveRequest = resolve;
+        })
+    );
+    const rootGetters = { getCurrentAccountId: 1 };
+    const state = { conversationFilters: { assigneeType: 'me' } };
+    const request = actions.fetchAllConversations({
+      commit,
+      dispatch,
+      state,
+      rootGetters,
+    });
+    rootGetters.getCurrentAccountId = 2;
+    resolveRequest({ data: { data: { payload: [{ id: 123 }] } } });
+    await request;
+    expect(commit.mock.calls).toEqual([[types.SET_LIST_LOADING_STATUS]]);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('discards the old assignee list when filters change while it is pending', async () => {
+    let resolveRequest;
+    axios.get.mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          resolveRequest = resolve;
+        })
+    );
+    const rootGetters = { getCurrentAccountId: 1 };
+    const state = { conversationFilters: { assigneeType: 'all' } };
+    const request = actions.fetchAllConversations({
+      commit,
+      dispatch,
+      state,
+      rootGetters,
+    });
+    state.conversationFilters = { assigneeType: 'me' };
+    resolveRequest({ data: { data: { payload: [{ id: 123 }] } } });
+    await request;
+    expect(commit.mock.calls).toEqual([
+      [types.SET_LIST_LOADING_STATUS],
+      [types.CLEAR_LIST_LOADING_STATUS],
+    ]);
+    expect(dispatch).not.toHaveBeenCalled();
   });
 });

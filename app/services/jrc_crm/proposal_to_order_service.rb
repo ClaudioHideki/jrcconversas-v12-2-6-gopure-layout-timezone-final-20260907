@@ -1,56 +1,78 @@
 module JrcCrm
   class ProposalToOrderService
+    attr_reader :created
+
     def initialize(proposal:, actor:)
       @proposal, @actor = proposal, actor
+      @created = false
     end
 
     def call
-      raise ArgumentError, 'A proposta precisa estar aceita' unless @proposal.accepted?
-      existing = @proposal.sales_orders.where.not(status: 'canceled').first
-      return existing if existing
+      # All entry points (top-level proposal_id, wizard and proposal action) use
+      # this source-row lock. No paid/accepted values are recalculated in place.
+      @proposal.with_lock do
+        raise CommercialFinancials::InvalidTerms, 'A proposta precisa estar aceita' unless @proposal.accepted?
+        raise CommercialFinancials::InvalidTerms, 'A proposta precisa ter um cliente vinculado' unless @proposal.customer_contact
+        unless @proposal.sent_at && @proposal.accepted_at
+          raise CommercialFinancials::InvalidTerms, 'O aceite exige envio e registro da data do aceite.'
+        end
+        if @proposal.public_token_revoked_at || (@proposal.public_token_expires_at && @proposal.public_token_expires_at <= Time.current) ||
+           (@proposal.valid_until && @proposal.valid_until < Date.current)
+          raise CommercialFinancials::InvalidTerms, 'Proposta expirada ou revogada não pode gerar pedido.'
+        end
+        JrcApprovals::CommercialGate.check!(resource: @proposal, user: @actor, key: 'crm.proposal_convert')
+        existing = @proposal.sales_orders.where.not(status: 'canceled').order(:id).first
+        next existing if existing
 
-      order = nil
-      JrcCrm::SalesOrder.transaction do
+        terms = @proposal.financial_summary
+        snapshot = JrcCrm::ProposalSerializer.new(@proposal).as_json.merge(
+          'company_name' => business_unit&.name.presence || @proposal.issuer_company_name.presence || @proposal.account.name,
+          'document_brand' => DocumentBranding.name(@proposal.account), 'origin' => 'proposal',
+          'proposal_number' => @proposal.proposal_number, 'company_id' => @proposal.customer_company&.id,
+          'customer_name' => @proposal.customer_company&.name || @proposal.customer_contact&.name,
+          'proposal_version' => @proposal.version_number,
+          'accepted_at' => @proposal.accepted_at,
+          'first_due_date' => terms[:first_due_date],
+          'relationship_origin' => @proposal.relationship_origin,
+          'source_contract_id' => @proposal.relationship_origin['source_contract_id']
+        )
         order = JrcCrm::SalesOrder.create!(
-          account: @proposal.account, deal: @proposal.deal, proposal: @proposal,
-          contact: @proposal.customer_contact, owner: @proposal.owner || @actor,
-          business_unit: business_unit,
-          products_cents: @proposal.initial_items_cents, shipping_cents: @proposal.shipping_cents,
-          discount_cents: @proposal.discount_cents,
-          total_cents: @proposal.total_cents.to_i + @proposal.shipping_cents.to_i,
-          monthly_cents: @proposal.has_monthly_fee? ? @proposal.monthly_cents : 0,
-          payment_condition: @proposal.payment_condition, payment_method: @proposal.payment_method,
-          down_payment_cents: @proposal.down_payment_cents, installments_count: @proposal.installments_count,
-          sold_at: Time.current,
-          snapshot: JrcCrm::ProposalSerializer.new(@proposal).as_json.merge(
-            'company_name' => business_unit&.name || @proposal.account.name,
-            'origin' => 'proposal', 'proposal_number' => @proposal.proposal_number
+          OrderFinancials.attributes_for(terms).merge(
+            account: @proposal.account, deal: @proposal.deal, proposal: @proposal,
+            contact: @proposal.customer_contact, owner: @proposal.owner || @actor, created_by: @actor,
+            business_unit: business_unit, source_type: 'proposal', order_origin: order_origin,
+            proposal_version: @proposal.version_number, sold_at: Time.current,
+            snapshot: OrderFinancials.snapshot_for(terms, snapshot)
           )
         )
-        @proposal.proposal_items.find_each do |item|
-          order.order_items.create!(
-            product: item.product, name: item.name_snapshot, quantity: item.quantity,
-            unit_cents: item.unit_price_cents, discount_cents: item.discount_cents,
-            one_time_cents: item.initial_total_cents, recurring_cents: item.recurring_total_cents,
-            snapshot: { description: item.description_snapshot, billing_model: item.billing_model, unit_name: item.unit_name,
-                        setup_fee_cents: item.setup_fee_cents, contract_term_months: item.product&.contract_term_months,
-                        requires_implementation: item.product&.requires_implementation }
-          )
-        end
-        # Normalize from the proposal's item snapshots, never from its legacy
-        # initial total (which included the first recurring charge).
-        if order.order_items.any?
-          calculator = OrderFinancials.new(attributes: order.attributes, items: [])
-          order.order_items.each { |item| item.update!(calculator.normalize_item(item.attributes.with_indifferent_access)) }
-          OrderFinancials.recalculate!(order)
-          # Implementation details are filled in the existing order workflow.
-          order.update!(status: 'draft') if order.implementation_items.any?
-        end
+        terms[:items].each { |item| order.order_items.create!(item) }
+        audit_created!(order)
+        @created = true
+        order
       end
-      order
     end
 
     private
+
+    def order_origin
+      return 'renewal' if @proposal.relationship_origin['source_contract_id'].present?
+      return 'expansion' if @proposal.relationship_origin['relationship_resource_type'] == 'JrcRelationship::ExpansionSignal'
+      'proposal_deal'
+    end
+
+    def audit_created!(order)
+      JrcCrm::AuditEvent.create!(
+        account_id: order.account_id, actor_type: 'User', actor_id: @actor&.id,
+        event_type: 'order_created', resource_type: 'JrcCrm::SalesOrder', resource_id: order.id,
+        from_value: {}, to_value: {}, metadata: {
+          source: 'accepted_proposal', order_origin: order.order_origin, contact_id: order.contact_id,
+          deal_id: order.deal_id, proposal_id: order.proposal_id, proposal_version: order.proposal_version,
+          created_at: order.created_at&.iso8601
+        }
+      )
+    rescue StandardError => e
+      Rails.logger.warn("JRC CRM proposal-to-order audit failed: #{e.message}")
+    end
 
     def business_unit
       @business_unit ||= JrcCrm::BusinessUnit.find_by(id: @proposal.business_unit_id, account_id: @proposal.account_id)

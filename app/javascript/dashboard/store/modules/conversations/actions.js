@@ -19,6 +19,16 @@ import {
   syncConversationCallVisibility,
 } from 'dashboard/helper/voice';
 
+const activeListRequests = new WeakMap();
+const listFilterKey = filters =>
+  JSON.stringify(
+    Object.fromEntries(
+      Object.entries(filters).sort(([left], [right]) =>
+        left.localeCompare(right)
+      )
+    )
+  );
+
 export const hasMessageFailedWithExternalError = pendingMessage => {
   // This helper is used to check if the message has failed with an external error.
   // We have two cases
@@ -33,9 +43,11 @@ export const hasMessageFailedWithExternalError = pendingMessage => {
 
 // actions
 const actions = {
-  getConversation: async ({ commit }, conversationId) => {
+  getConversation: async ({ commit, rootGetters }, conversationId) => {
+    const accountId = rootGetters.getCurrentAccountId;
     try {
       const response = await ConversationApi.show(conversationId);
+      if (rootGetters.getCurrentAccountId !== accountId) return;
       commit(types.UPDATE_CONVERSATION, response.data);
       commit(`contacts/${types.SET_CONTACT_ITEM}`, response.data.meta.sender);
     } catch (error) {
@@ -43,36 +55,68 @@ const actions = {
     }
   },
 
-  fetchAllConversations: async ({ commit, state, dispatch }) => {
+  fetchAllConversations: async ({ commit, state, dispatch, rootGetters }) => {
+    const accountId = rootGetters.getCurrentAccountId;
+    const request = {};
+    activeListRequests.set(state, request);
+    const ownsRequest = () =>
+      rootGetters.getCurrentAccountId === accountId &&
+      activeListRequests.get(state) === request;
+    const params = { ...state.conversationFilters };
+    const filterKey = listFilterKey(params);
     commit(types.SET_LIST_LOADING_STATUS);
     try {
-      const params = state.conversationFilters;
       const {
         data: { data },
       } = await ConversationApi.get(params);
+      if (
+        !ownsRequest() ||
+        listFilterKey(state.conversationFilters) !== filterKey
+      )
+        return;
       buildConversationList(
         { commit, dispatch },
         params,
         data,
         params.assigneeType
       );
-    } catch (error) {
-      // Handle error
+    } catch {
+      if (ownsRequest()) commit(types.SET_LIST_ERROR_STATUS);
+    } finally {
+      if (ownsRequest()) {
+        commit(types.CLEAR_LIST_LOADING_STATUS);
+        activeListRequests.delete(state);
+      }
     }
   },
 
-  fetchFilteredConversations: async ({ commit, dispatch }, params) => {
+  fetchFilteredConversations: async (
+    { commit, dispatch, state, rootGetters },
+    params
+  ) => {
+    const accountId = rootGetters.getCurrentAccountId;
+    const request = {};
+    activeListRequests.set(state, request);
+    const ownsRequest = () =>
+      rootGetters.getCurrentAccountId === accountId &&
+      activeListRequests.get(state) === request;
     commit(types.SET_LIST_LOADING_STATUS);
     try {
       const { data } = await ConversationApi.filter(params);
+      if (!ownsRequest()) return;
       buildConversationList(
         { commit, dispatch },
         params,
         data,
         'appliedFilters'
       );
-    } catch (error) {
-      // Handle error
+    } catch {
+      if (ownsRequest()) commit(types.SET_LIST_ERROR_STATUS);
+    } finally {
+      if (ownsRequest()) {
+        commit(types.CLEAR_LIST_LOADING_STATUS);
+        activeListRequests.delete(state);
+      }
     }
   },
 
@@ -330,7 +374,10 @@ const actions = {
 
   addMessage({ commit, rootGetters }, message) {
     commit(types.ADD_MESSAGE, message);
-    if (message.message_type === MESSAGE_TYPE.INCOMING || message.conversation?.whatsapp_window) {
+    if (
+      message.message_type === MESSAGE_TYPE.INCOMING ||
+      message.conversation?.whatsapp_window
+    ) {
       commit(types.SET_CONVERSATION_CAN_REPLY, {
         conversationId: message.conversation_id,
         canReply: message.conversation?.can_reply ?? true,

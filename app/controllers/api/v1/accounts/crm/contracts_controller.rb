@@ -17,27 +17,48 @@ module Api::V1::Accounts::Crm
       order = visible_to_current_user(crm_scope.jrc_crm_sales_orders).find(params.dig(:contract, :sales_order_id))
       attributes = normalized_contract_params
       contract = nil
-      JrcCrm::Contract.transaction do
+      order.with_lock do
+        unless JrcCrm::OrderWorkflowSyncService::QUALIFYING_STATUSES.include?(order.status)
+          return render json: { message: 'Aprove o pedido no Backoffice antes de gerar o contrato.' }, status: :unprocessable_entity
+        end
+        attributes[:contract_template] ||= JrcCrm::ContractTemplateSelection.select(crm_scope.jrc_crm_contract_templates.where(active: true).to_a, JrcCrm::ContractTemplateSelection.context(order))
+        if attributes[:contract_template].nil? && attributes['content_override'].blank?
+          return render json: { message: 'Selecione um modelo ativo antes de gerar o contrato.' }, status: :unprocessable_entity
+        end
         contract = crm_scope.jrc_crm_contracts.create!(attributes.merge(
           deal: order.deal, contact: order.contact, owner: order.owner, business_unit: order.business_unit
         ))
         copy_items!(order, contract)
+        order.backoffice_requests.where(request_kind: 'fulfillment').update_all(contract_id: contract.id, updated_at: Time.current)
+        audit!(contract, 'contract_created', {}, audit_snapshot(contract))
       end
-      order.backoffice_requests.where(request_kind: 'fulfillment').update_all(contract_id: contract.id, updated_at: Time.current)
-      audit!(contract, 'contract_created', {}, audit_snapshot(contract))
       render json: serialize(contract.reload), status: :created
     end
 
     def update
-      before = audit_snapshot(@contract)
-      @contract.update!(normalized_contract_params)
-      sync_signature_status_from_contract_status!(@contract)
-      sync_order_after_signature!(@contract)
-      audit!(@contract, 'contract_updated', before, audit_snapshot(@contract))
+      @contract.sales_order.with_lock do
+        @contract.lock!
+        before = audit_snapshot(@contract)
+        attributes = normalized_contract_params
+        if attributes.key?('lifecycle_metadata')
+          attributes['lifecycle_metadata'] = (@contract.lifecycle_metadata || {}).deep_merge(attributes['lifecycle_metadata'])
+        end
+        @contract.update!(attributes)
+        JrcApprovals::CommercialInvalidation.call(resource: @contract.reload, user: Current.user)
+        if %w[active expiring renewed].include?(@contract.status)
+          JrcApprovals::CommercialGate.check!(resource: @contract, user: Current.user, key: 'contracts.company_signature')
+        end
+        sync_signature_status_from_contract_status!(@contract)
+        sync_order_after_signature!(@contract)
+        audit!(@contract, 'contract_updated', before, audit_snapshot(@contract))
+      end
       render json: serialize(@contract.reload)
     end
 
     def pdf
+      if @contract.contract_template.nil? && @contract.content_override.blank?
+        return render json: { message: 'Selecione um modelo ativo antes de gerar o PDF.' }, status: :unprocessable_entity
+      end
       pdf_data = JrcCrm::ContractPdfService.new(@contract).call
       send_data pdf_data,
                 filename: "#{@contract.contract_number.parameterize.presence || "contrato-#{@contract.id}"}.pdf",
@@ -52,6 +73,9 @@ module Api::V1::Accounts::Crm
     def upload_documents
       uploads = Array(params[:files]).compact
       return render json: { message: 'Selecione ao menos um documento.' }, status: :unprocessable_entity if uploads.empty?
+      if @contract.documents.count + uploads.length > 10 || uploads.any? { |file| file.size > 20.megabytes }
+        return render json: { message: 'Limite de 10 arquivos de ate 20 MB por contrato.' }, status: :unprocessable_entity
+      end
       uploads.each { |file| @contract.documents.attach(file) }
       audit!(@contract, 'contract_document_uploaded', {}, { filenames: uploads.map(&:original_filename) })
       render json: { documents: document_rows(@contract.reload) }, status: :created
@@ -74,6 +98,7 @@ module Api::V1::Accounts::Crm
     end
 
     def prepare_signature
+      return render json: { message: 'A assinatura já foi registrada.' }, status: :unprocessable_entity if @contract.signature_status == 'signed'
       mode = params[:mode].to_s.presence || 'manual'
       unless mode.in?(%w[manual provider])
         return render json: { message: 'Modo de assinatura inválido.' }, status: :unprocessable_entity
@@ -84,13 +109,19 @@ module Api::V1::Accounts::Crm
         return render json: { message: 'Informe o provedor de assinatura. Nenhuma integração externa foi executada.' }, status: :unprocessable_entity
       end
 
-      @contract.update!(signature_mode: mode, signature_provider: provider,
-                        signature_status: 'prepared', status: 'awaiting_signature')
-      audit!(@contract, 'contract_signature_prepared', {}, { mode: mode, provider: provider })
+      @contract.with_lock do
+        if @contract.signature_status == 'signed'
+          return render json: { message: 'A assinatura já foi registrada.' }, status: :unprocessable_entity
+        end
+        @contract.update!(signature_mode: mode, signature_provider: provider,
+                          signature_status: 'prepared', status: 'awaiting_signature')
+        audit!(@contract, 'contract_signature_prepared', {}, { mode: mode, provider: provider })
+      end
       render json: serialize(@contract.reload)
     end
 
     def send_for_signature
+      return render json: { message: 'A assinatura já foi registrada.' }, status: :unprocessable_entity if @contract.signature_status == 'signed'
       unless @contract.signature_mode == 'provider'
         return render json: { message: 'Este contrato não está configurado para assinatura por provedor.' }, status: :unprocessable_entity
       end
@@ -102,21 +133,51 @@ module Api::V1::Accounts::Crm
         }, status: :unprocessable_entity
       end
 
-      @contract.update!(signature_external_id: external_id, signature_status: 'sent', status: 'awaiting_signature')
-      audit!(@contract, 'contract_signature_sent', {}, { provider: @contract.signature_provider, external_id: external_id })
+      @contract.with_lock do
+        if @contract.signature_status == 'signed' || @contract.signature_mode != 'provider'
+          return render json: { message: 'O estado da assinatura foi alterado. Atualize a tela.' }, status: :unprocessable_entity
+        end
+        @contract.update!(signature_external_id: external_id, signature_status: 'sent', status: 'awaiting_signature')
+        audit!(@contract, 'contract_signature_sent', {}, { provider: @contract.signature_provider, external_id: external_id })
+      end
       render json: serialize(@contract.reload)
     end
 
     def register_manual_signature
       signed_name = params[:signed_by_name].to_s.strip
-      return render json: { message: 'Informe quem assinou o contrato.' }, status: :unprocessable_entity if signed_name.blank?
-
-      @contract.signed_document.attach(params[:signed_file]) if params[:signed_file].present?
-      @contract.update!(signature_mode: 'manual', signature_provider: nil, signature_status: 'signed',
-                        signed_by_name: signed_name, signed_at: parse_time(params[:signed_at]) || Time.current, status: 'active')
-      sync_order_after_signature!(@contract)
-      audit!(@contract, 'contract_manual_signature_registered', {}, { signed_by_name: signed_name, signed_at: @contract.signed_at })
+      raise ArgumentError, 'Informe quem assinou o contrato.' if signed_name.blank?
+      signed_time = parse_time(params[:signed_at])
+      raise ArgumentError, 'Informe uma data/hora válida da assinatura.' unless signed_time && signed_time <= Time.current + 5.minutes
+      JrcCrm::SignedPdfValidation.validate!(params[:signed_file])
+      @contract.sales_order.with_lock do
+        @contract.lock!
+        raise ArgumentError, 'A assinatura já foi registrada. O documento existente foi preservado.' if @contract.signature_status == 'signed'
+        gate_mode = JrcApprovals::CommercialGate.mode(crm_scope, 'contracts.company_signature')
+        gate_result = if gate_mode == 'enforcement'
+                        JrcApprovals::CommercialGate.new(account: crm_scope, user: Current.user)
+                          .evaluate(key: 'contracts.company_signature', resource_id: @contract.id, lock: true)
+                      end
+        company_pending = gate_result && gate_result[:status] != 'ready'
+        file = params[:signed_file]
+        blob = ActiveStorage::Blob.create_and_upload!(io: file.tempfile, filename: file.original_filename,
+          content_type: 'application/pdf', identify: false)
+        @contract.signed_document.attach(blob)
+        @contract.update!(signature_mode: 'manual', signature_provider: nil, signature_status: 'signed',
+          signed_by_name: signed_name, signed_at: signed_time, status: company_pending ? 'awaiting_signature' : 'active')
+        sync_order_after_signature!(@contract)
+        audit!(@contract, 'contract_manual_signature_registered', {}, {
+          signed_by_name: signed_name, signed_at: signed_time, recorded_at: Time.current,
+          recorded_by_id: Current.user.id, source: 'manual', document_id: blob.id,
+          filename: blob.filename.to_s, byte_size: blob.byte_size, content_type: blob.content_type, request_id: request.request_id,
+          company_signature_gate: gate_result&.dig(:status) })
+      end
       render json: serialize(@contract.reload)
+    rescue ArgumentError, ActiveRecord::RecordInvalid => error
+      render json: { message: error.message, code: 'SIGN-004', request_id: request.request_id }, status: :unprocessable_entity
+    rescue StandardError => error
+      Rails.logger.error("[SIGN-004] request=#{request.request_id} account=#{crm_scope.id} contract=#{@contract.id} user=#{Current.user.id} #{error.class}: #{error.message}")
+      render json: { message: 'Não foi possível registrar a assinatura. O contrato não foi ativado por esta tentativa.',
+        code: 'SIGN-004', request_id: request.request_id }, status: :unprocessable_entity
     end
 
     def renew
@@ -189,7 +250,7 @@ module Api::V1::Accounts::Crm
       order.order_items.find_each do |item|
         contract.contract_items.create!(
           product: item.product, name: item.name, quantity: item.quantity,
-          one_time_cents: item.one_time_cents, monthly_cents: item.recurring_cents, snapshot: item.snapshot
+          one_time_cents: item.one_time_cents, monthly_cents: item.recurring_cents, snapshot: item.snapshot.merge('unit_cents' => item.unit_cents, 'discount_cents' => item.discount_cents)
         )
       end
     end
@@ -203,6 +264,11 @@ module Api::V1::Accounts::Crm
 
     def sync_order_after_signature!(contract)
       return unless contract.signature_status == 'signed'
+      if JrcApprovals::CommercialGate.mode(crm_scope, 'contracts.company_signature') == 'enforcement'
+        return unless %w[active expiring renewed].include?(contract.status)
+
+        JrcApprovals::CommercialGate.check!(resource: contract, user: Current.user, key: 'contracts.company_signature')
+      end
       JrcCrm::OrderWorkflowSyncService.new(order: contract.sales_order, actor: Current.user, event: 'contract_signed').call
     end
 
@@ -219,6 +285,7 @@ module Api::V1::Accounts::Crm
         signature_provider: contract.signature_provider, signature_external_id: contract.signature_external_id,
         signed_by_name: contract.signed_by_name, signed_at: contract.signed_at,
         lifecycle_metadata: contract.lifecycle_metadata, source_contract_id: contract.source_contract_id,
+        financials: contract.financial_summary,
         contact: contract.contact && { id: contract.contact.id, name: contract.contact.name, email: contract.contact.email },
         owner: contract.owner && { id: contract.owner.id, name: contract.owner.name },
         sales_order: contract.sales_order && { id: contract.sales_order.id, order_number: contract.sales_order.order_number,

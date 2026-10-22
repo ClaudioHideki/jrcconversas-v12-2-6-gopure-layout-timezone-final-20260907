@@ -1,8 +1,4 @@
-<% if @message.content_attributes.dig('email', 'html_content', 'reply').present? %>
-<%= @message.content_attributes.dig('email', 'html_content', 'reply').html_safe %>
-<% elsif @message.content %>
-<%= @message.outgoing_content.html_safe %>
-<% end %>
+<%= jrc_email_reply_body_with_history.html_safe %>
 <% if @large_attachments.present? %>
 <p>Attachments:</p>
 <% @large_attachments.each do |attachment| %>

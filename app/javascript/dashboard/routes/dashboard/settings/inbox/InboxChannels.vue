@@ -17,6 +17,15 @@ const currentRouteName = computed(() =>
 );
 
 const createFlowSteps = computed(() => {
+  if (route.params.sub_page === 'jrc_broker') {
+    return [
+      {
+        title: t('JRC_BROKER.TITLE'),
+        body: t('JRC_BROKER.DESCRIPTION'),
+        route: 'settings_inboxes_page_channel',
+      },
+    ];
+  }
   const steps = ['CHANNEL', 'INBOX', 'AGENT', 'FINISH'];
 
   const routes = {
@@ -72,7 +81,7 @@ const items = computed(() => {
         :global-config="globalConfig"
         :items="items"
       />
-      <div class="col-span-6 flex flex-col overflow-y-auto">
+      <div class="min-w-0 lg:col-span-6 flex flex-col overflow-y-auto">
         <router-view />
       </div>
     </div>

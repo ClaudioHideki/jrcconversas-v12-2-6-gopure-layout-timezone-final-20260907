@@ -14,8 +14,7 @@ RSpec.describe JrcAi::CockpitMetricsService do
 
   it 'does not expose CRM counts to an operator without CRM access' do
     account.enable_features!('jrc_crm')
-    membership.update!(role: :agent)
-    account.disable_features!('jrc_crm')
+    membership.update!(role: :agent, crm_enabled: false)
     create(:jrc_crm_lead, account: account, owner: user)
     expect(metrics[:summary][:active_leads]).to eq(0)
   end

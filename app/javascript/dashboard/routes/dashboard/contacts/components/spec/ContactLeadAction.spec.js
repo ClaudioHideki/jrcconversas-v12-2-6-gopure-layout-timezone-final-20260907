@@ -1,99 +1,124 @@
 import { mount, flushPromises } from '@vue/test-utils';
-import { useRouter } from 'vue-router';
+import { reactive } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { leadsAPI } from 'dashboard/api/crm';
 import ContactLeadAction from '../ContactLeadAction.vue';
 
-vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: { accountId: '1' } }),
-  useRouter: vi.fn(),
-}));
+vi.mock('vue-router', () => ({ useRoute: vi.fn(), useRouter: vi.fn() }));
 vi.mock('dashboard/api/crm', () => ({
-  leadsAPI: { forContact: vi.fn(), create: vi.fn() },
+  leadsAPI: { forContact: vi.fn(), fromContact: vi.fn() },
 }));
-vi.mock('dashboard/composables', () => ({ useAlert: vi.fn() }));
 
-const mountAction = () =>
-  mount(ContactLeadAction, {
-    props: { contact: { id: 141, name: 'Thiago' } },
-    global: {
-      stubs: { LeadCreateModal: true },
-    },
-  });
-
-describe('Contact lead action', () => {
-  it('opens the shared prefilled form and becomes View Lead after saving', async () => {
-    leadsAPI.forContact.mockResolvedValue({
-      data: { linked: false, lead_id: null },
+describe('Contact → Lead action', () => {
+  let route;
+  let router;
+  let wrapper;
+  beforeEach(() => {
+    route = reactive({ params: { accountId: '1' } });
+    router = { push: vi.fn() };
+    useRoute.mockReturnValue(route);
+    useRouter.mockReturnValue(router);
+    leadsAPI.forContact.mockResolvedValue({ data: { lead: null } });
+    leadsAPI.fromContact.mockResolvedValue({
+      data: { lead: { id: 7 }, created: true },
     });
-    const wrapper = mountAction();
-    await flushPromises();
-    expect(wrapper.get('button').text()).toBe('+ Criar Lead');
-    await wrapper.get('button').trigger('click');
-    const modal = wrapper.getComponent({ name: 'LeadCreateModal' });
-    expect(modal.props('contact').id).toBe(141);
-    modal.vm.$emit('created', { id: 33, contact_id: 141 });
-    await flushPromises();
-    expect(wrapper.get('button').text()).toBe('Ver Lead');
-    expect(wrapper.emitted('created')[0][0].contact_id).toBe(141);
   });
+  afterEach(() => wrapper?.unmount());
 
-  it('opens the correct existing lead instead of offering creation', async () => {
-    const push = vi.fn();
-    useRouter.mockReturnValue({ push });
-    leadsAPI.forContact.mockResolvedValue({
-      data: { linked: true, lead_id: 33 },
-    });
-    const wrapper = mountAction();
+  it('creates from the selected contact once, then opens the existing CRM detail', async () => {
+    wrapper = mount(ContactLeadAction, { props: { contact: { id: 42 } } });
     await flushPromises();
+    let finish;
+    leadsAPI.fromContact.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          finish = resolve;
+        })
+    );
     await wrapper.get('button').trigger('click');
-    expect(push).toHaveBeenCalledWith({
+    await wrapper.get('button').trigger('click');
+    expect(leadsAPI.fromContact).toHaveBeenCalledTimes(1);
+    expect(leadsAPI.fromContact).toHaveBeenCalledWith(42);
+    finish({ data: { lead: { id: 7 } } });
+    await flushPromises();
+    expect(router.push).toHaveBeenCalledWith({
       name: 'crm_leads',
       params: { accountId: '1' },
-      query: { leadId: 33 },
+      query: { leadId: 7 },
     });
-    expect(wrapper.findComponent({ name: 'LeadCreateModal' }).exists()).toBe(
-      false
+    await wrapper.get('button').trigger('click');
+    expect(leadsAPI.fromContact).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens a previously linked lead without creating it', async () => {
+    leadsAPI.forContact.mockResolvedValue({ data: { lead: { id: 8 } } });
+    wrapper = mount(ContactLeadAction, { props: { contact: { id: 42 } } });
+    await flushPromises();
+    expect(wrapper.text()).toContain('Abrir lead');
+    await wrapper.get('button').trigger('click');
+    expect(leadsAPI.fromContact).not.toHaveBeenCalled();
+    expect(router.push).toHaveBeenCalledWith(
+      expect.objectContaining({ query: { leadId: 8 } })
     );
   });
 
-  it('blocks creation and access when another agent owns the lead', async () => {
-    leadsAPI.forContact.mockResolvedValue({
-      data: { linked: true, lead_id: null },
-    });
-    const wrapper = mountAction();
+  it.each([401, 403])(
+    'hides the action when the API denies CRM access (%s)',
+    async status => {
+      leadsAPI.forContact.mockRejectedValue({ response: { status } });
+      wrapper = mount(ContactLeadAction, { props: { contact: { id: 42 } } });
+      await flushPromises();
+      expect(wrapper.find('button').exists()).toBe(false);
+      expect(leadsAPI.fromContact).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([404, 409, 500])(
+    'does not create a duplicate after a failed lookup (%s)',
+    async status => {
+      leadsAPI.forContact.mockRejectedValueOnce({ response: { status } });
+      wrapper = mount(ContactLeadAction, { props: { contact: { id: 42 } } });
+      await flushPromises();
+      expect(wrapper.get('[role="alert"]').text()).not.toBe('');
+      await wrapper.get('button').trigger('click');
+      await flushPromises();
+      expect(leadsAPI.forContact).toHaveBeenCalledTimes(2);
+      expect(leadsAPI.fromContact).not.toHaveBeenCalled();
+    }
+  );
+
+  it('ignores lookup responses for the previous contact/account', async () => {
+    let oldResponse;
+    leadsAPI.forContact.mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          oldResponse = resolve;
+        })
+    );
+    wrapper = mount(ContactLeadAction, { props: { contact: { id: 42 } } });
+    route.params.accountId = '2';
+    await wrapper.setProps({ contact: { id: 43 } });
     await flushPromises();
-    expect(wrapper.get('button').element.disabled).toBe(true);
-    expect(wrapper.text()).toContain('solicite acesso ao administrador');
+    oldResponse({ data: { lead: { id: 999 } } });
+    await flushPromises();
+    expect(wrapper.text()).toContain('Criar lead');
+    expect(wrapper.text()).not.toContain('Abrir lead');
   });
 
-  it('does not offer creation when lookup fails and permits retry', async () => {
-    leadsAPI.forContact.mockRejectedValueOnce(new Error('network'));
-    const wrapper = mountAction();
+  it('does not navigate for an old creation response after switching contact', async () => {
+    let oldResponse;
+    wrapper = mount(ContactLeadAction, { props: { contact: { id: 42 } } });
     await flushPromises();
-    expect(wrapper.text()).toContain('Tentar novamente');
-    leadsAPI.forContact.mockResolvedValue({
-      data: { linked: false, lead_id: null },
-    });
+    leadsAPI.fromContact.mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          oldResponse = resolve;
+        })
+    );
     await wrapper.get('button').trigger('click');
+    await wrapper.setProps({ contact: { id: 43 } });
+    oldResponse({ data: { lead: { id: 999 } } });
     await flushPromises();
-    expect(wrapper.get('button').text()).toBe('+ Criar Lead');
-  });
-
-  it('ignores stale lookup responses when another contact is selected', async () => {
-    let resolveFirst;
-    leadsAPI.forContact
-      .mockImplementationOnce(
-        () =>
-          new Promise(resolve => {
-            resolveFirst = resolve;
-          })
-      )
-      .mockResolvedValueOnce({ data: { linked: false, lead_id: null } });
-    const wrapper = mountAction();
-    await wrapper.setProps({ contact: { id: 142, name: 'Outro' } });
-    await flushPromises();
-    resolveFirst({ data: { linked: true, lead_id: 33 } });
-    await flushPromises();
-    expect(wrapper.get('button').text()).toBe('+ Criar Lead');
+    expect(router.push).not.toHaveBeenCalled();
   });
 });

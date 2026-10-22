@@ -5,6 +5,7 @@ module Api
         class DealProductsController < BaseController
           before_action :set_deal
           before_action :set_deal_product, only: [:update, :destroy]
+          around_action :lock_commercial_edit, only: %i[create update destroy]
 
           def index
             render json: serialize_products
@@ -40,6 +41,13 @@ module Api
 
           private
 
+          def lock_commercial_edit
+            @deal.with_lock do
+              yield
+              JrcApprovals::CommercialInvalidation.call(resource: @deal.reload, user: Current.user) if response.successful?
+            end
+          end
+
           def set_deal
             @deal = visible_to_current_user(crm_scope.jrc_crm_deals).find(params[:deal_id])
           end
@@ -49,15 +57,18 @@ module Api
           end
 
           def item_params
-            params.require(:item).permit(:product_id, :description_snapshot, :quantity, :unit_price_cents, :discount_cents, :notes)
+            params.require(:item).permit(:product_id, :description_snapshot, :quantity, :unit_price_cents, :discount_cents, :notes,
+                                         commercial_gratuity: [:type, :reason])
           end
 
           def hydrate_product(item)
             return if item.product_id.blank?
-            product = crm_scope.jrc_crm_products.active.find(item.product_id)
+
+            unit = JrcApprovals::CommercialCatalog.business_unit(@deal)
+            product = JrcCrm::CorporateIssuer.product!(account: crm_scope, user: Current.user, id: item.product_id, unit: unit)
             item.product = product
             item.description_snapshot = product.description if item.description_snapshot.blank?
-            item.unit_price_cents = product.unit_price_cents if item.unit_price_cents.blank? || item.unit_price_cents.zero?
+            item.unit_price_cents = product.unit_price_cents unless item_params.key?(:unit_price_cents)
           end
 
           def recalculate_deal_value!
@@ -75,7 +86,8 @@ module Api
                 unit_price_cents: item.unit_price_cents,
                 discount_cents: item.discount_cents,
                 total_cents: item.total_cents,
-                notes: item.notes
+                notes: item.notes,
+                commercial_gratuity: item.commercial_gratuity
               }
             end
           end

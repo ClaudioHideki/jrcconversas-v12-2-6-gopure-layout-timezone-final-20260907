@@ -24,6 +24,7 @@
 # - 'knowledge_base_manage': Can manage knowledge base portals.
 
 class CustomRole < ApplicationRecord
+  include Enterprise::Audit::ServiceDeskCustomRole
   belongs_to :account
   has_many :account_users, dependent: :nullify
 
@@ -38,7 +39,11 @@ class CustomRole < ApplicationRecord
     contact_manage
     report_manage
     knowledge_base_manage
-  ].freeze
+    jrc_crm
+  ].concat(::JrcServiceDesk::Capabilities::PERMISSIONS).concat(::JrcProjects::Authorization::PERMISSIONS)
+                .concat(::JrcRelationship::ModulePolicy::PERMISSIONS).concat(::JrcApprovals::Authorization::PERMISSIONS)
+                .concat(::JrcOperator::Access::PERMISSIONS)
+                .concat(::JrcContactCenter::ModulePolicy::PERMISSIONS).freeze
 
   validates :name, presence: true
   validates :permissions, inclusion: { in: PERMISSIONS }

@@ -6,7 +6,7 @@
 #  activation_days              :integer          default(0), not null
 #  active                       :boolean          default(TRUE), not null
 #  adjustment_index             :string           default("IPCA"), not null
-#  adjustment_period_months     :integer
+#  adjustment_period_months     :integer          default(12), not null
 #  allow_standalone_sale        :boolean          default(TRUE), not null
 #  allow_variable_quantity      :boolean          default(TRUE), not null
 #  available_for                :jsonb            not null
@@ -15,7 +15,7 @@
 #  category                     :string
 #  commission_rate              :decimal(6, 2)    default(0.0), not null
 #  contract_template_name       :string
-#  contract_term_months         :integer
+#  contract_term_months         :integer          default(12), not null
 #  cost_cents                   :bigint           default(0), not null
 #  currency                     :string           default("BRL")
 #  custom_attributes            :jsonb            not null
@@ -51,23 +51,21 @@
 #  created_at                   :datetime         not null
 #  updated_at                   :datetime         not null
 #  account_id                   :integer          not null
-#  business_unit_id             :bigint
 #
 # Indexes
 #
-#  idx_jrc_crm_products_account_billing        (account_id,billing_model)
-#  idx_jrc_crm_products_account_sku            (account_id,sku)
-#  idx_jrc_crm_products_account_type           (account_id,product_type)
-#  index_jrc_crm_products_on_account_id        (account_id)
-#  index_jrc_crm_products_on_business_unit_id  (business_unit_id)
+#  idx_jrc_crm_products_account_billing  (account_id,billing_model)
+#  idx_jrc_crm_products_account_sku      (account_id,sku)
+#  idx_jrc_crm_products_account_type     (account_id,product_type)
+#  index_jrc_crm_products_on_account_id  (account_id)
 #
 # Foreign Keys
 #
 #  fk_rails_...  (account_id => accounts.id)
-#  fk_rails_...  (business_unit_id => jrc_crm_business_units.id)
 #
 module JrcCrm
   class Product < ApplicationRecord
+    include JrcCrm::CorporateUnitBinding
     self.table_name = 'jrc_crm_products'
 
     PRODUCT_TYPES = {
@@ -114,6 +112,7 @@ module JrcCrm
     validates :billing_model, inclusion: { in: BILLING_MODELS.values }
     validates :renewal_type, inclusion: { in: RENEWAL_TYPES.values }
     validate :discount_threshold_is_consistent
+    validate :valid_document_rules
 
     before_validation :normalize_commercial_fields
     validate :price_respects_minimum
@@ -129,8 +128,6 @@ module JrcCrm
       %w[monthly annual usage].include?(billing_model)
     end
 
-    # Reuse the explicit implementation integration setting; product type and
-    # recurrence do not imply that implementation is required.
     def requires_implementation
       Array(integrations).include?('implementation')
     end
@@ -162,6 +159,15 @@ module JrcCrm
     end
 
     private
+
+    def valid_document_rules
+      valid = document_rules.is_a?(Array) && document_rules.length <= 30 && document_rules.all? do |row|
+        row.is_a?(Hash) && row['key'].to_s.match?(/\A[a-z0-9_\-]{1,80}\z/) && row['label'].present? &&
+          JrcCrm::BackofficeDocumentChecklist::SOURCES.include?(row['source']) &&
+          [true, false].include?(row['required']) && [true, false].include?(row['blocking'])
+      end
+      errors.add(:document_rules, 'regras documentais inválidas') unless valid
+    end
 
     def discount_threshold_is_consistent
       return if discount_approval_percent.to_f <= maximum_discount_percent.to_f

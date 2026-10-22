@@ -13,6 +13,7 @@ const ActivitiesIndex = () => import('./views/activities/ActivitiesIndex.vue');
 const CalendarView = () => import('./views/calendar/CalendarView.vue');
 const ProductsIndex = () => import('./views/products/ProductsIndex.vue');
 const ProposalsIndex = () => import('./views/proposals/ProposalsIndex.vue');
+
 const SalesOrdersView = () => import('./views/orders/SalesOrdersView.vue');
 const SalesOrderWizard = () => import('./views/orders/SalesOrderWizard.vue');
 const ContractsView = () => import('./views/contracts/ContractsView.vue');
@@ -114,8 +115,18 @@ export default {
           component: ContractTemplates,
           meta,
         },
-        { path: 'management', name: 'crm_management', component: ManagementView, meta },
-        { path: 'settings', name: 'crm_settings', component: CrmSettingsView, meta },
+        {
+          path: 'management',
+          name: 'crm_management',
+          component: ManagementView,
+          meta: { ...meta, permissions: ['administrator'] },
+        },
+        {
+          path: 'settings',
+          name: 'crm_settings',
+          component: CrmSettingsView,
+          meta: { ...meta, permissions: ['administrator'] },
+        },
         { path: 'goals', name: 'crm_goals', component: GoalsView, meta },
         {
           path: 'commissions/:section?',

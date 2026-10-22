@@ -3,6 +3,12 @@ module JrcCopilot
     DEFAULT_ROUTE = 'jrc_cockpit'.freeze
 
     ROUTE_GUIDES = {
+      'automation_list' => {
+        title: 'Automações Inteligentes',
+        summary: 'Regras de atendimento: escolha um evento, condições e ações. A delegação temporária ao NICO não cria uma regra recorrente. Configure e acompanhe as regras nesta tela.',
+        quick_prompts: ['Explique as automações desta tela', 'Como configurar uma regra de atendimento?'],
+        actions: [{ label: 'Abrir Automações Inteligentes', route_name: 'automation_list', icon: 'i-lucide-workflow', tone: 'blue' }]
+      },
       'jrc_cockpit' => {
         title: 'Cockpit',
         summary: 'Centraliza a operacao, mostra o que esta acontecendo agora e direciona o usuario para a acao necessaria.',
@@ -346,6 +352,51 @@ module JrcCopilot
           { label: 'Configurar caixas de entrada', route_name: 'settings_inbox_list', icon: 'i-lucide-inbox', tone: 'blue' },
           { label: 'Configurar equipe', route_name: 'settings_teams_list', icon: 'i-lucide-users', tone: 'violet' }
         ]
+      },
+      'crm_orders' => {
+        title: 'Pedidos', summary: 'Consulte pedidos ou crie um pedido a partir de uma proposta aceita. Revise os valores e vínculos antes de confirmar.',
+        quick_prompts: ['Liste meus pedidos', 'Consulte um pedido', 'Crie um pedido da proposta aceita'],
+        actions: [{ label: 'Abrir Pedidos', route_name: 'crm_orders', icon: 'i-lucide-shopping-cart', tone: 'blue' }]
+      },
+      'crm_contracts' => {
+        title: 'Contratos', summary: 'Consulte contratos, vigências e estados de assinatura. Renovação, aditivo e registro de assinatura são realizados na tela do contrato.',
+        quick_prompts: ['Liste meus contratos', 'Consulte a vigência de um contrato'],
+        actions: [{ label: 'Abrir Contratos', route_name: 'crm_contracts', icon: 'i-lucide-file-text', tone: 'blue' }]
+      },
+      'crm_goals' => {
+        title: 'Metas', summary: 'Administradores podem consultar metas e progresso pelo NICO. Criação, distribuição e publicação de metas ficam na tela de Metas.',
+        quick_prompts: ['Consulte as metas e o progresso'],
+        actions: [{ label: 'Abrir Metas', route_name: 'crm_goals', icon: 'i-lucide-target', tone: 'blue' }]
+      },
+      'crm_commissions' => {
+        title: 'Comissões', summary: 'Consulte as comissões permitidas ao seu perfil. Liberação, pagamento, estorno e edição de programas exigem revisão na tela de Comissões.',
+        quick_prompts: ['Liste minhas comissões'],
+        actions: [{ label: 'Abrir Comissões', route_name: 'crm_commissions', icon: 'i-lucide-wallet', tone: 'blue' }]
+      },
+      'crm_backoffice' => {
+        title: 'Backoffice', summary: 'Consulte etapa, estado e prazo das solicitações. Documentos, provisionamento e ações financeiras são tratados na tela de Backoffice.',
+        quick_prompts: ['Liste minhas solicitações de backoffice'],
+        actions: [{ label: 'Abrir Backoffice', route_name: 'crm_backoffice', icon: 'i-lucide-clipboard-list', tone: 'blue' }]
+      },
+      'crm_management' => {
+        title: 'Equipe Comercial', summary: 'Acompanhe indicadores da equipe e seus responsáveis. O NICO orienta a navegação; a gestão comercial da equipe permanece nesta tela.',
+        quick_prompts: ['Abra a equipe comercial'],
+        actions: [{ label: 'Abrir Equipe Comercial', route_name: 'crm_management', icon: 'i-lucide-users', tone: 'blue' }]
+      },
+      'jrc_service_desk_tickets' => {
+        title: 'Service Desk R2', summary: 'Consulte, crie e atualize chamados nas unidades autorizadas. Atribuições, notas e transições respeitam as permissões, versões e evidências exigidas pelo chamado.',
+        quick_prompts: ['Liste meus chamados', 'Consulte minhas unidades de atendimento', 'Consulte as próximas ações deste chamado'],
+        actions: [{ label: 'Abrir Chamados', route_name: 'jrc_service_desk_tickets', icon: 'i-lucide-ticket', tone: 'blue' }]
+      },
+      'jrc_projects_list' => {
+        title: 'Projetos', summary: 'Consulte e crie projetos e tarefas, edite o planejamento e mova tarefas entre colunas. Criar ou editar tarefas usa a aba autenticada; revise a versão e as condições de conclusão antes de confirmar.',
+        quick_prompts: ['Liste meus projetos', 'Consulte as tarefas do projeto', 'Crie uma tarefa no projeto'],
+        actions: [{ label: 'Abrir Projetos', route_name: 'jrc_projects_list', icon: 'i-lucide-folder-kanban', tone: 'blue' }]
+      },
+      'jrc_operations_agenda' => {
+        title: 'Minha Agenda', summary: 'Consolida compromissos do CRM e tarefas de Projetos conforme suas permissões. Prazos de tarefas mantêm a data original; chamados R2 ainda não fornecem tarefas para esta agenda.',
+        quick_prompts: ['Consulte minha agenda de hoje', 'Quais compromissos estão atrasados?'],
+        actions: [{ label: 'Abrir Minha Agenda', route_name: 'jrc_operations_agenda', icon: 'i-lucide-calendar-days', tone: 'blue' }]
       },
       'jrc_copilot_index' => {
         title: 'Copiloto JRC',

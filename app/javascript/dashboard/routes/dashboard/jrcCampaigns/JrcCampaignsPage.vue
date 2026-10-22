@@ -35,6 +35,7 @@ const analyticsLoading = ref(false);
 const activeTab = ref('dispatches');
 const showWizard = ref(false);
 const editingCampaign = ref(null);
+const initialListId = ref(null);
 const reportCampaign = ref(null);
 const reviewCampaign = ref(null);
 const period = ref('30');
@@ -153,7 +154,10 @@ const filteredCampaigns = computed(() =>
       !statusFilters.value.includes(campaign.status)
     )
       return false;
-    if (channelFilter.value && campaign.delivery_channel !== channelFilter.value)
+    if (
+      channelFilter.value &&
+      campaign.delivery_channel !== channelFilter.value
+    )
       return false;
     return (
       !periodStart.value || new Date(campaign.created_at) >= periodStart.value
@@ -208,36 +212,6 @@ const progress = campaign => {
     );
   return total ? Math.min(100, Math.round((processed / total) * 100)) : 0;
 };
-const jarvisInsight = computed(() => {
-  const current = analytics.value.summary;
-  if (!current.sent) return t('JRC_CAMPAIGNS.JARVIS.NO_DATA');
-  const failureRate =
-    (Number(current.failed || 0) / Number(current.sent)) * 100;
-  if (failureRate >= 5) {
-    return t('JRC_CAMPAIGNS.JARVIS.FAILURE_ALERT', {
-      rate: formatPercent(failureRate),
-    });
-  }
-  const currentReplyRate =
-    (Number(current.replied || 0) / Number(current.sent)) * 100;
-  const previous = analytics.value.previous_summary;
-  const previousReplyRate = previous.sent
-    ? (Number(previous.replied || 0) / Number(previous.sent)) * 100
-    : null;
-  if (previousReplyRate !== null) {
-    const difference = currentReplyRate - previousReplyRate;
-    return t(
-      difference >= 0
-        ? 'JRC_CAMPAIGNS.JARVIS.REPLY_UP'
-        : 'JRC_CAMPAIGNS.JARVIS.REPLY_DOWN',
-      { rate: formatPercent(Math.abs(difference)) }
-    );
-  }
-  return t('JRC_CAMPAIGNS.JARVIS.REPLY_RATE', {
-    rate: formatPercent(currentReplyRate),
-  });
-});
-
 const fetchAnalytics = async () => {
   analyticsLoading.value = true;
   try {
@@ -269,7 +243,21 @@ const fetchData = async () => {
     loading.value = false;
   }
 };
+const refreshSenders = async () => {
+  try {
+    const { data } = await JrcCampaignsAPI.metadata();
+    metadata.value = data;
+  } catch {
+    useAlert(t('JRC_CAMPAIGNS.ALERTS.LOAD_FAILED'));
+  }
+};
 const openNew = () => {
+  initialListId.value = null;
+  editingCampaign.value = null;
+  showWizard.value = true;
+};
+const openFromList = list => {
+  initialListId.value = list.id;
   editingCampaign.value = null;
   showWizard.value = true;
 };
@@ -283,6 +271,11 @@ const closeWizard = () => {
 };
 const saved = async () => {
   closeWizard();
+  await fetchData();
+};
+const reviewSavedCampaign = async campaign => {
+  closeWizard();
+  reviewCampaign.value = campaign;
   await fetchData();
 };
 const runAction = async (campaign, action) => {
@@ -438,9 +431,15 @@ onMounted(fetchData);
                 v-model="channelFilter"
                 class="mt-1.5 w-full rounded-xl border border-n-weak bg-n-background px-3 py-2.5 text-sm text-n-slate-12"
               >
-                <option value="">{{ $t('JRC_CAMPAIGNS.FILTERS.ALL_CHANNELS') }}</option>
-                <option value="whatsapp">{{ $t('JRC_CAMPAIGNS.CHANNEL_WHATSAPP') }}</option>
-                <option value="email">{{ $t('JRC_CAMPAIGNS.CHANNEL_EMAIL') }}</option>
+                <option value="">
+                  {{ $t('JRC_CAMPAIGNS.FILTERS.ALL_CHANNELS') }}
+                </option>
+                <option value="whatsapp">
+                  {{ $t('JRC_CAMPAIGNS.CHANNEL_WHATSAPP') }}
+                </option>
+                <option value="email">
+                  {{ $t('JRC_CAMPAIGNS.CHANNEL_EMAIL') }}
+                </option>
               </select>
             </label>
             <button
@@ -564,7 +563,7 @@ onMounted(fetchData);
           </article>
 
           <article
-            class="rounded-2xl border border-n-weak bg-n-background p-5 shadow-sm xl:col-span-3"
+            class="rounded-2xl border border-n-weak bg-n-background p-5 shadow-sm xl:col-span-5"
           >
             <h2 class="font-semibold text-n-slate-12">
               {{ $t('JRC_CAMPAIGNS.FUNNEL.TITLE') }}
@@ -588,44 +587,6 @@ onMounted(fetchData);
                   class="h-2 w-full overflow-hidden rounded-full accent-n-brand"
                 />
               </div>
-            </div>
-          </article>
-
-          <article
-            class="rounded-2xl border border-n-violet-5 bg-n-violet-2 p-5 shadow-sm xl:col-span-2"
-          >
-            <div class="flex items-center gap-2">
-              <span
-                class="flex size-9 items-center justify-center rounded-xl bg-n-violet-4 text-n-violet-11"
-                ><span class="i-lucide-bot size-5"
-              /></span>
-              <div>
-                <h2 class="text-sm font-semibold text-n-slate-12">
-                  {{ $t('JRC_CAMPAIGNS.JARVIS.TITLE') }}
-                </h2>
-                <p class="text-[11px] text-n-slate-9">
-                  {{ $t('JRC_CAMPAIGNS.JARVIS.SUBTITLE') }}
-                </p>
-              </div>
-            </div>
-            <p class="mt-5 text-sm leading-6 text-n-slate-11">
-              {{ jarvisInsight }}
-            </p>
-            <div class="mt-5 space-y-2">
-              <button
-                type="button"
-                class="w-full rounded-xl bg-n-violet-9 px-3 py-2 text-xs font-medium text-white"
-                @click="activeTab = 'reports'"
-              >
-                {{ $t('JRC_CAMPAIGNS.JARVIS.ANALYZE') }}
-              </button>
-              <button
-                type="button"
-                class="w-full rounded-xl border border-n-violet-6 bg-n-background px-3 py-2 text-xs font-medium text-n-violet-11"
-                @click="fetchAnalytics"
-              >
-                {{ $t('JRC_CAMPAIGNS.JARVIS.REFRESH') }}
-              </button>
             </div>
           </article>
         </section>
@@ -809,7 +770,9 @@ onMounted(fetchData);
                     <td class="px-4 py-4">
                       <div class="flex justify-end gap-1">
                         <button
-                          v-if="['draft', 'scheduled'].includes(campaign.status)"
+                          v-if="
+                            ['draft', 'scheduled'].includes(campaign.status)
+                          "
                           type="button"
                           class="rounded-lg p-2 text-n-violet-11 hover:bg-n-violet-3"
                           :title="$t('JRC_CAMPAIGNS.GOVERNANCE.REVIEW')"
@@ -908,9 +871,13 @@ onMounted(fetchData);
         v-else-if="activeTab === 'sanitize'"
         :lists="metadata.sanitized_lists"
         @changed="fetchData"
+        @use-list="openFromList"
       />
       <BlacklistPanel v-else-if="activeTab === 'blacklist'" />
-      <ConsentPanel v-else-if="activeTab === 'consents'" />
+      <ConsentPanel
+        v-else-if="activeTab === 'consents'"
+        @navigate="$event === 'campaign' ? openNew() : (activeTab = 'sanitize')"
+      />
       <template v-else>
         <div class="mb-5">
           <h2 class="text-xl font-semibold text-n-slate-12">
@@ -962,8 +929,11 @@ onMounted(fetchData);
       v-if="showWizard"
       :campaign="editingCampaign"
       :metadata="metadata"
+      :initial-sanitized-list-id="initialListId"
       @close="closeWizard"
       @saved="saved"
+      @review-requested="reviewSavedCampaign"
+      @refresh-senders="refreshSenders"
     />
     <CampaignReport
       v-if="reportCampaign"
@@ -974,7 +944,10 @@ onMounted(fetchData);
       v-if="reviewCampaign"
       :campaign="reviewCampaign"
       @close="reviewCampaign = null"
-      @approved="reviewCampaign = null; fetchData()"
+      @approved="
+        reviewCampaign = null;
+        fetchData();
+      "
     />
   </div>
 </template>

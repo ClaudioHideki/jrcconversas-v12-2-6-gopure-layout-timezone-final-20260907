@@ -1,16 +1,46 @@
 <script setup>
+import CustomerMasterAPI from 'dashboard/api/jrcCustomers';
+import { useCustomerMaster } from 'dashboard/routes/dashboard/jrcCustomers/useCustomerMaster';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { debounce } from '@chatwoot/utils';
+import { useI18n } from 'vue-i18n';
+import { useMapGetter } from 'dashboard/composables/store';
+import VideoConferenceSettingsAPI from 'dashboard/api/videoConferenceSettings';
+import { openVideoConferencePopup } from 'dashboard/helper/videoConference';
+import { normalizeSipDialNumber } from './phoneNumber';
 import CompanyAPI from 'dashboard/api/companies';
 import ContactAPI from 'dashboard/api/contacts';
 import CallHistoryPanel from './CallHistoryPanel.vue';
 import CurrentContactCard from './CurrentContactCard.vue';
 import { useSipWebphone } from './useSipWebphone';
+import {
+  notificationPermission,
+  requestCallNotificationPermission,
+} from './callNotification';
 
+const props = defineProps({
+  compact: { type: Boolean, default: false },
+  externalBusy: { type: Boolean, default: false },
+  allowConference: { type: Boolean, default: true },
+});
+const emit = defineEmits(['dialing']);
+const { enabled: hasCustomerMaster } = useCustomerMaster();
 const RINGTONE_URL = '/audio/dashboard/ringtone.mp3';
 const CONTACT_PAGE_SIZE = 15;
 const CONTACT_SEARCH_DEBOUNCE = 300;
+
+const { t } = useI18n();
+const currentUser = useMapGetter('getCurrentUser');
+const activeTab = ref('phone');
+const keypadOpen = ref(false);
+const phoneTabs = computed(() => [
+  { key: 'phone', label: t('SOFTPHONE.TABS.PHONE') },
+  { key: 'contacts', label: t('SOFTPHONE.TABS.CONTACTS') },
+  { key: 'history', label: t('SOFTPHONE.TABS.HISTORY') },
+]);
+const startingCall = ref(false);
+const conferenceMessage = ref('');
 
 const TEXT = Object.freeze({
   extension: 'Ramal',
@@ -28,8 +58,6 @@ const TEXT = Object.freeze({
   destination: 'Numero ou ramal de destino',
   transfer: 'Transferir',
   transferDestination: 'Ramal ou numero',
-  supervisedTransfer: 'Transf. supervis.',
-  immediateTransfer: 'Transf. imediata',
   confirmTransfer: 'Enviar transf.',
   conference: 'Conferencia',
   incoming: 'Chamada recebida',
@@ -54,6 +82,8 @@ const {
   established,
   muted,
   held,
+  holdPending,
+  transferring,
   errorMessage,
   remoteNumber,
   remoteStream,
@@ -77,6 +107,10 @@ const remoteAudio = ref(null);
 const transferMenuOpen = ref(false);
 const transferMode = ref('');
 const transferDestination = ref('');
+const callNotificationPermission = ref(notificationPermission());
+const enableCallNotifications = async () => {
+  callNotificationPermission.value = await requestCallNotificationPermission();
+};
 const hasAutodialed = ref(false);
 const currentContact = ref(null);
 const currentContactNumber = ref('');
@@ -88,12 +122,14 @@ const contactSearching = ref(false);
 const contactLoadingMore = ref(false);
 const contactSearchPage = ref(1);
 const contactHasMore = ref(false);
-const ringtone = new Audio(RINGTONE_URL);
+const ringtone = props.compact ? null : new Audio(RINGTONE_URL);
 let contactLookupVersion = 0;
 let contactSearchVersion = 0;
 
-ringtone.loop = true;
-ringtone.volume = 1;
+if (ringtone) {
+  ringtone.loop = true;
+  ringtone.volume = 1;
+}
 
 const keypadTones = [
   '1',
@@ -126,6 +162,25 @@ const extensionTitle = computed(
   () => `${TEXT.extension}: ${agentExtension.value}`
 );
 const canTransfer = computed(() => established.value);
+const canDial = computed(
+  () =>
+    registered.value &&
+    !hasCall.value &&
+    !props.externalBusy &&
+    !startingCall.value &&
+    !!normalizeSipDialNumber(destination.value)
+);
+const startCall = async () => {
+  if (!canDial.value) return;
+  startingCall.value = true;
+  emit('dialing', true);
+  try {
+    await call();
+  } finally {
+    startingCall.value = false;
+    emit('dialing', false);
+  }
+};
 const callTargetName = computed(() => {
   if (incoming.value) return TEXT.incoming;
   return remoteNumber.value || destination.value || 'Sem chamada';
@@ -162,6 +217,7 @@ const mergeContactResults = (current, incomingContacts) => {
 };
 
 const stopRingtone = () => {
+  if (!ringtone) return;
   ringtone.pause();
   ringtone.currentTime = 0;
 };
@@ -172,8 +228,19 @@ const selectTransferMode = mode => {
 };
 
 const submitTransfer = async () => {
-  if (!transferMode.value || !transferDestination.value) return;
-  await transferCall(transferMode.value, transferDestination.value);
+  if (
+    !established.value ||
+    !transferMode.value ||
+    !transferDestination.value ||
+    transferring.value ||
+    holdPending.value
+  )
+    return;
+  const sent = await transferCall(
+    transferMode.value,
+    transferDestination.value
+  );
+  if (!sent) return;
   transferMode.value = '';
   transferDestination.value = '';
 };
@@ -183,6 +250,28 @@ const toggleMute = () => setMuted(!muted.value);
 const toggleExtension = () =>
   extensionEnabled.value ? turnOffExtension() : turnOnExtension();
 const openVideoConference = () => {
+  if (!props.allowConference) return;
+  if (props.compact) {
+    conferenceMessage.value = '';
+    openVideoConferencePopup({
+      preferredRole: null,
+      getSetting: async () =>
+        (await VideoConferenceSettingsAPI.getFreshMine()).data,
+      onBlocked: () => {
+        conferenceMessage.value = t('VIDEO_CONFERENCE.POPUP_BLOCKED');
+      },
+      onUnavailable: () => {
+        conferenceMessage.value = t('VIDEO_CONFERENCE.UNAVAILABLE');
+      },
+      onInvalidUrl: () => {
+        conferenceMessage.value = t('VIDEO_CONFERENCE.INVALID_URL');
+      },
+      onError: () => {
+        conferenceMessage.value = t('VIDEO_CONFERENCE.OPEN_ERROR');
+      },
+    });
+    return;
+  }
   router.push({ name: 'video_conference_index', params: route.params });
 };
 
@@ -218,7 +307,9 @@ const setCurrentContact = async (contact, version) => {
   if (!companyId) return;
 
   try {
-    const { data } = await CompanyAPI.show(companyId);
+    const { data } = await (hasCustomerMaster.value
+      ? CustomerMasterAPI.company(companyId)
+      : CompanyAPI.show(companyId));
     if (version === contactLookupVersion) {
       currentCompanyName.value = data.payload?.name || '';
     }
@@ -228,6 +319,11 @@ const setCurrentContact = async (contact, version) => {
 };
 
 const selectContact = contact => {
+  if (
+    props.compact &&
+    (hasCall.value || props.externalBusy || startingCall.value)
+  )
+    return;
   const phone = contactPhoneNumber(contact);
   if (!phone) return;
 
@@ -239,8 +335,19 @@ const selectContact = contact => {
 };
 
 const dialContact = contact => {
+  if (
+    props.compact &&
+    (!registered.value ||
+      hasCall.value ||
+      props.externalBusy ||
+      startingCall.value)
+  )
+    return;
   selectContact(contact);
-  call();
+  if (props.compact) {
+    activeTab.value = 'phone';
+    startCall();
+  } else call();
 };
 
 const loadContacts = async ({ query = '', page = 1, append = false } = {}) => {
@@ -329,6 +436,16 @@ const findContactByPhone = async number => {
   contactLoading.value = true;
   currentContactNumber.value = number;
   try {
+    if (hasCustomerMaster.value) {
+      const identityInput = /^\d{2,6}$/.test(String(number))
+        ? { extension: String(number) }
+        : { phone: number, country: 'BR' };
+      const { data } = await CustomerMasterAPI.identity(identityInput);
+      if (version !== contactLookupVersion) return;
+      if (data.match === 'unique') setCurrentContact(data.payload[0], version);
+      else setUnknownContact(number);
+      return;
+    }
     const { data } = await ContactAPI.search(number);
     if (version !== contactLookupVersion) return;
     const contact = data.payload?.find(item =>
@@ -357,7 +474,7 @@ watch(
   () => incoming.value,
   shouldRing => {
     if (shouldRing) {
-      ringtone.play().catch(() => {});
+      ringtone?.play().catch(() => {});
     } else {
       stopRingtone();
     }
@@ -376,6 +493,11 @@ watch(
   [selectedContactId, selectedContactPhone],
   ([contactId, phone]) => {
     if (!contactId) return;
+    if (
+      props.compact &&
+      (hasCall.value || props.externalBusy || startingCall.value)
+    )
+      return;
     if (phone) destination.value = phone;
     loadContactById(contactId, phone);
   },
@@ -395,6 +517,7 @@ watch(
   [registered, hasCall, autodialTarget],
   ([isRegistered, activeCall, target]) => {
     if (!target) return;
+    if (props.compact) return;
     destination.value = target;
     if (!isRegistered || activeCall || hasAutodialed.value) return;
     hasAutodialed.value = true;
@@ -404,17 +527,74 @@ watch(
 );
 
 onBeforeUnmount(stopRingtone);
-onMounted(loadRecentContacts);
+onMounted(() => {
+  if (!props.compact) loadRecentContacts();
+});
+watch(activeTab, tab => {
+  if (
+    tab === 'contacts' &&
+    !contactSearchResults.value.length &&
+    !contactSearching.value
+  )
+    loadRecentContacts();
+});
+watch(hasCall, active => {
+  if (!active) {
+    transferMode.value = '';
+    transferDestination.value = '';
+    transferMenuOpen.value = false;
+  }
+});
 </script>
 
 <template>
   <section
-    class="h-full w-full overflow-y-auto bg-n-background p-4 lg:p-6 xl:overflow-hidden"
+    :class="
+      compact
+        ? 'w-full space-y-3 px-3 pb-3'
+        : 'h-full w-full overflow-y-auto bg-n-background p-4 lg:p-6 xl:overflow-hidden'
+    "
   >
+    <RouterLink
+      v-if="!compact && currentUser?.type === 'SuperAdmin'"
+      :to="{
+        name: 'ramal_settings',
+        params: { accountId: route.params.accountId },
+      }"
+      class="mb-3 inline-flex rounded-lg border border-n-weak px-3 py-2 text-sm"
+    >
+      {{ t('SOFTPHONE.PABX.TITLE') }}
+    </RouterLink>
+    <nav
+      v-if="compact"
+      :aria-label="t('SOFTPHONE.TITLE')"
+      class="grid grid-cols-3 gap-1 rounded-xl bg-n-alpha-2 p-1"
+    >
+      <button
+        v-for="tab in phoneTabs"
+        :key="tab.key"
+        type="button"
+        :aria-pressed="activeTab === tab.key"
+        class="min-h-10 rounded-lg text-xs font-semibold"
+        :class="
+          activeTab === tab.key
+            ? 'bg-n-blue-3 text-n-blue-11'
+            : 'text-n-slate-11 hover:bg-n-alpha-2'
+        "
+        @click="activeTab = tab.key"
+      >
+        {{ tab.label }}
+      </button>
+    </nav>
     <div
-      class="mx-auto grid max-w-[1500px] gap-5 xl:h-full xl:min-h-0 xl:grid-cols-[minmax(250px,0.7fr)_minmax(340px,0.9fr)_minmax(420px,1fr)]"
+      :class="
+        compact
+          ? 'space-y-3'
+          : 'mx-auto grid max-w-[1500px] gap-5 xl:h-full xl:min-h-0 xl:grid-cols-[minmax(250px,0.7fr)_minmax(340px,0.9fr)_minmax(420px,1fr)]'
+      "
     >
       <CurrentContactCard
+        v-show="!compact || activeTab === 'contacts'"
         :contact="currentContact"
         :phone-number="currentContactNumber"
         :loading="contactLoading"
@@ -425,18 +605,26 @@ onMounted(loadRecentContacts);
         :searching="contactSearching"
         :loading-more="contactLoadingMore"
         :has-more="contactHasMore"
-        class="xl:h-full xl:min-h-0"
+        :class="{ 'xl:h-full xl:min-h-0': !compact }"
         @update:search-query="contactSearchQuery = $event"
         @select-contact="selectContact"
         @dial-contact="dialContact"
         @load-more="loadMoreContacts"
       />
 
-      <div class="mx-auto w-full max-w-[420px] xl:h-full xl:min-h-0">
-        <div class="jrc-softphone">
+      <div
+        v-show="!compact || activeTab === 'phone'"
+        class="mx-auto w-full max-w-[420px]"
+        :class="{ 'xl:h-full xl:min-h-0': !compact }"
+      >
+        <div class="jrc-softphone" :class="{ '!p-3': compact }">
           <div class="flex items-start justify-between gap-3">
             <div>
-              <span class="jrc-status-pill">{{ TEXT.activeExtension }}</span>
+              <span class="jrc-status-pill">{{
+                extensionEnabled
+                  ? TEXT.activeExtension
+                  : t('SOFTPHONE.EXTENSION_OFF')
+              }}</span>
               <h1 class="jrc-extension-title text-xl font-semibold text-white">
                 {{ extensionTitle }}
               </h1>
@@ -452,7 +640,7 @@ onMounted(loadRecentContacts);
               v-if="configured"
               type="button"
               class="min-h-9 rounded-lg bg-white/10 px-3 text-xs font-bold text-white transition hover:brightness-110 disabled:opacity-60"
-              :disabled="loading || connecting || hasCall"
+              :disabled="loading || connecting || hasCall || startingCall"
               @click="toggleExtension"
             >
               {{ extensionToggleLabel }}
@@ -471,20 +659,56 @@ onMounted(loadRecentContacts);
           </div>
 
           <template v-else>
-            <div class="jrc-caller-card">
+            <button
+              v-if="
+                callNotificationPermission === 'default' &&
+                (!compact || !hasCall)
+              "
+              type="button"
+              class="mt-3 rounded-lg bg-white/10 px-3 py-2 text-sm text-white"
+              @click="enableCallNotifications"
+            >
+              {{ $t('SOFTPHONE.ENABLE_NOTIFICATIONS') }}
+            </button>
+            <p
+              v-if="callNotificationPermission === 'denied'"
+              class="mt-3 text-sm text-white"
+            >
+              {{ $t('SOFTPHONE.NOTIFICATIONS_DENIED') }}
+            </p>
+            <div
+              class="jrc-caller-card"
+              :class="{ '!mt-3 !gap-2 !p-3': compact }"
+            >
               <div class="min-w-0 flex-1">
                 <p class="truncate text-base font-semibold text-white">
                   {{ callTargetName }}
                 </p>
                 <input
+                  v-show="!compact || !hasCall"
                   v-model="destination"
                   type="tel"
                   :placeholder="TEXT.destination"
                   class="jrc-destination-input"
-                  :disabled="hasCall"
-                  @keyup.enter="call"
+                  :disabled="hasCall || (compact && externalBusy)"
+                  @keyup.enter="compact ? startCall() : call()"
                 />
-                <p v-if="hasCall" class="mt-2 text-sm font-semibold text-white">
+                <button
+                  v-if="compact && !hasCall"
+                  type="button"
+                  class="mt-2 rounded-lg bg-white/10 px-3 py-1 text-xs text-white disabled:opacity-50"
+                  :aria-label="t('WHATSAPP_CALLING.SIDEBAR.BACKSPACE')"
+                  :disabled="
+                    hasCall || externalBusy || startingCall || !destination
+                  "
+                  @click="destination = destination.slice(0, -1)"
+                >
+                  <span class="i-lucide-delete size-4" />
+                </button>
+                <p
+                  v-if="hasCall && !compact"
+                  class="mt-2 text-sm font-semibold text-white"
+                >
                   {{ callTargetNumber }}
                 </p>
                 <p
@@ -499,18 +723,36 @@ onMounted(loadRecentContacts);
             </div>
 
             <p
+              v-if="compact && externalBusy"
+              class="mt-3 rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-100"
+            >
+              {{ t('SOFTPHONE.OTHER_CALL_BUSY') }}
+            </p>
+            <p
+              v-if="conferenceMessage"
+              role="alert"
+              class="mt-3 rounded-xl bg-white/10 p-3 text-sm text-white"
+            >
+              {{ conferenceMessage }}
+            </p>
+            <p
               v-if="errorMessage"
               class="mt-4 rounded-xl border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-100"
             >
               {{ errorMessage }}
             </p>
 
-            <div class="jrc-action-grid">
+            <div
+              class="jrc-action-grid"
+              :class="{ '!mt-3 !grid-cols-3': compact }"
+            >
               <button
                 type="button"
                 class="jrc-action-button jrc-call-button"
-                :disabled="!registered || hasCall || !destination"
-                @click="call"
+                :disabled="
+                  compact ? !canDial : !registered || hasCall || !destination
+                "
+                @click="compact ? startCall() : call()"
               >
                 <span class="i-lucide-phone" />
                 <span>{{ TEXT.call }}</span>
@@ -518,7 +760,7 @@ onMounted(loadRecentContacts);
               <button
                 type="button"
                 class="jrc-action-button bg-blue-600"
-                :disabled="!incoming"
+                :disabled="!incoming || (compact && externalBusy)"
                 @click="answer"
               >
                 <span class="i-lucide-phone-call" />
@@ -528,7 +770,7 @@ onMounted(loadRecentContacts);
                 <button
                   type="button"
                   class="jrc-action-button bg-white/10"
-                  :disabled="!canTransfer"
+                  :disabled="!canTransfer || transferring || holdPending"
                   @click="transferMenuOpen = !transferMenuOpen"
                 >
                   <span class="i-lucide-arrow-left-right" />
@@ -540,14 +782,14 @@ onMounted(loadRecentContacts);
                     @click="selectTransferMode('supervised')"
                   >
                     <span class="i-lucide-eye size-4" />
-                    {{ TEXT.supervisedTransfer }}
+                    {{ t('SOFTPHONE.TRANSFER.ASSISTED') }}
                   </button>
                   <button
                     type="button"
                     @click="selectTransferMode('immediate')"
                   >
                     <span class="i-lucide-eye-off size-4" />
-                    {{ TEXT.immediateTransfer }}
+                    {{ t('SOFTPHONE.TRANSFER.BLIND') }}
                   </button>
                 </div>
               </div>
@@ -555,13 +797,14 @@ onMounted(loadRecentContacts);
                 type="button"
                 class="jrc-action-button bg-white/10"
                 :class="{ 'jrc-hold-active': held }"
-                :disabled="!established"
+                :disabled="!established || holdPending || transferring"
                 @click="toggleHold"
               >
                 <span :class="held ? 'i-lucide-play' : 'i-lucide-pause'" />
                 <span>{{ holdLabel }}</span>
               </button>
               <button
+                v-if="allowConference"
                 type="button"
                 class="jrc-action-button bg-white/10"
                 @click="openVideoConference"
@@ -575,30 +818,63 @@ onMounted(loadRecentContacts);
               v-if="transferMode"
               class="jrc-transfer-panel grid grid-cols-[1fr_auto] gap-2 rounded-xl border border-white/10 bg-white/10 p-3"
             >
+              <p class="col-span-2 text-xs text-white/80">
+                {{
+                  transferMode === 'supervised'
+                    ? t('SOFTPHONE.TRANSFER.ASSISTED_HELP')
+                    : t('SOFTPHONE.TRANSFER.BLIND_HELP')
+                }}
+              </p>
               <input
                 v-model="transferDestination"
                 type="tel"
-                :placeholder="TEXT.transferDestination"
+                :placeholder="t('SOFTPHONE.TRANSFER.DESTINATION')"
                 class="jrc-transfer-input"
+                :disabled="transferring || holdPending || !established"
                 @keyup.enter="submitTransfer"
               />
               <button
                 type="button"
                 class="jrc-transfer-submit"
-                :disabled="!transferDestination"
+                :disabled="
+                  !transferDestination ||
+                  transferring ||
+                  holdPending ||
+                  !established
+                "
                 @click="submitTransfer"
               >
                 {{ TEXT.confirmTransfer }}
               </button>
             </div>
 
-            <div class="jrc-keypad-grid grid grid-cols-3 gap-2">
+            <button
+              v-if="compact"
+              type="button"
+              :aria-expanded="keypadOpen"
+              aria-controls="quick-ramal-keypad"
+              class="mt-3 flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-white/10 text-sm font-semibold text-white"
+              @click="keypadOpen = !keypadOpen"
+            >
+              <span class="i-lucide-grid-3x3 size-4" />
+              {{ t('WHATSAPP_CALLING.SIDEBAR.KEYPAD') }}
+            </button>
+            <div
+              v-show="!compact || keypadOpen"
+              :id="compact ? 'quick-ramal-keypad' : undefined"
+              class="jrc-keypad-grid grid grid-cols-3 gap-2"
+            >
               <button
                 v-for="tone in keypadTones"
                 :key="tone"
                 type="button"
                 class="jrc-key-button border-white/20 bg-white/10 text-white shadow-sm"
-                :disabled="!configured || (hasCall && !established)"
+                :disabled="
+                  !configured ||
+                  (hasCall && !established) ||
+                  transferring ||
+                  (compact && (externalBusy || startingCall))
+                "
                 @click="pressKey(tone)"
               >
                 <span class="text-white drop-shadow-sm">{{ tone }}</span>
@@ -608,7 +884,10 @@ onMounted(loadRecentContacts);
               </button>
             </div>
 
-            <div class="jrc-mute-row flex justify-center">
+            <div
+              class="jrc-mute-row flex justify-center"
+              :class="{ '!mt-3': compact }"
+            >
               <button
                 type="button"
                 class="jrc-bottom-button"
@@ -622,8 +901,11 @@ onMounted(loadRecentContacts);
             </div>
 
             <button
+              v-if="!compact || hasCall || incoming"
               type="button"
+              :aria-label="incoming ? TEXT.reject : TEXT.hangup"
               class="jrc-hangup-button mx-auto flex items-center justify-center rounded-full bg-red-500 text-white shadow-lg shadow-red-950/40 transition hover:brightness-110 disabled:opacity-60"
+              :class="{ '!mt-3 !size-12': compact }"
               :disabled="!hasCall && !incoming"
               @click="incoming ? reject() : hangup()"
             >
@@ -631,6 +913,7 @@ onMounted(loadRecentContacts);
             </button>
 
             <div
+              v-if="!compact"
               class="jrc-status-row flex items-center justify-center gap-4 border-t border-white/10 pt-4 text-[11px] text-white"
             >
               <span class="flex items-center gap-1">
@@ -654,9 +937,12 @@ onMounted(loadRecentContacts);
         </div>
       </div>
 
-      <CallHistoryPanel v-if="configured" class="xl:h-full xl:min-h-0" />
+      <CallHistoryPanel
+        v-if="configured && (!compact || activeTab === 'history')"
+        :class="{ 'xl:h-full xl:min-h-0': !compact }"
+      />
     </div>
-    <audio ref="remoteAudio" autoplay />
+    <audio v-if="!compact" ref="remoteAudio" autoplay />
   </section>
 </template>
 

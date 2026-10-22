@@ -37,7 +37,7 @@ class JrcCampaigns::AudienceResolver
     resolved = resolved_entries
     counters = Hash.new(0)
     rejections = []
-    evolution = campaign.whatsapp? && campaign.evolution_connectors.any?
+    evolution = campaign.whatsapp? && (campaign.evolution_connectors.any? || campaign.broker_connectors.any?)
     eligible = resolved.filter_map do |entry|
       normalized = normalized_entry(entry)
       destination = normalized.destination(campaign.delivery_channel)
@@ -129,6 +129,7 @@ class JrcCampaigns::AudienceResolver
   end
 
   def contact_entries(scope, source)
+    scope = JrcCustomers::CampaignFilter.apply(scope: scope, account: account, filters: campaign.audience_config['customer_filters'] || {})
     scope.distinct.find_each.map do |contact|
       Entry.new(
         contact: contact,

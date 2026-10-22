@@ -9,10 +9,10 @@ module JrcCrm
 
     attr_reader :goal
 
-    def initialize(goal:, user_id: nil, as_of: nil)
+    def initialize(goal:, user_id: nil, actor: nil)
       @goal = goal
       @user_id = user_id
-      @as_of = as_of
+      @actor = actor
     end
 
     def call
@@ -44,22 +44,13 @@ module JrcCrm
         product = goal.account.jrc_crm_products.find_by(id: product_id)
         next unless product
         target = (row['target_cents'] || row[:target_cents] || 0).to_i
-        items = JrcCrm::OrderItem.where(sales_order_id: order_scope.select(:id), product_id: product_id)
-        realized = items.sum(goal.metric == 'mrr' ? :recurring_cents : :one_time_cents)
+        realized = scoped_order_amount(order_scope_for(product_id: product_id), product_id: product_id, metric: 'revenue')
         { product_id: product_id, name: product.name, target_cents: target, realized_cents: realized,
           percent: percent(realized, target) }
       end
     end
 
-    def realized_through(date)
-      self.class.new(goal: goal, user_id: @user_id, as_of: date).send(:realized_value)
-    end
-
     private
-
-    def period_end
-      [goal.period_end, @as_of].compact.min.end_of_day
-    end
 
     def monetary?
       MONETARY_METRICS.include?(goal.metric)
@@ -83,18 +74,18 @@ module JrcCrm
 
     def realized_for_metric(metric)
       if goal.calculation_method.to_s == 'won_deals'
-        return deal_scope.sum(:value_cents) if metric.to_s == 'revenue'
+        return deal_revenue if metric.to_s == 'revenue'
         return deal_scope.count if metric.to_s == 'quantity'
         return deal_scope.where.not(contact_id: nil).distinct.count(:contact_id) if metric.to_s == 'customers'
         if metric.to_s == 'ticket'
-          values = deal_scope.pluck(:value_cents)
-          return values.empty? ? 0 : (values.sum.to_f / values.length).round
+          count = deal_scope.count
+          return count.zero? ? 0 : (deal_revenue.to_d / count).round
         end
       end
 
       case metric.to_s
-      when 'revenue' then order_scope.sum(:total_cents)
-      when 'mrr' then order_scope.sum(:monthly_cents)
+      when 'revenue' then scoped_order_amount(order_scope, product_id: goal.product_id, metric: 'revenue')
+      when 'mrr' then scoped_order_amount(order_scope, product_id: goal.product_id, metric: 'mrr')
       when 'quantity' then order_items_scope.sum(:quantity).to_f.round(3)
       when 'customers' then order_scope.where.not(contact_id: nil).distinct.count(:contact_id)
       when 'renewals' then contract_scope.where(status: 'renewed').count
@@ -126,59 +117,106 @@ module JrcCrm
     end
 
     def order_scope
-      scope = order_scope_for(product_id: goal.product_id)
-      statuses = ORDER_STATUSES.fetch(goal.calculation_method.to_s, ORDER_STATUSES['approved_orders'])
-      scope.where(status: statuses)
+      order_scope_for(product_id: goal.product_id)
     end
 
     def order_scope_for(product_id: nil)
       scope = goal.account.jrc_crm_sales_orders
       date_sql = 'COALESCE(jrc_crm_sales_orders.sold_at, jrc_crm_sales_orders.closed_at, jrc_crm_sales_orders.created_at) BETWEEN ? AND ?'
-      scope = scope.where(date_sql, goal.period_start.beginning_of_day, period_end)
-      owner_id = @user_id.presence || goal.user_id
-      scope = scope.where(owner_id: owner_id) if owner_id.present?
-      scope = scope.where(business_unit_id: goal.business_unit_id) if goal.business_unit_id.present?
-      scope = scope.where(owner_id: goal.team.members.select(:id)) if goal.team_id.present?
-      if product_id.present?
-        scope = scope.where(id: JrcCrm::OrderItem.where(product_id: product_id).select(:sales_order_id))
+      scope = scope.where(date_sql, goal.period_start.beginning_of_day, goal.period_end.end_of_day)
+      scope = scoped_responsibility(scope)
+      statuses = ORDER_STATUSES.fetch(goal.calculation_method.to_s, ORDER_STATUSES['approved_orders'])
+      scope = scope.where(status: statuses)
+      ids = product_filter_ids(product_id)
+      if ids.any?
+        # Subquery prevents a repeated product line from multiplying an order.
+        scope = scope.where(id: JrcCrm::OrderItem.where(product_id: ids).select(:sales_order_id))
       end
       apply_settings(scope)
     end
 
+    def product_filter_ids(explicit_id = nil)
+      return [explicit_id.to_i] if explicit_id.present?
+      return [goal.product_id] if goal.product_id.present?
+      return [] unless goal.scope_kind == 'product'
+      Array(goal.product_targets).map { |row| (row['product_id'] || row[:product_id]).to_i }.reject(&:zero?).uniq
+    end
+
+    def scoped_responsibility(scope)
+      scope = JrcCrm::CorporateCoverage.for_actor(goal.account, @actor, scope)
+      # A user drill-down INTERSECTS the original goal, never replaces its scope.
+      scope = scope.where(owner_id: goal.user_id) if goal.user_id.present?
+      if goal.scope_kind == 'user' && goal.user_id.blank?
+        allocated_ids = Array(goal.allocations).map { |row| (row['user_id'] || row[:user_id]).to_i }.reject(&:zero?)
+        scope = scope.where(owner_id: allocated_ids)
+      end
+      scope = scope.where(owner_id: @user_id) if @user_id.present?
+      scope = scope.where(business_unit_id: goal.business_unit_id) if goal.business_unit_id.present?
+      scope = scope.where(owner_id: JrcCrm::CorporateCoverage.goal_team_members(goal)) if goal.team_id.present?
+      scope
+    end
+
     def order_items_scope
-      items = JrcCrm::OrderItem.where(sales_order_id: order_scope.select(:id))
-      goal.product_id.present? ? items.where(product_id: goal.product_id) : items
+      scope = JrcCrm::OrderItem.where(sales_order_id: order_scope.select(:id))
+      ids = product_filter_ids
+      scope = scope.where(product_id: ids) if ids.any?
+      scope
+    end
+
+    def scoped_order_amount(scope, product_id:, metric:)
+      column = metric == 'mrr' ? :monthly_cents : :total_cents
+      ids = product_filter_ids(product_id).map(&:to_s)
+      return scope.sum(column) if ids.empty?
+
+      scope.includes(:order_items).find_each.sum do |order|
+        values = CommercialItemAllocation.call(items: order.order_items.to_a,
+          discount_cents: order.discount_cents, monthly_enabled: order.monthly_cents.to_i.positive?)
+        key = metric == 'mrr' ? :monthly_cents : :revenue_cents
+        values.select { |row| ids.include?(row[:product_id].to_s) }.sum { |row| row[key] }
+      end
     end
 
     def contract_scope
-      scope = goal.account.jrc_crm_contracts.where(created_at: goal.period_start.beginning_of_day..period_end)
-      scope = scope.where(owner_id: (@user_id.presence || goal.user_id)) if @user_id.present? || goal.user_id.present?
-      scope = scope.where(business_unit_id: goal.business_unit_id) if goal.business_unit_id.present?
-      scope = scope.where(owner_id: goal.team.members.select(:id)) if goal.team_id.present?
+      scope = scoped_responsibility(goal.account.jrc_crm_contracts)
+              .where(created_at: goal.period_start.beginning_of_day..goal.period_end.end_of_day)
+      ids = product_filter_ids
+      if ids.any?
+        scope = scope.where(id: JrcCrm::ContractItem.where(product_id: ids).select(:contract_id))
+      end
+      scope
+    end
+
+    def period_deals
+      scope = scoped_responsibility(goal.account.jrc_crm_deals)
+              .where(updated_at: goal.period_start.beginning_of_day..goal.period_end.end_of_day)
+      ids = product_filter_ids
+      if ids.any?
+        scope = scope.where(id: JrcCrm::DealProduct.where(product_id: ids).select(:deal_id))
+      end
       scope
     end
 
     def deal_scope
-      scope = goal.account.jrc_crm_deals.where(status: 'won')
-      scope = scope.where(updated_at: goal.period_start.beginning_of_day..period_end)
-      owner_id = @user_id.presence || goal.user_id
-      scope = scope.where(owner_id: owner_id) if owner_id.present?
-      scope = scope.where(team_id: goal.team_id) if goal.team_id.present?
-      scope
+      period_deals.where(status: 'won')
+    end
+
+    def deal_revenue
+      ids = product_filter_ids
+      return deal_scope.sum(:value_cents) if ids.empty?
+      JrcCrm::DealProduct.where(deal_id: deal_scope.select(:id), product_id: ids).sum(:total_cents)
     end
 
     def conversion_percent
-      scope = goal.account.jrc_crm_deals.where(updated_at: goal.period_start.beginning_of_day..period_end)
-      owner_id = @user_id.presence || goal.user_id
-      scope = scope.where(owner_id: owner_id) if owner_id.present?
+      scope = period_deals
       closed = scope.where(status: %w[won lost]).count
       won = scope.where(status: 'won').count
       closed.zero? ? 0 : ((won.to_f / closed) * 100).round(2)
     end
 
     def average_ticket
-      values = order_scope.pluck(:total_cents)
-      values.empty? ? 0 : (values.sum.to_f / values.length).round
+      count = order_scope.count
+      return 0 if count.zero?
+      (scoped_order_amount(order_scope, product_id: goal.product_id, metric: 'revenue').to_d / count).round
     end
 
     def apply_settings(scope)
@@ -194,18 +232,11 @@ module JrcCrm
       scope
     end
 
-    def effective_order_statuses
-      statuses = ORDER_STATUSES.fetch(goal.calculation_method.to_s, ORDER_STATUSES['approved_orders'])
-      settings = (goal.settings || {}).with_indifferent_access
-      selected = settings[:statuses].presence || settings[:order_statuses].presence
-      selected ? statuses & Array(selected).map(&:to_s) : statuses
-    end
-
     def effective_criteria
       { metric: goal.metric, period_start: goal.period_start, period_end: goal.period_end,
-        user_id: @user_id.presence || goal.user_id, business_unit_id: goal.business_unit_id,
-        product_id: goal.product_id, calculation_method: goal.calculation_method,
-        order_statuses: effective_order_statuses, settings: goal.settings || {} }
+        user_id: @user_id.presence || goal.user_id, goal_user_id: goal.user_id, team_id: goal.team_id,
+        team_basis: 'current_account_team_membership', business_unit_id: goal.business_unit_id,
+        product_id: goal.product_id, eligible_product_ids: product_filter_ids, settings: goal.settings || {} }
     end
 
     def percent(value, target)

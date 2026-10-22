@@ -31,7 +31,9 @@ class JrcNico::Command < ApplicationRecord
   self.table_name = 'jrc_nico_commands'
   belongs_to :session, class_name: 'JrcNico::Session'
   belongs_to :source_notice, class_name: 'JrcNico::Notice', optional: true
+  has_one :broker_send_operation, class_name: 'JrcNico::BrokerSendOperation', dependent: :nullify
   after_commit :publish_notice, on: [:create, :update]
+  after_create_commit :enqueue_planning
   validates :request_id, format: { with: /\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i }
   validates :message, presence: true, length: { maximum: 4000 }
   validates :status, inclusion: { in: %w[planning awaiting_confirmation executing browser_pending succeeded failed cancelled unknown] }
@@ -40,8 +42,15 @@ class JrcNico::Command < ApplicationRecord
     slice(:id, :request_id, :status, :tool, :arguments, :result, :reply, :created_at).merge(
       source_notice_id: source_notice_id, source_contact: source_notice&.conversation&.contact&.name,
       source_conversation_id: source_notice&.conversation&.display_id,
-      authorization: execution_context['authorization']
+      authorization: execution_context['authorization'], result: current_result
     )
+  end
+
+  def current_result
+    operation = broker_send_operation
+    return result unless operation
+
+    result.merge('broker_send' => operation.receipt.as_json)
   end
 
   def publish_notice
@@ -51,5 +60,9 @@ class JrcNico::Command < ApplicationRecord
     if source_notice_id.nil? && execution_context['workflow_id'] && status == 'succeeded' && JrcNico::ToolCatalog::TOOLS.dig(tool, 2) == true
       JrcNico::ContinueCommandJob.perform_later(id)
     end
+  end
+
+  def enqueue_planning
+    JrcNico::PlanCommandJob.perform_later(id) if status == 'planning' && execution_context['async_planning'] == true
   end
 end

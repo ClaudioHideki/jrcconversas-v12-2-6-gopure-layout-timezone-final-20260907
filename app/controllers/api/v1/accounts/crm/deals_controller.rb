@@ -81,6 +81,8 @@ module Api
 
             JrcCrm::Deal.transaction do
               deal.save!
+              create_initial_products!(deal)
+              create_initial_activity!(deal)
 
               link_conversation!(deal, conversation_id) if conversation_id.present?
             end
@@ -97,9 +99,15 @@ module Api
             attributes = deal_params
             conversation_id = attributes.delete(:conversation_id)
 
-            if @deal.update(attributes)
-              link_conversation!(@deal, conversation_id) if conversation_id.present?
+            # Serialize source edits with Linker, which locks this deal before linking.
+            updated = @deal.with_lock do
+              saved = @deal.update(attributes)
+              JrcApprovals::CommercialInvalidation.call(resource: @deal.reload, user: Current.user) if saved
+              link_conversation!(@deal, conversation_id) if saved && conversation_id.present?
+              saved
+            end
 
+            if updated
               render json: JrcCrm::DealSerializer.new(@deal).as_json
             else
               render json: {
@@ -199,7 +207,7 @@ module Api
               :stage_id,
               :value_cents,
               :currency,
-              :contact_id,
+              :contact_id, :company_id, :organization_id,
               :conversation_id,
               :team_id,
               :source,
@@ -218,6 +226,24 @@ module Api
             end
 
             attributes
+          end
+
+          def create_initial_products!(deal)
+            items = params.permit(items: [:product_id, :quantity, :unit_price_cents, :discount_cents])[:items] || []
+            items.each do |values|
+              product = corporate_product(values.fetch(:product_id), unit: JrcApprovals::CommercialCatalog.business_unit(deal))
+              deal.deal_products.create!(values.merge(product: product, description_snapshot: product.description))
+            end
+            deal.update!(value_cents: deal.deal_products.sum(:total_cents)) if items.any?
+          end
+
+          def create_initial_activity!(deal)
+            return unless params[:next_activity].present?
+            attrs = params.require(:next_activity).permit(:title, :activity_type, :due_at)
+            attrs[:due_at] = parse_crm_time(attrs[:due_at]) if attrs[:due_at].present?
+            activity = crm_scope.jrc_crm_activities.new(attrs.merge(deal: deal, user: Current.user))
+            result = JrcCrm::ActivityDispatchService.new(activity: activity, actor: Current.user).call
+            raise ActiveRecord::RecordInvalid, activity unless result[:success]
           end
 
           def source_from_conversation(conversation)

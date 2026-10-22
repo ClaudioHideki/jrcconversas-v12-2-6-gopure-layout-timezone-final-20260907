@@ -28,7 +28,7 @@ module JrcCrm
     
     belongs_to :account
     has_many :stages, -> { order(:position) }, dependent: :destroy
-    has_many :deals, dependent: :restrict_with_error
+    has_many :deals
     
     validates :name, :key, presence: true
     validates :key, uniqueness: { scope: :account_id }
@@ -37,7 +37,7 @@ module JrcCrm
     scope :active, -> { where(active: true) }
     scope :ordered, -> { order(:position) }
     
-    before_validation :set_position, on: :create
+    before_create :set_position
     
     private
     

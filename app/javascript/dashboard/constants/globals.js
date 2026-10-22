@@ -49,7 +49,6 @@ export default {
   LARGE_SCREEN_BREAKPOINT: 1024,
   AVAILABILITY_STATUS_KEYS: [
     'online',
-    'busy',
     'offline',
     'meeting',
     'feedback',

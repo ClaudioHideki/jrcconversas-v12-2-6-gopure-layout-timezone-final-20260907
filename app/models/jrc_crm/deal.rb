@@ -23,7 +23,6 @@
 #  created_at                  :datetime         not null
 #  updated_at                  :datetime         not null
 #  account_id                  :integer          not null
-#  business_unit_id            :bigint
 #  company_id                  :bigint
 #  contact_id                  :integer
 #  lead_id                     :bigint
@@ -40,7 +39,6 @@
 #  idx_jrc_crm_deals_account_conversion      (account_id,conversion_key) UNIQUE WHERE (conversion_key IS NOT NULL)
 #  idx_jrc_crm_deals_legacy_sales            (account_id,legacy_sales_opportunity_id) UNIQUE WHERE (legacy_sales_opportunity_id IS NOT NULL)
 #  index_jrc_crm_deals_on_account_id         (account_id)
-#  index_jrc_crm_deals_on_business_unit_id   (business_unit_id)
 #  index_jrc_crm_deals_on_company_id         (company_id)
 #  index_jrc_crm_deals_on_expected_close_at  (expected_close_at)
 #  index_jrc_crm_deals_on_lead_id            (lead_id)
@@ -54,7 +52,6 @@
 # Foreign Keys
 #
 #  fk_rails_...  (account_id => accounts.id)
-#  fk_rails_...  (business_unit_id => jrc_crm_business_units.id)
 #  fk_rails_...  (contact_id => contacts.id)
 #  fk_rails_...  (lead_id => jrc_crm_leads.id)
 #  fk_rails_...  (lost_reason_id => jrc_crm_lost_reasons.id)
@@ -66,6 +63,8 @@
 #
 module JrcCrm
   class Deal < ApplicationRecord
+    include JrcCrm::CorporateUnitBinding
+    include JrcCustomers::CrmMasterLink
     self.table_name = 'jrc_crm_deals'
     belongs_to :account
     belongs_to :pipeline, class_name: 'JrcCrm::Pipeline'
@@ -76,21 +75,21 @@ module JrcCrm
     belongs_to :lead, class_name: 'JrcCrm::Lead', optional: true
     belongs_to :contact, class_name: 'Contact', optional: true
     belongs_to :organization, class_name: 'JrcCrm::Organization', optional: true
-    belongs_to :company, optional: true # Enterprise fallback via CompanyAdapter
+    belongs_to :company, class_name: 'JrcCustomers::Company', optional: true # Enterprise fallback via CompanyAdapter
 
     has_many :deal_contacts, class_name: 'JrcCrm::DealContact', dependent: :destroy
     has_many :contacts, through: :deal_contacts
     has_many :deal_products, class_name: 'JrcCrm::DealProduct', dependent: :destroy
     has_many :products, through: :deal_products
     has_many :proposals, class_name: 'JrcCrm::Proposal', dependent: :destroy
-    has_many :sales_orders, class_name: 'JrcCrm::SalesOrder', dependent: :restrict_with_error
-    has_many :contracts, class_name: 'JrcCrm::Contract', dependent: :restrict_with_error
-    has_many :activities, class_name: 'JrcCrm::Activity', foreign_key: :deal_id, dependent: :destroy
-    has_many :follow_ups, class_name: 'JrcCrm::FollowUp', foreign_key: :deal_id, dependent: :destroy
-    has_many :deal_conversations, class_name: 'JrcCrm::DealConversation', foreign_key: :deal_id, dependent: :destroy
+    has_many :activities, class_name: 'JrcCrm::Activity', dependent: :destroy
+    has_many :follow_ups, class_name: 'JrcCrm::FollowUp', dependent: :destroy
+    has_many :deal_conversations, class_name: 'JrcCrm::DealConversation', dependent: :destroy
     has_many :conversations, through: :deal_conversations
     has_many :audit_events, -> { where(resource_type: 'JrcCrm::Deal') }, class_name: 'JrcCrm::AuditEvent', foreign_key: :resource_id
 
+    has_many :sales_orders, class_name: 'JrcCrm::SalesOrder', dependent: :restrict_with_error
+    has_many :contracts, class_name: 'JrcCrm::Contract', dependent: :restrict_with_error
     validates :title, :pipeline, :stage, :owner, presence: true
     validates :value_cents, numericality: { greater_than_or_equal_to: 0 }
     validates :conversion_key, uniqueness: { scope: :account_id }, allow_nil: true
@@ -100,6 +99,7 @@ module JrcCrm
     validate :lost_reason_required_when_lost
     validate :associations_belong_to_account
     after_save :ensure_primary_contact_link, if: :saved_change_to_contact_id?
+    after_update_commit :dispatch_flow_stage_change, if: :saved_change_to_stage_id?
 
     scope :open_deals, -> { where(status: 'open') }
     scope :won_deals, -> { where(status: 'won') }
@@ -145,14 +145,31 @@ module JrcCrm
       )
     end
 
+    validate :preserve_project_contact, if: :will_save_change_to_contact_id?
+
     private
 
-    def lost_reason_required_when_lost
-      if status == 'lost' && lost_reason_id.blank? && lost_reason_note.blank?
-        errors.add(:base, 'Lost reason is required when deal is lost')
+    def preserve_project_contact
+      return unless persisted? && JrcOperations::Link.table_exists?
+      return unless JrcOperations::Link.where(account_id: account_id, crm_deal_id: id).where.not(project_id: nil).exists?
+
+      errors.add(:contact, 'remova os vinculos com projetos antes de trocar o cliente')
+    end
+
+    def dispatch_flow_stage_change
+      return if Current.executed_by.is_a?(JrcFlowRun)
+
+      conversations.find_each do |conversation|
+        JrcFlows::DispatchJob.perform_later(account_id, conversation.id, 'stage_changed',
+          "deal:#{id}:#{stage_id}:#{updated_at.to_f}:#{conversation.id}", nil, stage_id.to_s)
       end
     end
 
+    def lost_reason_required_when_lost
+      return unless status == 'lost' && lost_reason_id.blank? && lost_reason_note.blank?
+
+      errors.add(:base, 'Lost reason is required when deal is lost')
+    end
 
     def associations_belong_to_account
       errors.add(:pipeline, 'must belong to account') if pipeline && pipeline.account_id != account_id

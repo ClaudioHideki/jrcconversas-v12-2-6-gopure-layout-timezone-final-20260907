@@ -1,4 +1,10 @@
 Rails.application.routes.draw do
+  draw :jrc_operations
+  draw :jrc_approvals
+  draw :jrc_operator
+  draw :jrc_contact_center
+  get '/flows/portal(/:public_id)', to: 'jrc_flows/portal#show'
+  post '/jrc_flows/events/:public_id', to: 'jrc_flows/events#create'
   # AUTH STARTS
   mount_devise_token_auth_for 'User', at: 'auth', controllers: {
     confirmations: 'devise_overrides/confirmations',
@@ -42,6 +48,56 @@ Rails.application.routes.draw do
   get '/api', to: 'api#index'
   namespace :api, defaults: { format: 'json' } do
     namespace :v1 do
+      scope 'accounts/:account_id/jrc_flow_delegation', module: 'accounts', controller: 'jrc_flow_delegation' do
+        get 'configuration', action: :configuration
+        put 'configuration', action: :configure
+        post 'registration', action: :register
+        delete 'registration/:id', action: :revoke_registration
+        post 'sessions', action: :create_session
+        delete 'sessions/:id', action: :close_session
+        get 'sessions/:session_id/editor-context', action: :editor_context
+        post 'installations', action: :claim_installation
+        delete 'installations/:id', action: :revoke_installation
+        scope 'sessions/:session_id/flows' do
+          get '', action: :editor, defaults: { editor_operation: 'list' }
+          post '', action: :editor, defaults: { editor_operation: 'create' }
+          post 'import-preview', action: :editor, defaults: { editor_operation: 'import_preview' }
+          get 'targets', action: :editor, defaults: { editor_operation: 'targets' }
+          get 'status', action: :editor, defaults: { editor_operation: 'status' }
+          get 'nodes', action: :editor, defaults: { editor_operation: 'nodes' }
+          get 'integrations/:id/cutover', action: :editor, defaults: { editor_operation: 'cutover_get' }
+          post 'integrations/:id/cutover/prepare', action: :editor, defaults: { editor_operation: 'cutover_prepare' }
+          post 'integrations/:id/cutover/reconcile', action: :editor, defaults: { editor_operation: 'cutover_reconcile' }
+          get ':id/http-credentials', action: :editor, defaults: { editor_operation: 'http_catalog' }
+          get ':id/subflow-catalog', action: :editor, defaults: { editor_operation: 'subflow_catalog' }
+          get ':id/ai-credentials', action: :editor, defaults: { editor_operation: 'ai_catalog' }
+          get ':id/handoff-connections', action: :editor, defaults: { editor_operation: 'handoff_connections' }
+          get ':id/local-handoff-channels', action: :editor, defaults: { editor_operation: 'local_handoff_channels' }
+          get ':id/integrations/:target_id/attendance-catalog', action: :editor, defaults: { editor_operation: 'handoff_catalog' }
+          get ':id/channels/:target_id/local-attendance-catalog', action: :editor, defaults: { editor_operation: 'local_handoff_catalog' }
+          post ':id/channels/:channel_id/media', action: :upload_media
+          get ':id/resource-channels', action: :editor, defaults: { editor_operation: 'resource_channels' }
+          get ':id/channels/:target_id/action-catalog', action: :editor, defaults: { editor_operation: 'action_catalog' }
+          post ':id/channels/:target_id/action-resources', action: :editor, defaults: { editor_operation: 'save_action_resource' }
+          get ':id/channels/:target_id/media', action: :editor, defaults: { editor_operation: 'media_catalog' }
+          post ':id/channels/:target_id/media/:resource_id/revoke', action: :editor, defaults: { editor_operation: 'revoke_media' }
+          get ':id', action: :editor, defaults: { editor_operation: 'get' }
+          put ':id', action: :editor, defaults: { editor_operation: 'save' }
+          get ':id/scope', action: :editor, defaults: { editor_operation: 'scope' }
+          post ':id/validate', action: :editor, defaults: { editor_operation: 'validate' }
+          post ':id/simulate', action: :editor, defaults: { editor_operation: 'simulate' }
+          post ':id/publish', action: :editor, defaults: { editor_operation: 'publish' }
+          get ':id/versions', action: :editor, defaults: { editor_operation: 'versions' }
+          post ':id/bindings', action: :editor, defaults: { editor_operation: 'bind' }
+        end
+      end
+      post 'jrc_flow_native/ownership/fence', to: 'jrc_flow_ownership#fence'
+      post 'jrc_flow_native/ownership/observe', to: 'jrc_flow_ownership#observe'
+      post 'jrc_flow_native/ownership/retire', to: 'jrc_flow_ownership#retire'
+      post 'jrc_flow_native/ownership/rollback', to: 'jrc_flow_ownership#rollback'
+      post 'jrc_flow_native/introspect', to: 'jrc_flow_native#introspect'
+      post 'jrc_flow_native/registration-challenge', to: 'jrc_flow_native#registration_challenge'
+      post 'jrc_flow_native/installation-challenge', to: 'jrc_flow_native#installation_challenge'
       # ----------------------------------
       # start of account scoped api routes
       resources :accounts, only: [:create, :show, :update] do
@@ -51,6 +107,103 @@ Rails.application.routes.draw do
         end
 
         scope module: :accounts do
+          # JRC Service Desk CP4: all endpoints inherit the native Account authentication.
+          namespace :jrc_service_desk do
+            get 'knowledge', to: 'knowledge#index'
+            get 'board', to: 'cockpit#board'
+            patch 'incidents/:incident_id', to: 'cockpit#update_incident'
+            get 'reports', to: 'dashboard#report'
+            # CP6-D01: structural authority is separate from ticket access.
+            get 'structure/context', to: 'structure#context'
+            get 'structure/members', to: 'structure#members'
+            %w[operator_companies units unit_memberships].each do |structural_resource|
+              scope "structure/#{structural_resource}", defaults: { resource: structural_resource } do
+                get '/', to: 'structure#index'
+                post '/', to: 'structure#create'
+                get ':id/receipts/:audit_id', to: 'structure#receipt'
+                get ':id', to: 'structure#show'
+                patch ':id', to: 'structure#update'
+              end
+            end
+            # CP6: finite, authorized administrative catalogue. No structural bootstrap or deletion.
+            get 'configuration/portal_options', to: 'configuration#portal_options'
+            scope 'configuration/:resource', constraints: { resource: /queues|categories|ticket_types|priorities|statuses|services/ } do
+              get '/', to: 'configuration#index'
+              post '/', to: 'configuration#create'
+              get '/:id/receipts/:audit_id', to: 'configuration#receipt'
+              get '/:id', to: 'configuration#show'
+              patch '/:id', to: 'configuration#update'
+            end
+            resources :lifecycle_policies, only: [:index, :show, :create]
+            resources :service_definitions, only: [:index, :show, :create]
+            get 'ui_context', to: 'ui_context#show'
+            get 'operational_rules', to: 'operational_rules#index'
+            post 'operational_rules', to: 'operational_rules#create'
+            get 'intake_options', to: 'operational_rules#intake_options'
+            get 'operational_reports', to: 'operational_reports#show'
+            get 'operational_reports/export', to: 'operational_reports#export'
+            get 'recurrence_suggestions', to: 'incident_batches#suggestions'
+            post 'incidents/:incident_id/batch_preview', to: 'incident_batches#preview'
+            post 'incidents/:incident_id/batches', to: 'incident_batches#create'
+            get 'incidents/:incident_id/batch_result', to: 'incident_batches#result'
+            get 'dashboard', to: 'dashboard#show'
+            get 'tickets/:id/cockpit', to: 'cockpit#show'
+            post 'tickets/:id/evaluate_clocks', to: 'cockpit#evaluate_clocks'
+            post 'tickets/:id/sla_snapshots', to: 'sla_snapshots#create'
+            get 'tickets/:id/sla_snapshots/:snapshot_id', to: 'sla_snapshots#show'
+            get 'tickets/:id/composer_options', to: 'communication#composer_options'
+            get 'tickets/:id/recipient_preferences', to: 'communication#recipient_preferences'
+            patch 'tickets/:id/recipient_preferences', to: 'communication#update_recipient_preferences'
+            post 'tickets/:id/interaction_preview', to: 'communication#preview'
+            get 'tickets/:id/timeline', to: 'communication#timeline'
+            get 'tickets/:id/timeline/:kind/:record_id/attachments/:attachment_id', to: 'communication#timeline_attachment'
+            post 'tickets/:id/notification_deliveries/:delivery_id/resend_preview', to: 'communication#resend_preview'
+            post 'tickets/:id/notification_deliveries/:delivery_id/resend', to: 'communication#resend'
+            post 'tickets/:id/notification_deliveries/:delivery_id/reconcile', to: 'communication#reconcile'
+            get 'tickets/:id/export', to: 'cockpit#export'
+            post 'tickets/:id/interactions', to: 'cockpit#add_interaction'
+            post 'tickets/:id/tasks', to: 'cockpit#create_task'
+            patch 'tickets/:id/tasks/:record_id', to: 'cockpit#update_task'
+            post 'tickets/:id/approvals', to: 'cockpit#request_approval'
+            post 'tickets/:id/approvals/:record_id/decision', to: 'cockpit#decide_approval'
+            post 'tickets/:id/approvals/:record_id/escalate', to: 'cockpit#escalate_approval'
+            get 'resources', to: 'resources#index'
+            post 'resources', to: 'resources#create'
+            get 'resources/:resource_id', to: 'resources#show'
+            patch 'resources/:resource_id', to: 'resources#update'
+            delete 'resources/:resource_id', to: 'resources#destroy'
+            post 'resources/:resource_id/tickets', to: 'resources#link_tickets'
+            get 'tickets/:id/notes/:record_id/attachments/:attachment_id', to: 'cockpit#attachment'
+            post 'claim_next', to: 'cockpit#claim_next'
+            post 'incidents', to: 'cockpit#create_incident'
+            get 'incidents/:incident_id', to: 'cockpit#show_incident'
+            post 'notification_policies', to: 'cockpit#publish_notification_policy'
+            get 'notification_policies', to: 'communication#notification_policies'
+            get 'catalogue_form', to: 'catalogue_forms#show'
+            %w[queues priorities categories ticket_types statuses units operator_companies assignees requesters teams
+               contracts].each do |resource|
+              get resource, to: 'lookups#index', defaults: { resource: resource }
+            end
+            resources :tickets, only: [:index, :show, :create, :update] do
+              member do
+                get 'lifecycle', to: 'lifecycle#show'
+                post 'lifecycle', to: 'lifecycle#create'
+                get 'lifecycle/transitions/:transition_id', to: 'lifecycle#transition'
+                post :assign
+                post 'transfer', to: 'tickets#transfer'
+                get 'customer_context', to: 'native_context#customer'
+                get 'conversations/:record_id/navigation', to: 'native_context#conversation_navigation'
+                post :work_status
+                post 'notes', to: 'tickets#add_note'
+                post 'conversations', to: 'tickets#link_conversation'
+                get 'notes/:record_id', to: 'tickets#related_item', defaults: { kind: 'notes' }
+                get 'conversations/:record_id', to: 'tickets#related_item', defaults: { kind: 'conversations' }
+                %w[notes events sla conversations status_options].each do |kind|
+                  get kind, to: 'tickets#related', defaults: { kind: kind }
+                end
+              end
+            end
+          end
           namespace :actions do
             resource :contact_merge, only: [:create]
           end
@@ -68,6 +221,12 @@ Rails.application.routes.draw do
             get :me, on: :collection
           end
           resource :call_history, only: :show, controller: :call_history
+          resource :telephony_integration, only: [:show, :update], controller: :telephony_integration do
+            post :test_connection
+            post :synchronize
+          end
+          get 'call_history/:id/recording', to: 'call_history#recording', as: :call_history_recording
+          get 'call_history/:id/recording_metadata', to: 'call_history#recording_metadata'
           resources :call_quality_analyses, only: [:index, :create]
           namespace :captain do
             resource :preferences, only: [:show, :update]
@@ -148,6 +307,24 @@ Rails.application.routes.draw do
           end
           resources :campaigns, only: [:index, :create, :show, :update, :destroy]
           resources :dashboard_apps, only: [:index, :show, :create, :update, :destroy]
+          resource :jrc_broker, only: [:show, :update], controller: 'jrc_broker' do
+            get :assignment_policy
+            put :assignment_policy, action: :update_assignment_policy
+            get :resources
+            post :adopt
+            get :onboarding, action: :onboardings
+            post :onboarding, action: :create_onboarding
+            get 'onboarding/:operation_id', action: :onboarding
+            post 'onboarding/:operation_id/recover', action: :recover_onboarding
+            get 'inboxes/:inbox_id/status', action: :status
+            post 'inboxes/:inbox_id/pair', action: :pair
+            get 'inboxes/:inbox_id/pair-operations/:operation_id', action: :pair_operation
+            post 'inboxes/:inbox_id/disconnect', action: :disconnect
+            post 'inboxes/:inbox_id/confirm_identity', action: :confirm_identity
+            get 'inboxes/:inbox_id/grants', action: :grants
+            put 'inboxes/:inbox_id/grants', action: :update_grants
+            put 'inboxes/:inbox_id/agents', action: :assign_agents
+          end
           namespace :channels do
             resource :twilio_channel, only: [:create]
           end
@@ -194,6 +371,32 @@ Rails.application.routes.draw do
               get :messages
               get :contacts
               get :articles
+            end
+          end
+
+          namespace :customers do
+            get :metadata, to: 'directory#metadata'
+            get :identity, to: 'directory#identity'
+            resources :taxonomies, only: [:index, :create, :update]
+            post 'imports/preview', to: 'imports#preview'
+            post 'imports/apply', to: 'imports#apply'
+            resources :companies, only: [:index, :show, :create, :update] do
+              get :duplicates, on: :collection
+              member do
+                get :overview
+                get :relationships
+                get :timeline
+                get :records
+              end
+              resources :addresses, only: [:create, :update, :destroy]
+            end
+            resources :contacts, only: [:index, :show, :create, :update] do
+              member do
+                get :duplicates
+                get :timeline
+                post :merge
+              end
+              resources :contact_points, only: [:create, :update, :destroy]
             end
           end
 
@@ -250,6 +453,54 @@ Rails.application.routes.draw do
             end
             resources :activities, only: :update
           end
+          resources :jrc_flow_connections, only: [:index, :show, :create, :update] do
+            member do
+              post :verify
+              post :install
+              post :disconnect
+            end
+            resources :flows, controller: 'jrc_remote_flows' do
+              get :metadata, on: :collection
+              post :import_preview, on: :collection
+              post :import_definition, on: :collection
+              member do
+                get :export_definition
+                get :runs
+                post :activate
+                post :pause
+                post :duplicate
+                post :stop_run
+                post :validate_definition
+                post :simulate
+              end
+            end
+          end
+          get 'jrc_history_import/inboxes/:inbox_id', to: 'jrc_history_imports#capability'
+          post 'jrc_history_import/inboxes/:inbox_id/bootstrap', to: 'jrc_history_imports#bootstrap'
+          post 'conversations/:conversation_id/jrc_history_import', to: 'jrc_history_imports#create'
+          get 'jrc_flow_effects/capabilities', to: 'jrc_flow_effects#capabilities'
+          get 'jrc_domain_commands/capabilities', to: 'jrc_domain_commands#capabilities'
+          post 'conversations/:conversation_id/jrc_domain_commands', to: 'jrc_domain_commands#create'
+          get 'conversations/:conversation_id/jrc_domain_commands/:operation_id', to: 'jrc_domain_commands#show'
+          get 'conversations/:conversation_id/jrc_flow_effects/context', to: 'jrc_flow_effects#context'
+          post 'conversations/:conversation_id/jrc_flow_effects', to: 'jrc_flow_effects#create'
+          get 'conversations/:conversation_id/jrc_flow_effects/:operation_id', to: 'jrc_flow_effects#show'
+          resources :jrc_flows do
+            get :metadata, on: :collection
+            post :import_preview, on: :collection
+            post :import_definition, on: :collection
+            member do
+              get :export_definition
+              post :activate
+              post :pause
+              post :duplicate
+              post :stop_run
+              post :validate_definition
+              post :simulate
+              post :start
+              get :runs
+            end
+          end
           namespace :jrc_campaigns do
             resources :test_authorizations, only: [:index, :create, :destroy]
             resources :test_deliveries, only: [:index, :show]
@@ -283,13 +534,81 @@ Rails.application.routes.draw do
               end
             end
           end
+          namespace :relationship do
+            get :metadata, to: 'dashboard#metadata'
+            get :dashboard, to: 'dashboard#show'
+            get :drilldown, to: 'dashboard#drilldown'
+            get :team, to: 'dashboard#team'
+            resources :portfolio, only: [:index, :show, :create, :update] do
+              member do
+                post :recalculate
+                post :activity
+                get :recommendations
+                get :channels
+                get :work_context
+                post :native_csat
+                post :manual_attendance
+              end
+            end
+            get 'records/:kind', to: 'records#index'
+            post 'records/:kind', to: 'records#create'
+            patch 'records/:kind/:id', to: 'records#update'
+            post 'records/:kind/:id/opportunity', to: 'records#opportunity'
+            post 'portfolio/batch', to: 'portfolio#batch'
+            resources :reviewed_batches, only: [:create, :show] do
+              member do
+                post :approve
+                post :advance
+                post :cancel
+              end
+            end
+            resources :cadences, only: [:show] do
+              member do
+                post :advance
+                post :cancel
+              end
+            end
+            post 'actions/batch', to: 'records#batch'
+            post 'surveys/:id/deliver', to: 'records#deliver_survey'
+            get 'surveys/:id/link', to: 'records#survey_link'
+            get 'surveys/:id/voice_preview', to: 'records#voice_preview'
+            post 'surveys/:id/voice_preview', to: 'records#voice_preview'
+            patch 'surveys/:id/treatment', to: 'records#treat_survey'
+            scope 'survey_administration/:kind', constraints: { kind: /definitions|rules/ } do
+              get '/', to: 'survey_administration#index'
+              post '/', to: 'survey_administration#save'
+              patch '/:id', to: 'survey_administration#save'
+              post '/:id/duplicate', to: 'survey_administration#duplicate'
+              get '/:id/history', to: 'survey_administration#history'
+            end
+            post :survey_policy_preview, to: 'survey_administration#preview'
+            get :survey_decisions, to: 'survey_administration#decisions'
+            get :survey_origins, to: 'survey_administration#origins'
+            get 'survey_responses/export', to: 'records#export_surveys'
+            resources :handoffs, only: [:index, :create] do
+              member do
+                get :context
+                post :decide
+              end
+            end
+            get :export, to: 'dashboard#export'
+            get :export_history, to: 'dashboard#export_history'
+            resource :configuration, only: [:show, :update], controller: :configuration
+            get :playbooks, to: 'configuration#playbooks'
+            get :playbook_options, to: 'configuration#playbook_options'
+            post :playbook_preview, to: 'configuration#playbook_preview'
+            get :playbook_executions, to: 'configuration#playbook_executions'
+            post :playbooks, to: 'configuration#save_playbook'
+            patch 'playbooks/:id', to: 'configuration#save_playbook'
+          end
           namespace :crm do
-              resource :dashboard, only: :show, controller: :dashboards
-              resources :reports, only: :index
-              resources :leads, only: [:index, :show, :create, :update, :destroy] do
-                get :for_contact, on: :collection
-                post :from_conversation, on: :collection
-                member do
+            resource :dashboard, only: :show, controller: :dashboards
+            resources :reports, only: :index
+            resources :leads, only: [:index, :show, :create, :update, :destroy] do
+              get :for_contact, on: :collection
+              post :from_contact, on: :collection
+              post :from_conversation, on: :collection
+              member do
                 post :convert
                 post :lose
               end
@@ -303,20 +622,35 @@ Rails.application.routes.draw do
               end
             end
             resources :management, only: [:index]
-            resources :pipelines, only: [:index, :show, :create, :update, :destroy]
-            resources :stages, only: [:index, :show, :create, :update, :destroy] do
+            resource :organization_structure, only: [:show], controller: :organization_structure do
+              patch :settings, action: :update_settings
+              post :companies, action: :create_company
+              patch 'companies/:company_id', action: :update_company
+              post :business_units, action: :create_business_unit
+              patch 'business_units/:business_unit_id', action: :update_business_unit
+              delete 'business_units/:business_unit_id', action: :destroy_business_unit
+              post :team_scopes, action: :create_team_scope
+              patch 'team_scopes/:scope_id', action: :update_team_scope
+              delete 'team_scopes/:scope_id', action: :destroy_team_scope
+              post :user_scopes, action: :create_user_scope
+              patch 'user_scopes/:scope_id', action: :update_user_scope
+              delete 'user_scopes/:scope_id', action: :destroy_user_scope
+            end
+            resources :pipelines
+            resources :stages do
               post :reorder, on: :collection
             end
-            resources :activities, only: [:index, :show, :create, :update, :destroy] do
+            resources :activities do
               post :complete, on: :member
             end
-            resources :follow_ups, only: [:index, :show, :create, :update, :destroy] do
+            resources :follow_ups do
               post :complete, on: :member
             end
-            resources :products, only: [:index, :show, :create, :update, :destroy] do
+            resources :products do
               patch :toggle_active, on: :member
             end
-            resources :proposals, only: [:index, :show, :create, :update, :destroy] do
+            resources :proposals do
+              get :creation_options, on: :collection
               resources :items, controller: :proposal_items, only: [:create, :update, :destroy]
               member do
                 get :pdf
@@ -332,6 +666,7 @@ Rails.application.routes.draw do
             end
             resources :sales_orders, only: [:index, :show, :create, :update] do
               post :preview, on: :collection
+              get :selection_options, on: :collection
               member do
                 get :pdf
                 post :attachments, action: :upload_attachments
@@ -362,6 +697,7 @@ Rails.application.routes.draw do
             resources :backoffice_requests, only: [:index, :show, :create, :update] do
               get :summary, on: :collection
               member do
+                post :decide_order
                 post :advance
                 post :documents, action: :upload_documents
                 get 'documents/:attachment_id', action: :download_document, as: :document
@@ -372,6 +708,8 @@ Rails.application.routes.draw do
                 post :reopen
               end
             end
+            resources :operations_queues, only: [:index, :create, :update]
+            resources :operations_sla_policies, only: [:index, :create, :update]
             resources :invoices, only: [:index, :show, :create, :update]
             resources :payments, only: [:index, :create]
             resources :contract_templates, only: [:index, :show, :create, :update, :destroy]
@@ -379,7 +717,7 @@ Rails.application.routes.draw do
               get :dashboard, on: :collection
             end
             resources :customers, only: [:show]
-            resources :lost_reasons, only: [:index, :show, :create, :update, :destroy]
+            resources :lost_reasons
             resource :wallet, only: :show
             resources :timeline, only: :index
             get 'public/proposals/:token', to: 'public_proposals#show'
@@ -389,6 +727,28 @@ Rails.application.routes.draw do
           end
           post 'jrc_copilot/ask', to: 'jrc_copilot#ask'
           namespace :jrc_nico do
+            scope :helpdesk do
+              get '/', to: 'helpdesk#show'
+              get :events, to: 'helpdesk#events'
+              get :approvals, to: 'helpdesk#approvals'
+              get :catalog, to: 'helpdesk#catalog'
+              get :report, to: 'helpdesk#report'
+              get :reports, to: 'helpdesk#reports'
+              get 'reports/:id', to: 'helpdesk#report_history'
+              get :kpis, to: 'helpdesk#kpis'
+              get :broker_health, to: 'helpdesk#broker_health'
+              post :policies, to: 'helpdesk#create_policy'
+              post 'policies/:id/publish', to: 'helpdesk#publish_policy'
+              post 'policies/:id/disable', to: 'helpdesk#disable_policy'
+              post :simulate, to: 'helpdesk#simulate'
+              post :group_preview, to: 'helpdesk#group_preview'
+              post :group_prepare, to: 'helpdesk#group_prepare'
+              post :profile, to: 'helpdesk#profile'
+              post :approvals, to: 'helpdesk#prepare_approval'
+              post 'approvals/:id/approve', to: 'helpdesk#approve'
+              post 'approvals/:id/cancel', to: 'helpdesk#cancel'
+              post 'approvals/:id/reconcile', to: 'helpdesk#reconcile'
+            end
             resource :operations, only: [:show], controller: :operations do
               get :notices
               post 'notices/:id/read', action: :read_notice
@@ -424,6 +784,9 @@ Rails.application.routes.draw do
           end
           get 'jrc_copilot/context', to: 'jrc_copilot#context'
           namespace :jrc_ai do
+            get 'legacy_reservations', to: 'legacy_reservations#index'
+            post 'legacy_reservations/:type/:id/simulate', to: 'legacy_reservations#simulate'
+            post 'legacy_reservations/:type/:id/reconcile', to: 'legacy_reservations#reconcile'
             resource :cockpit, only: :show, controller: :cockpit
             resources :agents, only: :index
             resources :providers do
@@ -490,11 +853,11 @@ Rails.application.routes.draw do
             post :set_agent_bot, on: :member
             delete :avatar, on: :member
             post :sync_templates, on: :member
+            get :health, on: :member
             get :whatsapp_templates, on: :member
             post :refresh_whatsapp_templates, on: :member
             patch :update_whatsapp_template_rule, on: :member
             get :whatsapp_template_logs, on: :member
-            get :health, on: :member
             post :register_webhook, on: :member
             post :reset_secret, on: :member
             if ChatwootApp.enterprise?
@@ -680,6 +1043,14 @@ Rails.application.routes.draw do
       resource :notification_subscriptions, only: [:create, :destroy]
 
       namespace :widget do
+        get 'service_desk/services', to: 'service_desk#services'
+        get 'service_desk/knowledge', to: 'service_desk#knowledge'
+        get 'service_desk/tickets', to: 'service_desk#index'
+        post 'service_desk/tickets', to: 'service_desk#create'
+        get 'service_desk/tickets/:id', to: 'service_desk#show'
+        post 'service_desk/tickets/:id/replies', to: 'service_desk#reply'
+        get 'service_desk/tickets/:id/notes/:note_id/attachments/:attachment_id', to: 'service_desk#attachment'
+        get 'service_desk/tickets/:id/messages/:message_id/attachments/:attachment_id', to: 'service_desk#customer_attachment'
         resource :direct_uploads, only: [:create]
         resource :config, only: [:create]
         resources :campaigns, only: [:index]
@@ -921,10 +1292,12 @@ Rails.application.routes.draw do
 
       # order of resources affect the order of sidebar navigation in super admin
       resources :accounts, only: [:index, :new, :create, :show, :edit, :update, :destroy] do
+        get 'service-desk-initialization', to: 'service_desk_initializations#show', as: :service_desk_initialization
+        post 'service-desk-initialization', to: 'service_desk_initializations#create'
+        get 'service-desk-initialization/receipts/:audit_id', to: 'service_desk_initializations#receipt', as: :service_desk_initialization_receipt
         post :seed, on: :member
         post :reset_cache, on: :member
         post :toggle_feature, on: :member
-        patch :update_nico, on: :member
         get :impersonate, to: 'account_impersonations#show'
         get 'settings/inboxes', to: 'account_inboxes#index'
         get 'settings/inboxes/*path', to: 'account_inboxes#index'
@@ -948,11 +1321,11 @@ Rails.application.routes.draw do
             post :set_agent_bot, on: :member
             delete :avatar, on: :member
             post :sync_templates, on: :member
+            get :health, on: :member
             get :whatsapp_templates, on: :member
             post :refresh_whatsapp_templates, on: :member
             patch :update_whatsapp_template_rule, on: :member
             get :whatsapp_template_logs, on: :member
-            get :health, on: :member
             post :register_webhook, on: :member
             post :reset_secret, on: :member
 
@@ -1053,6 +1426,8 @@ Rails.application.routes.draw do
 
   # ---------------------------------------------------------------------
   # JRC CRM public commercial proposals (no Chatwoot session required)
+  get '/jrc/relacionamento/pesquisas/:token', to: 'relationship_surveys#show'
+  post '/jrc/relacionamento/pesquisas/:token', to: 'relationship_surveys#update'
   get '/jrc/propostas/:account_id/:token', to: 'jrc_crm/public_proposals#show', as: :jrc_crm_public_proposal
   get '/jrc/propostas/:account_id/:token/pdf', to: 'jrc_crm/public_proposals#pdf', as: :jrc_crm_public_proposal_pdf
   post '/jrc/propostas/:account_id/:token/accept', to: 'jrc_crm/public_proposals#accept', as: :jrc_crm_public_proposal_accept

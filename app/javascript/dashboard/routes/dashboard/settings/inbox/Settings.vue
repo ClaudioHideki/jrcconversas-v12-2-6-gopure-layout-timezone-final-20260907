@@ -45,9 +45,13 @@ import SelectInput from 'dashboard/components-next/select/Select.vue';
 import Widget from 'dashboard/modules/widget-preview/components/Widget.vue';
 import AccessToken from 'dashboard/routes/dashboard/settings/profile/AccessToken.vue';
 import { copyTextToClipboard } from 'shared/helpers/clipboard';
+import ConnectionPanel from 'dashboard/components-next/jrc-broker/ConnectionPanel.vue';
+import GrantsPanel from 'dashboard/components-next/jrc-broker/GrantsPanel.vue';
 
 export default {
   components: {
+    ConnectionPanel,
+    GrantsPanel,
     BotConfiguration,
     CollaboratorsPage,
     ConfigurationPage,
@@ -274,8 +278,20 @@ export default {
         ];
       }
 
+      if (
+        this.inbox?.jrc_broker_bound &&
+        window.chatwootConfig?.jrcBrokerEnabled === true
+      ) {
+        visibleToAllChannelTabs.push({
+          key: 'jrc-broker',
+          name: this.$t('JRC_BROKER.CONNECT_WHATSAPP'),
+        });
+      }
       if (this.inbox.channel_type === 'Channel::Whatsapp') {
-        visibleToAllChannelTabs.push({ key: 'whatsapp-templates', name: 'Templates WhatsApp' });
+        visibleToAllChannelTabs.push({
+          key: 'whatsapp-templates',
+          name: this.$t('WHATSAPP_TEMPLATES.MODAL.TITLE'),
+        });
       }
       return visibleToAllChannelTabs;
     },
@@ -1368,6 +1384,21 @@ export default {
           </div>
         </div>
 
+        <div
+          v-if="selectedTabKey === 'jrc-broker' && inbox.jrc_broker_bound"
+          class="mx-6 max-w-4xl flex flex-col gap-5"
+        >
+          <ConnectionPanel
+            :key="`connection:${accountId}:${inbox.id}`"
+            :account-id="Number(accountId)"
+            :inbox-id="inbox.id"
+          />
+          <GrantsPanel
+            :key="`grants:${accountId}:${inbox.id}`"
+            :account-id="Number(accountId)"
+            :inbox-id="inbox.id"
+          />
+        </div>
         <div v-if="selectedTabKey === 'collaborators'" class="mx-6 max-w-4xl">
           <CollaboratorsPage :inbox="inbox" />
         </div>
@@ -1391,7 +1422,10 @@ export default {
           <WhatsappCallingPage :inbox="inbox" />
         </div>
         <WhatsappTemplatesPage
-          v-if="selectedTabKey === 'whatsapp-templates' && inbox.channel_type === 'Channel::Whatsapp'"
+          v-if="
+            selectedTabKey === 'whatsapp-templates' &&
+            inbox.channel_type === 'Channel::Whatsapp'
+          "
           :inbox="inbox"
         />
         <div v-if="selectedTabKey === 'csat'">

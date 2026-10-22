@@ -2,10 +2,14 @@
 /* eslint-disable vue/no-bare-strings-in-template, @intlify/vue-i18n/no-raw-text */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { useMapGetter, useStore } from 'dashboard/composables/store';
 import jrcAiAPI from 'dashboard/api/jrcAi';
+import CockpitHero from './CockpitHero.vue';
+import { useJrcModuleAvailability } from 'dashboard/composables/useJrcModuleAvailability';
 import { useJrcCopilot } from 'dashboard/components-next/jrcCopilot/useJrcCopilot';
 
+const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const store = useStore();
@@ -14,7 +18,8 @@ const inboxes = useMapGetter('inboxes/getInboxes');
 const getInboxUnreadCount = useMapGetter(
   'conversationUnreadCounts/getInboxUnreadCount'
 );
-const { openWithPrompt } = useJrcCopilot();
+const { openWithPrompt, openQuick } = useJrcCopilot();
+const { modules, statusLabel: moduleStatusLabel } = useJrcModuleAvailability();
 
 const loading = ref(false);
 const error = ref('');
@@ -50,12 +55,6 @@ const displayName = computed(
   () => currentUser.value?.name || currentUser.value?.email || 'Usuário'
 );
 const firstName = computed(() => displayName.value.split(' ')[0]);
-const greeting = computed(() => {
-  const hour = new Date().getHours();
-  if (hour < 12) return 'Bom dia';
-  if (hour < 18) return 'Boa tarde';
-  return 'Boa noite';
-});
 const profileTitle = computed(() =>
   isSupervisor.value ? 'Operação geral' : 'Meu dia'
 );
@@ -74,8 +73,7 @@ const emailInboxes = computed(() =>
 );
 const emailUnreadCount = computed(() =>
   emailInboxes.value.reduce(
-    (total, inbox) =>
-      total + Number(getInboxUnreadCount.value(inbox.id) || 0),
+    (total, inbox) => total + Number(getInboxUnreadCount.value(inbox.id) || 0),
     0
   )
 );
@@ -118,7 +116,7 @@ const summaryCards = computed(() => {
     {
       key: 'email',
       label: 'E-mails não lidos',
-      value: formatNumber(summary.emails_unread ?? emailUnreadCount.value),
+      value: formatNumber(emailUnreadCount.value),
       detail: `${formatNumber(summary.emails_open)} em atendimento`,
       icon: 'i-lucide-mail',
       tone: 'amber',
@@ -130,7 +128,7 @@ const summaryCards = computed(() => {
       value: formatNumber(summary.calls_in_progress),
       detail: `${formatNumber(summary.missed_calls)} perdida(s)`,
       icon: 'i-lucide-phone-call',
-      tone: 'rose',
+      tone: summary.missed_calls > 0 ? 'rose' : 'teal',
       route: 'jrc_calls_center',
     },
     {
@@ -148,7 +146,7 @@ const summaryCards = computed(() => {
       value: formatPercent(summary.sla_estimated_percent),
       detail: `${formatNumber(summary.sla_risk_count)} em risco`,
       icon: 'i-lucide-gauge',
-      tone: 'teal',
+      tone: summary.sla_risk_count > 0 ? 'amber' : 'teal',
       route: 'operational_live_reports',
     },
   ];
@@ -191,7 +189,7 @@ const operationalCards = computed(() => {
       icon: isSupervisor.value
         ? 'i-lucide-user-round-x'
         : 'i-lucide-user-round-plus',
-      tone: 'rose',
+      tone: 'cyan',
     },
   ];
 });
@@ -210,7 +208,7 @@ const quickLinks = computed(() => {
     {
       label: 'E-mails',
       description: 'Caixas de e-mail, pendências e histórico do cliente.',
-      value: Number(summary.emails_unread ?? emailUnreadCount.value),
+      value: emailUnreadCount.value,
       icon: 'i-lucide-mail-open',
       tone: 'amber',
       route: 'jrc_email_center',
@@ -247,6 +245,14 @@ const quickLinks = computed(() => {
       tone: 'cyan',
       route: 'settings_inbox_list',
     },
+    ...modules.value
+      .filter(module => module.key !== 'contacts')
+      .map(module => ({
+        ...module,
+        description: moduleStatusLabel(module.status),
+        value: null,
+        route: module.route?.name,
+      })),
   ];
 });
 
@@ -265,27 +271,24 @@ const personalizationItems = computed(() => {
 
 const toneClasses = tone =>
   ({
-    blue: 'border-blue-300 bg-blue-50/90 text-blue-700',
-    amber: 'border-amber-300 bg-amber-50/90 text-amber-700',
-    rose: 'border-rose-300 bg-rose-50/90 text-rose-700',
-    violet: 'border-violet-300 bg-violet-50/90 text-violet-700',
-    teal: 'border-teal-300 bg-teal-50/90 text-teal-700',
-    emerald: 'border-emerald-300 bg-emerald-50/90 text-emerald-700',
-    cyan: 'border-cyan-300 bg-cyan-50/90 text-cyan-700',
-  })[tone] || 'border-slate-200 bg-slate-50 text-slate-700';
-
-const toneCardStyle = tone => { const colors = { blue:{border:'#3b82f6',soft:'#eff6ff',text:'#2563eb'}, cyan:{border:'#06b6d4',soft:'#ecfeff',text:'#0891b2'}, amber:{border:'#f59e0b',soft:'#fffbeb',text:'#d97706'}, rose:{border:'#f43f5e',soft:'#fff1f2',text:'#e11d48'}, violet:{border:'#8b5cf6',soft:'#f5f3ff',text:'#7c3aed'}, teal:{border:'#14b8a6',soft:'#f0fdfa',text:'#0f766e'}, emerald:{border:'#22c55e',soft:'#f0fdf4',text:'#16a34a'} }; const color = colors[tone] || colors.blue; return { backgroundColor: color.soft, borderColor: '#dbe7f5', borderTop: '4px solid ' + color.border, color: color.text }; };
-
-const toneIconStyle = tone => { const colors = { blue:{bg:'#dbeafe',border:'#60a5fa',text:'#2563eb'}, cyan:{bg:'#cffafe',border:'#22d3ee',text:'#0891b2'}, amber:{bg:'#fef3c7',border:'#fbbf24',text:'#d97706'}, rose:{bg:'#ffe4e6',border:'#fb7185',text:'#e11d48'}, violet:{bg:'#ede9fe',border:'#a78bfa',text:'#7c3aed'}, teal:{bg:'#ccfbf1',border:'#2dd4bf',text:'#0f766e'}, emerald:{bg:'#dcfce7',border:'#4ade80',text:'#16a34a'} }; const color=colors[tone] || colors.blue; return { backgroundColor: color.bg, borderColor: color.border, color: color.text }; };
+    blue: 'border-n-blue-6 bg-n-blue-2 text-n-blue-11',
+    amber: 'border-n-amber-6 bg-n-amber-2 text-n-amber-11',
+    rose: 'border-n-ruby-6 bg-n-ruby-2 text-n-ruby-11',
+    ruby: 'border-n-ruby-6 bg-n-ruby-2 text-n-ruby-11',
+    violet: 'border-n-violet-6 bg-n-violet-2 text-n-violet-11',
+    teal: 'border-n-teal-6 bg-n-teal-2 text-n-teal-11',
+    emerald: 'border-n-teal-6 bg-n-teal-2 text-n-teal-11',
+    cyan: 'border-n-blue-6 bg-n-blue-2 text-n-blue-11',
+  })[tone] || 'border-n-weak bg-n-slate-2 text-n-slate-12';
 
 const statusClasses = status =>
   ({
-    active: 'bg-emerald-100 text-emerald-700',
-    attention: 'bg-amber-100 text-amber-700',
-    ready: 'bg-blue-100 text-blue-700',
-    idle: 'bg-slate-100 text-slate-600',
-    restricted: 'bg-violet-100 text-violet-700',
-  })[status] || 'bg-slate-100 text-slate-600';
+    active: 'bg-n-teal-3 text-n-teal-11',
+    attention: 'bg-n-amber-3 text-n-amber-11',
+    ready: 'bg-n-blue-3 text-n-blue-11',
+    idle: 'bg-n-slate-3 text-n-slate-11',
+    restricted: 'bg-n-violet-3 text-n-violet-11',
+  })[status] || 'bg-n-slate-3 text-n-slate-11';
 const statusLabel = status =>
   ({
     not_run: 'Ainda não executado',
@@ -323,8 +326,7 @@ const donutStyle = computed(() => {
   let cursor = 0;
   const pieces = data.value.channel_distribution.map((item, index) => {
     const start = cursor;
-    const end =
-      cursor + (Number(item.count || 0) / totalChannels.value) * 100;
+    const end = cursor + (Number(item.count || 0) / totalChannels.value) * 100;
     cursor = end;
     return `${channelColors[index % channelColors.length]} ${start}% ${end}%`;
   });
@@ -334,10 +336,7 @@ const donutStyle = computed(() => {
 const chartPoints = computed(() => {
   const rows = data.value.daily_volume || [];
   if (!rows.length) return '';
-  const max = Math.max(
-    1,
-    ...rows.map(row => Number(row.conversations || 0))
-  );
+  const max = Math.max(1, ...rows.map(row => Number(row.conversations || 0)));
   return rows
     .map((row, index) => {
       const x = rows.length === 1 ? 50 : (index / (rows.length - 1)) * 100;
@@ -408,76 +407,55 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
 
 <template>
   <main
-    class="jrc-visible-scrollbar h-full overflow-y-auto bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.12),transparent_30%),linear-gradient(135deg,#f5fbf8,#edf8f3)] p-4 sm:p-5"
+    class="h-full overflow-auto bg-gradient-to-br from-n-blue-2 to-n-background text-n-slate-12 p-4 sm:p-5"
   >
     <div class="mx-auto max-w-[1750px] space-y-4">
-      <header
-        class="relative overflow-hidden rounded-[28px] bg-gradient-to-r from-[#00623f] via-[#007a4f] to-[#009b63] px-6 py-6 text-white shadow-lg"
+      <CockpitHero
+        :name="firstName"
+        :description="`${profileTitle} · ${profileDescription}`"
+        :summary="data.summary"
+        :attention="data.attention"
+        :ready="!!data.generated_at && !error"
+        :loading="loading"
       >
-        <div
-          class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_82%_5%,rgba(167,243,208,0.30),transparent_28%),radial-gradient(circle_at_68%_110%,rgba(255,255,255,0.12),transparent_32%)]"
-        />
-        <div
-          class="relative z-10 flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between"
-        >
-          <div>
-            <span
-              class="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider"
-            >
-              <i class="i-lucide-radar size-4" /> Cockpit · Central de
-              Atendimento
-            </span>
-            <h1 class="mt-3 text-3xl font-bold text-white" style="color: #ffffff !important;">
-              {{ greeting }}, {{ firstName }}!
-            </h1>
-            <p class="mt-1 text-sm text-emerald-50/95">
-              {{ profileTitle }} · {{ profileDescription }}
-            </p>
-            <p class="mt-2 max-w-3xl text-xs leading-5 text-emerald-100">
-              Uma única central para acompanhar a operação, identificar
-              prioridades e seguir para Conversas, E-mails, Ligações, Agenda e
-              CRM sem duplicar esses módulos.
-            </p>
-            <p class="mt-3 text-xs text-emerald-100">
-              Atualizado às {{ formatUpdated(data.generated_at) }}
-            </p>
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <select
-              v-model="period"
-              class="h-11 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-semibold text-white outline-none backdrop-blur [&>option]:text-slate-900"
-            >
-              <option value="today">Hoje</option>
-              <option value="7_days">Últimos 7 dias</option>
-              <option value="30_days">Últimos 30 dias</option>
-            </select>
-            <button
-              type="button"
-              class="inline-flex h-11 items-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-[#007a4f] shadow"
-              @click="showPersonalize = true"
-            >
-              <i class="i-lucide-sliders-horizontal size-4" /> Personalizar
-              Cockpit
-            </button>
-            <button
-              type="button"
-              class="grid size-11 place-content-center rounded-xl bg-white/10 transition hover:bg-white/20"
-              :disabled="loading"
-              title="Atualizar"
-              @click="loadCockpit"
-            >
-              <i
-                class="i-lucide-refresh-cw size-5"
-                :class="{ 'animate-spin': loading }"
-              />
-            </button>
-          </div>
+        <p class="mb-0 text-xs text-white/90">
+          Atualizado às {{ formatUpdated(data.generated_at) }}
+        </p>
+        <div class="flex flex-wrap items-center gap-2">
+          <select
+            v-model="period"
+            class="h-11 w-auto rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-semibold text-white outline-none backdrop-blur [&>option]:text-n-slate-12 [&>option]:bg-n-solid-2"
+          >
+            <option value="today">Hoje</option>
+            <option value="7_days">Últimos 7 dias</option>
+            <option value="30_days">Últimos 30 dias</option>
+          </select>
+          <button
+            type="button"
+            class="inline-flex h-11 items-center gap-2 rounded-xl bg-n-solid-2 px-4 text-sm font-semibold text-n-blue-11 shadow"
+            @click="showPersonalize = true"
+          >
+            <i class="i-lucide-sliders-horizontal size-4" /> Personalizar
+            Cockpit
+          </button>
+          <button
+            type="button"
+            class="grid size-11 place-content-center rounded-xl bg-white/10 transition hover:bg-white/20"
+            :disabled="loading"
+            title="Atualizar"
+            @click="loadCockpit"
+          >
+            <i
+              class="i-lucide-refresh-cw size-5"
+              :class="{ 'animate-spin': loading }"
+            />
+          </button>
         </div>
-      </header>
+      </CockpitHero>
 
       <div
         v-if="error"
-        class="flex items-center justify-between rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"
+        class="flex items-center justify-between rounded-2xl border border-n-ruby-6 bg-n-ruby-2 p-4 text-sm text-n-ruby-11"
       >
         <span>{{ error }}</span>
         <button class="font-semibold underline" @click="loadCockpit">
@@ -493,16 +471,19 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
           v-for="card in summaryCards"
           :key="card.key"
           type="button"
-          class="group rounded-2xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-          :style="toneCardStyle(card.tone)"
+          class="group rounded-2xl border bg-n-solid-2 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          :class="toneClasses(card.tone).split(' ')[0]"
           @click="openRoute(card.route)"
         >
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
-              <p class="truncate text-xs font-semibold text-[#667085]">
+              <p class="truncate text-xs font-semibold text-n-slate-11">
                 {{ card.label }}
               </p>
-              <strong class="mt-3 block text-3xl font-bold">
+              <strong
+                class="mt-3 block text-3xl"
+                :class="toneClasses(card.tone).split(' ')[2]"
+              >
                 {{ card.value }}
               </strong>
             </div>
@@ -513,7 +494,7 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
               <i class="size-5" :class="card.icon" />
             </span>
           </div>
-          <p class="mt-3 text-xs font-semibold text-[#667085]">
+          <p class="mt-3 text-xs font-semibold text-n-slate-11">
             {{ card.detail }} →
           </p>
         </button>
@@ -526,7 +507,7 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
         <article
           v-for="card in operationalCards"
           :key="card.label"
-          class="rounded-2xl border bg-white p-4 shadow-sm" :style="toneCardStyle(card.tone)"
+          class="rounded-2xl border border-n-weak bg-n-solid-2 p-4 shadow-sm"
         >
           <div class="flex items-center gap-3">
             <span
@@ -536,8 +517,12 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
               <i class="size-4" :class="card.icon" />
             </span>
             <div>
-              <p class="text-xs text-[#667085]">{{ card.label }}</p>
-              <strong class="text-xl font-bold">{{ card.value }}</strong>
+              <p class="text-xs text-n-slate-11">{{ card.label }}</p>
+              <strong
+                class="text-xl"
+                :class="toneClasses(card.tone).split(' ')[2]"
+                >{{ card.value }}</strong
+              >
             </div>
           </div>
         </article>
@@ -545,42 +530,54 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
 
       <section
         v-if="visibleSections.quickLinks"
-        class="rounded-2xl border border-[#dbe7f5] bg-white p-5 shadow-sm"
+        class="rounded-2xl border border-n-weak bg-n-solid-2 p-5 shadow-sm"
       >
         <div>
-          <h2 class="text-lg font-bold text-[#172033]">
+          <h2 class="text-lg font-bold text-n-slate-12">
             Acessos operacionais
           </h2>
-          <p class="text-sm text-[#667085]">
+          <p class="text-sm text-n-slate-11">
             O Cockpit organiza a operação e direciona para os módulos que já
             executam cada tarefa.
           </p>
         </div>
-        <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <div
+          class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6"
+        >
           <button
             v-for="link in quickLinks"
             :key="link.label"
             type="button"
-            class="rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md"
+            class="rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-n-brand disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none"
             :class="toneClasses(link.tone)"
-            @click="openRoute(link.route)"
+            :disabled="link.available === false"
+            @click="
+              link.command === 'nico' ? openQuick() : openRoute(link.route)
+            "
           >
             <div class="flex items-start justify-between gap-2">
-              <span class="grid size-10 place-content-center rounded-xl border" :style="toneIconStyle(link.tone)">
+              <span
+                class="grid size-10 place-content-center rounded-xl bg-n-solid-2"
+              >
                 <i class="size-5" :class="link.icon" />
               </span>
               <strong
                 v-if="link.value !== null && link.value !== undefined"
-                class="text-lg text-[#172033]"
+                class="text-lg"
+                :class="toneClasses(link.tone).split(' ')[2]"
               >
                 {{ formatNumber(link.value) }}
               </strong>
             </div>
-            <h3 class="mt-3 font-bold text-[#172033]">{{ link.label }}</h3>
-            <p class="mt-1 text-xs leading-5 text-[#667085]">
+            <h3 class="mt-3 font-bold text-n-slate-12">{{ link.label }}</h3>
+            <p class="mt-1 text-xs leading-5 text-n-slate-11">
               {{ link.description }}
             </p>
-            <span class="mt-3 inline-block text-xs font-semibold" :style="{ color: toneIconStyle(link.tone).color }">
+            <span
+              v-if="link.available !== false"
+              class="mt-3 inline-block rounded-lg border px-3 py-1.5 text-xs font-semibold"
+              :class="toneClasses(link.tone)"
+            >
               Abrir →
             </span>
           </button>
@@ -592,20 +589,20 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
         class="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]"
       >
         <article
-          class="rounded-2xl border border-[#e4e9f1] bg-white p-5 shadow-sm"
+          class="rounded-2xl border border-n-weak bg-n-solid-2 p-5 shadow-sm"
         >
           <div class="flex items-center justify-between gap-3">
             <div>
-              <h2 class="text-lg font-bold text-[#172033]">
+              <h2 class="text-lg font-bold text-n-slate-12">
                 O que precisa da minha atenção
               </h2>
-              <p class="text-sm text-[#667085]">
+              <p class="text-sm text-n-slate-11">
                 Prioridades calculadas com os dados atuais da operação.
               </p>
             </div>
             <button
               v-if="aiConfigured"
-              class="rounded-xl bg-[#087ff5] px-4 py-2 text-xs font-semibold text-white"
+              class="rounded-xl bg-n-brand px-4 py-2 text-xs font-semibold text-white"
               @click="
                 openWithPrompt(
                   'O que precisa da minha atenção agora? Organize por urgência e explique a próxima ação.'
@@ -622,38 +619,40 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
               class="flex items-start gap-3 rounded-2xl border p-4"
               :class="
                 item.severity === 'high'
-                  ? 'border-rose-200 bg-rose-50'
+                  ? 'border-n-ruby-6 bg-n-ruby-2'
                   : item.severity === 'medium'
-                    ? 'border-amber-200 bg-amber-50'
-                    : 'border-emerald-200 bg-emerald-50'
+                    ? 'border-n-amber-6 bg-n-amber-2'
+                    : 'border-n-teal-6 bg-n-teal-2'
               "
             >
-              <span class="grid size-10 shrink-0 place-content-center rounded-xl bg-white">
+              <span
+                class="grid size-10 shrink-0 place-content-center rounded-xl bg-n-solid-2"
+              >
                 <i
                   class="size-5"
                   :class="
                     item.severity === 'high'
-                      ? 'i-lucide-triangle-alert text-rose-600'
+                      ? 'i-lucide-triangle-alert text-n-ruby-11'
                       : item.severity === 'medium'
-                        ? 'i-lucide-clock-alert text-amber-600'
-                        : 'i-lucide-circle-check text-emerald-600'
+                        ? 'i-lucide-clock-alert text-n-amber-11'
+                        : 'i-lucide-circle-check text-n-teal-11'
                   "
                 />
               </span>
               <div class="min-w-0 flex-1">
                 <div class="flex items-center justify-between gap-2">
-                  <b class="text-sm text-[#172033]">{{ item.title }}</b>
-                  <strong class="text-lg text-[#172033]">
+                  <b class="text-sm text-n-slate-12">{{ item.title }}</b>
+                  <strong class="text-lg text-n-slate-12">
                     {{ item.count }}
                   </strong>
                 </div>
-                <small class="mt-1 block text-[#667085]">
+                <small class="mt-1 block text-n-slate-11">
                   {{ item.description }}
                 </small>
                 <div class="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    class="rounded-lg bg-[#087ff5] px-3 py-2 text-xs font-semibold text-white"
+                    class="rounded-lg bg-n-brand px-3 py-2 text-xs font-semibold text-white"
                     @click="openAttention(item)"
                   >
                     Abrir e agir
@@ -661,7 +660,7 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
                   <button
                     v-if="aiConfigured"
                     type="button"
-                    class="rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-semibold text-violet-700"
+                    class="rounded-lg border border-n-violet-6 bg-n-solid-2 px-3 py-2 text-xs font-semibold text-n-violet-11"
                     @click="analyzeAttention(item)"
                   >
                     Analisar com IA
@@ -673,21 +672,21 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
         </article>
 
         <article
-          class="rounded-2xl border border-[#e4e9f1] bg-white p-5 shadow-sm"
+          class="rounded-2xl border border-n-weak bg-n-solid-2 p-5 shadow-sm"
         >
           <div class="flex items-center justify-between">
             <div>
-              <h2 class="font-bold text-[#172033]">
+              <h2 class="font-bold text-n-slate-12">
                 Evolução dos atendimentos
               </h2>
-              <p class="text-xs text-[#98a2b3]">
+              <p class="text-xs text-n-slate-11">
                 Conversas criadas nos últimos 7 dias
               </p>
             </div>
-            <i class="i-lucide-chart-no-axes-combined size-5 text-blue-600" />
+            <i class="i-lucide-chart-no-axes-combined size-5 text-n-blue-11" />
           </div>
           <div
-            class="mt-5 h-44 rounded-2xl bg-gradient-to-b from-blue-50 to-white p-3"
+            class="mt-5 h-44 rounded-2xl bg-gradient-to-b from-n-blue-2 to-n-solid-2 p-3"
           >
             <svg
               viewBox="0 0 100 100"
@@ -716,7 +715,7 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
               />
             </svg>
           </div>
-          <div class="mt-2 flex justify-between text-[10px] text-[#98a2b3]">
+          <div class="mt-2 flex justify-between text-[10px] text-n-slate-11">
             <span v-for="row in data.daily_volume" :key="row.date">
               {{ row.date.slice(5).split('-').reverse().join('/') }}
             </span>
@@ -729,21 +728,21 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
         class="grid gap-4 xl:grid-cols-3"
       >
         <article
-          class="rounded-2xl border border-[#e4e9f1] bg-white p-5 shadow-sm"
+          class="rounded-2xl border border-n-weak bg-n-solid-2 p-5 shadow-sm"
         >
-          <h2 class="font-bold text-[#172033]">Atendimentos por canal</h2>
+          <h2 class="font-bold text-n-slate-12">Atendimentos por canal</h2>
           <div class="mt-5 flex items-center gap-6">
             <div
               class="relative size-40 shrink-0 rounded-full"
               :style="donutStyle"
             >
               <div
-                class="absolute inset-7 grid place-content-center rounded-full bg-white text-center"
+                class="absolute inset-7 grid place-content-center rounded-full bg-n-solid-2 text-center"
               >
-                <strong class="text-2xl text-[#172033]">
+                <strong class="text-2xl text-n-slate-12">
                   {{ totalChannels }}
                 </strong>
-                <span class="text-[10px] text-[#667085]">Em aberto</span>
+                <span class="text-[10px] text-n-slate-11">Em aberto</span>
               </div>
             </div>
             <div class="min-w-0 flex-1 space-y-2">
@@ -760,15 +759,15 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
                         channelColors[index % channelColors.length],
                     }"
                   />
-                  <span class="truncate text-[#667085]">
+                  <span class="truncate text-n-slate-11">
                     {{ item.channel }}
                   </span>
                 </span>
-                <b class="text-[#172033]">{{ item.count }}</b>
+                <b class="text-n-slate-12">{{ item.count }}</b>
               </div>
               <p
                 v-if="!data.channel_distribution.length"
-                class="text-sm text-[#98a2b3]"
+                class="text-sm text-n-slate-11"
               >
                 Nenhum atendimento em aberto.
               </p>
@@ -777,10 +776,10 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
         </article>
 
         <article
-          class="rounded-2xl border border-[#e4e9f1] bg-white p-5 shadow-sm"
+          class="rounded-2xl border border-n-weak bg-n-solid-2 p-5 shadow-sm"
         >
-          <h2 class="font-bold text-[#172033]">Capacidade da equipe</h2>
-          <p class="text-xs text-[#98a2b3]">
+          <h2 class="font-bold text-n-slate-12">Capacidade da equipe</h2>
+          <p class="text-xs text-n-slate-11">
             {{
               isSupervisor
                 ? 'Visão geral dos agentes'
@@ -793,18 +792,18 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
                 {
                   key: 'online',
                   label: 'Disponíveis',
-                  tone: 'bg-emerald-500',
+                  tone: 'bg-n-teal-9',
                 },
-                { key: 'busy', label: 'Ocupados', tone: 'bg-amber-500' },
+                { key: 'busy', label: 'Ocupados', tone: 'bg-n-amber-9' },
                 { key: 'offline', label: 'Offline', tone: 'bg-slate-400' },
               ]"
               :key="item.key"
             >
               <div class="mb-1 flex justify-between text-xs">
-                <span class="text-[#667085]">{{ item.label }}</span>
-                <b class="text-[#172033]">{{ data.team[item.key] || 0 }}</b>
+                <span class="text-n-slate-11">{{ item.label }}</span>
+                <b class="text-n-slate-12">{{ data.team[item.key] || 0 }}</b>
               </div>
-              <div class="h-2 rounded-full bg-slate-100">
+              <div class="h-2 rounded-full bg-n-slate-3">
                 <div
                   class="h-2 rounded-full"
                   :class="item.tone"
@@ -823,68 +822,64 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
         </article>
 
         <article
-          class="rounded-2xl border border-[#e4e9f1] bg-white p-5 shadow-sm"
+          class="rounded-2xl border border-n-weak bg-n-solid-2 p-5 shadow-sm"
         >
           <div class="flex items-center justify-between">
             <div>
-              <h2 class="font-bold text-[#172033]">
-                Inteligência Artificial
-              </h2>
-              <p class="text-xs text-[#98a2b3]">
+              <h2 class="font-bold text-n-slate-12">Inteligência Artificial</h2>
+              <p class="text-xs text-n-slate-11">
                 Recurso opcional administrado pela própria conta
               </p>
             </div>
-            <i class="i-lucide-brain-circuit size-6 text-violet-600" />
+            <i class="i-lucide-brain-circuit size-6 text-n-violet-11" />
           </div>
 
           <template v-if="aiConfigured">
             <div class="mt-5 grid grid-cols-2 gap-3">
-              <div class="rounded-xl bg-violet-50 p-3">
-                <span class="text-xs text-violet-700">Tokens hoje</span>
-                <strong class="mt-1 block text-xl text-[#172033]">
+              <div class="rounded-xl bg-n-violet-2 p-3">
+                <span class="text-xs text-n-violet-11">Tokens hoje</span>
+                <strong class="mt-1 block text-xl text-n-slate-12">
                   {{ formatNumber(data.usage.tokens_today) }}
                 </strong>
               </div>
-              <div class="rounded-xl bg-blue-50 p-3">
-                <span class="text-xs text-blue-700">Tokens no mês</span>
-                <strong class="mt-1 block text-xl text-[#172033]">
+              <div class="rounded-xl bg-n-blue-2 p-3">
+                <span class="text-xs text-n-blue-11">Tokens no mês</span>
+                <strong class="mt-1 block text-xl text-n-slate-12">
                   {{ formatNumber(data.usage.tokens_month) }}
                 </strong>
               </div>
-              <div class="col-span-2 rounded-xl bg-emerald-50 p-3">
-                <span class="text-xs text-emerald-700">
+              <div class="col-span-2 rounded-xl bg-n-teal-2 p-3">
+                <span class="text-xs text-n-teal-11">
                   Provedores configurados
                 </span>
-                <strong class="mt-1 block text-xl text-[#172033]">
+                <strong class="mt-1 block text-xl text-n-slate-12">
                   {{ formatNumber(data.usage.providers_configured) }}
                 </strong>
               </div>
             </div>
             <button
-              class="mt-4 w-full rounded-xl border border-violet-200 px-4 py-2.5 text-xs font-semibold text-violet-700"
+              class="mt-4 w-full rounded-xl border border-n-violet-6 px-4 py-2.5 text-xs font-semibold text-n-violet-11"
               @click="
-                openRoute(
-                  canConfigureAi ? 'jrc_ai_providers' : 'jrc_ai_agents'
-                )
+                openRoute(canConfigureAi ? 'jrc_ai_providers' : 'jrc_ai_agents')
               "
             >
-              {{ canConfigureAi ? 'Administrar IA' : 'Ver NICO' }} →
+              {{ canConfigureAi ? 'Administrar IA' : 'Ver Agentes IA' }} →
             </button>
           </template>
 
           <template v-else>
-            <div class="mt-5 rounded-2xl bg-slate-50 p-4">
+            <div class="mt-5 rounded-2xl bg-n-slate-2 p-4">
               <div class="flex items-start gap-3">
                 <span
-                  class="grid size-10 shrink-0 place-content-center rounded-xl bg-white text-slate-500"
+                  class="grid size-10 shrink-0 place-content-center rounded-xl bg-n-solid-2 text-n-slate-11"
                 >
                   <i class="i-lucide-power size-5" />
                 </span>
                 <div>
-                  <h3 class="text-sm font-bold text-[#172033]">
+                  <h3 class="text-sm font-bold text-n-slate-12">
                     IA não configurada
                   </h3>
-                  <p class="mt-1 text-xs leading-5 text-[#667085]">
+                  <p class="mt-1 text-xs leading-5 text-n-slate-11">
                     O Cockpit, Conversas, CRM, Agenda, Ligações e WhatsApp
                     Calling continuam funcionando normalmente sem IA.
                   </p>
@@ -898,7 +893,7 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
             >
               Configurar Inteligência Artificial
             </button>
-            <p v-else class="mt-4 text-xs text-[#667085]">
+            <p v-else class="mt-4 text-xs text-n-slate-11">
               A configuração de provedor e credencial pertence ao administrador
               desta conta.
             </p>
@@ -908,16 +903,16 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
 
       <section
         v-if="visibleSections.aiAgents && aiConfigured"
-        class="rounded-2xl border border-[#dbe7f5] bg-white p-5 shadow-sm"
+        class="rounded-2xl border border-n-weak bg-n-solid-2 p-5 shadow-sm"
       >
         <div
           class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
         >
           <div>
-            <h2 class="text-lg font-bold text-[#172033]">
-              NICO trabalhando para você
+            <h2 class="text-lg font-bold text-n-slate-12">
+              Agentes IA trabalhando para você
             </h2>
-            <p class="text-sm text-[#667085]">
+            <p class="text-sm text-n-slate-11">
               Especialistas analisam a operação e entregam recomendações ao
               Copiloto JRC.
             </p>
@@ -926,7 +921,7 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
             class="rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 px-4 py-2.5 text-xs font-semibold text-white"
             @click="openRoute('jrc_ai_agents')"
           >
-            Ver Central NICO
+            Ver Central de Agentes IA
           </button>
         </div>
         <div class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -934,12 +929,12 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
             v-for="agent in data.ai_agents"
             :key="agent.key"
             type="button"
-            class="rounded-2xl border border-[#e4e9f1] p-4 text-left transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
+            class="rounded-2xl border border-n-weak p-4 text-left transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
             @click="askAgent(agent)"
           >
             <div class="flex items-start justify-between gap-2">
               <span
-                class="grid size-10 place-content-center rounded-xl bg-gradient-to-br from-cyan-50 to-violet-50 text-[#007a4f]"
+                class="grid size-10 place-content-center rounded-xl bg-gradient-to-br from-cyan-50 to-violet-50 text-n-blue-11"
               >
                 <i class="i-lucide-bot size-5" />
               </span>
@@ -950,17 +945,17 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
                 {{ statusLabel(agent.status) }}
               </span>
             </div>
-            <h3 class="mt-3 font-bold text-[#172033]">{{ agent.name }}</h3>
-            <p class="mt-1 text-xs leading-5 text-[#667085]">
+            <h3 class="mt-3 font-bold text-n-slate-12">{{ agent.name }}</h3>
+            <p class="mt-1 text-xs leading-5 text-n-slate-11">
               {{ agent.description }}
             </p>
             <p
-              class="mt-3 rounded-xl bg-[#f6f8fb] p-2.5 text-xs font-medium text-[#344054]"
+              class="mt-3 rounded-xl bg-n-slate-2 p-2.5 text-xs font-medium text-n-slate-12"
             >
               {{ agent.last_result }}
             </p>
             <span
-              class="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-blue-600"
+              class="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-n-blue-11"
             >
               Pedir análise <i class="i-lucide-arrow-up-right size-3" />
             </span>
@@ -974,18 +969,21 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
       class="fixed inset-0 z-[80] grid place-content-center bg-slate-950/40 p-4"
       @click.self="showPersonalize = false"
     >
-      <section class="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+      <section
+        class="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-3xl bg-n-solid-2 p-6 shadow-2xl"
+      >
         <div class="flex items-center justify-between">
           <div>
-            <h2 class="text-lg font-bold text-[#172033]">
+            <h2 class="text-lg font-bold text-n-slate-12">
               Personalizar Cockpit
             </h2>
-            <p class="text-xs text-[#667085]">
+            <p class="text-xs text-n-slate-11">
               Escolha os blocos visíveis para este usuário.
             </p>
           </div>
           <button
-            class="grid size-9 place-content-center rounded-xl bg-slate-100"
+            class="grid size-9 shrink-0 place-content-center rounded-xl bg-n-slate-3 text-n-slate-12 hover:bg-n-alpha-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-n-brand"
+            :aria-label="t('GENERAL.CLOSE')"
             @click="showPersonalize = false"
           >
             <i class="i-lucide-x size-4" />
@@ -995,9 +993,9 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
           <label
             v-for="item in personalizationItems"
             :key="item.key"
-            class="flex items-center justify-between rounded-xl border border-slate-200 p-3"
+            class="flex items-center justify-between rounded-xl border border-n-weak p-3"
           >
-            <span class="text-sm font-medium text-[#344054]">
+            <span class="text-sm font-medium text-n-slate-12">
               {{ item.label }}
             </span>
             <input
@@ -1008,7 +1006,7 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer));
           </label>
         </div>
         <button
-          class="mt-5 w-full rounded-xl bg-[#087ff5] py-3 text-sm font-semibold text-white"
+          class="mt-5 w-full rounded-xl bg-n-brand py-3 text-sm font-semibold text-white"
           @click="savePreferences"
         >
           Salvar preferências

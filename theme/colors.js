@@ -12,8 +12,35 @@ const {
   violet,
   violetDark,
 } = require('@radix-ui/colors');
+const tailwindColors = require('tailwindcss/colors');
 
 export const colors = {
+  // JRC screens use these Tailwind families alongside the existing Radix tokens.
+  // theme.colors replaces Tailwind's palette, so each family must be registered.
+  blue: tailwindColors.blue,
+  cyan: tailwindColors.cyan,
+  sky: tailwindColors.sky,
+  teal: tailwindColors.teal,
+  emerald: tailwindColors.emerald,
+  lime: tailwindColors.lime,
+  amber: tailwindColors.amber,
+  orange: tailwindColors.orange,
+  rose: tailwindColors.rose,
+  pink: tailwindColors.pink,
+  fuchsia: tailwindColors.fuchsia,
+  indigo: tailwindColors.indigo,
+  gray: tailwindColors.gray,
+  zinc: tailwindColors.zinc,
+  neutral: tailwindColors.neutral,
+  stone: tailwindColors.stone,
+  // Keep GoPure branding consistent in both application themes.
+  sidebar: {
+    surface: '#006b4b',
+    foreground: '#ffffff',
+    secondary: '#d1fae5',
+    muted: '#bce8d7',
+    active: '#00805a',
+  },
   woot: {
     25: blue.blue2,
     50: blue.blue3,
@@ -226,7 +253,8 @@ export const colors = {
     },
 
     black: '#000000',
-    brand: '#087CF0',
+    brand: '#0969C8',
+    'on-amber': '#4f3422',
     portal: 'var(--dynamic-portal-color)',
     'portal-soft': 'var(--dynamic-portal-color-soft)',
     'portal-faint': 'var(--dynamic-portal-color-faint)',

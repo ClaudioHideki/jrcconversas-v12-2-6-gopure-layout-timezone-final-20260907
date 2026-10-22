@@ -1,11 +1,12 @@
 require 'set'
 
 class JrcCampaigns::Sanitizer
-  def initialize(account:, user:, name:, entries:)
+  def initialize(account:, user:, name:, entries:, include_channel_statuses: true)
     @account = account
     @user = user
     @name = name
     @entries = entries
+    @include_channel_statuses = include_channel_statuses
   end
 
   def perform
@@ -30,6 +31,8 @@ class JrcCampaigns::Sanitizer
         stats[status] += 1
         stats['valid_phone'] += 1 if phone_status == 'valid'
         stats['valid_email'] += 1 if email_status == 'valid'
+        metadata = data.except(:name, :nome, :phone, :telefone, :phone_number, :celular, :email, :e_mail)
+        metadata = metadata.merge('phone_status' => phone_status, 'email_status' => email_status) if @include_channel_statuses
 
         list.entries.create!(
           name: data[:name] || data[:nome],
@@ -39,10 +42,7 @@ class JrcCampaigns::Sanitizer
           normalized_email: normalized_email,
           status: status,
           reason: reason,
-          metadata: data.except(:name, :nome, :phone, :telefone, :phone_number, :celular, :email, :e_mail).merge(
-            'phone_status' => phone_status,
-            'email_status' => email_status
-          )
+          metadata: metadata
         )
       end
 

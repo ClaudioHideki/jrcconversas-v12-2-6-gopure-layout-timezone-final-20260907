@@ -21,7 +21,7 @@ export const useCallHistoryStore = defineStore('callHistory', {
         // A newer fetch (filter/page change) superseded this one; drop the result.
         if (this.fetchRequestToken !== requestToken) return this.records;
         this.records = camelcaseKeys(data.payload, { deep: true });
-        this.meta = camelcaseKeys(data.meta, { deep: true });
+        this.meta = camelcaseKeys(data.meta);
         return this.records;
       } catch (error) {
         // Don't surface errors from a fetch that a newer request already replaced.

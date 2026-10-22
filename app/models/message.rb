@@ -45,6 +45,8 @@ class Message < ApplicationRecord
   include MessageFilterHelpers
   include WhatsappTemplateAuditable
   include Liquidable
+  include JrcServiceDesk::NotificationReceipts
+  include JrcRelationship::SurveyMessageReceipts
   NUMBER_OF_PERMITTED_ATTACHMENTS = 15
 
   TEMPLATE_PARAMS_SCHEMA = {

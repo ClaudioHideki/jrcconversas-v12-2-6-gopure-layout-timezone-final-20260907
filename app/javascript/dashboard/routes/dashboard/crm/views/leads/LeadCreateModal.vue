@@ -1,17 +1,23 @@
 <script setup>
-import { useCrmTheme } from '../../useCrmTheme';
 import { reactive, ref } from 'vue';
+import { useFormDraft } from '../../helpers/useFormDraft';
+import CompanyPicker from 'dashboard/routes/dashboard/jrcCustomers/components/CompanyPicker.vue';
+import { useCustomerMaster } from 'dashboard/routes/dashboard/jrcCustomers/useCustomerMaster';
+const props = defineProps({ contact: { type: Object, default: null } });
+const emit = defineEmits(['close', 'created']);
+const { enabled: hasCustomerMaster } = useCustomerMaster();
+const companyId = ref(null);
+import { crmControlClasses } from '../../crmControlClasses';
+
 import { useI18n } from 'vue-i18n';
 import { leadsAPI } from 'dashboard/api/crm';
 import { useAlert } from 'dashboard/composables';
 
-const { crmControlClasses } = useCrmTheme();
-const props = defineProps({ contact: { type: Object, default: null } });
-const emit = defineEmits(['close', 'created']);
 const { t } = useI18n();
 const saving = ref(false);
 const errorMessage = ref('');
 const contact = props.contact;
+companyId.value = contact?.company_id || contact?.companyId || null;
 const form = reactive({
   name: contact?.name || '',
   company_name:
@@ -28,20 +34,36 @@ const form = reactive({
   notes: '',
 });
 
+const activeDraft = ref(true);
+const initialForm = { ...form };
+const initialCompany = companyId.value;
+const draft = useFormDraft('crm:new_lead:' + (contact?.id || 'standalone'), {
+  active: activeDraft, snapshot: () => ({ form: { ...form }, company_id: companyId.value }),
+  restore: value => { Object.assign(form, value.form || {}); companyId.value = value.company_id || null; },
+  reset: () => { Object.assign(form, initialForm); companyId.value = initialCompany; },
+});
+draft.open();
 const close = () => {
-  if (!saving.value) emit('close');
+  if (!saving.value) { draft.flush(); activeDraft.value = false; emit('close'); }
 };
 const save = async () => {
+  const savingDraftKey = draft.key.value;
   if (saving.value) return;
   errorMessage.value = '';
   saving.value = true;
   try {
     const { data, status } = await leadsAPI.create({
-      lead: { ...form, ...(contact ? { contact_id: contact.id } : {}) },
+      lead: {
+        ...form,
+        ...(hasCustomerMaster.value ? { company_id: companyId.value } : {}),
+        ...(contact ? { contact_id: contact.id } : {}),
+      },
     });
     useAlert(
       status === 201 ? t('CRM.LEAD_FORM.SUCCESS') : t('CRM.LEAD_FORM.EXISTING')
     );
+    if (!draft.complete(savingDraftKey)) return;
+    activeDraft.value = false;
     emit('created', data);
   } catch (error) {
     const errors = error.response?.data?.errors;
@@ -104,7 +126,17 @@ const save = async () => {
           />
         </label>
         <div class="grid gap-3 sm:grid-cols-2">
-          <label class="text-sm text-n-slate-11">
+          <CompanyPicker
+            v-if="hasCustomerMaster"
+            v-model="companyId"
+            :disabled="saving"
+            @selected="
+              value => {
+                form.company_name = value?.name || '';
+              }
+            "
+          />
+          <label v-else class="text-sm text-n-slate-11">
             <span class="block">{{ t('CRM.LEAD_FORM.COMPANY') }}</span
             ><input
               v-model="form.company_name"
@@ -172,6 +204,7 @@ const save = async () => {
           {{ errorMessage }}
         </p>
         <div class="flex justify-end gap-2">
+          <button type="button" :disabled="saving" class="mr-auto rounded-xl border border-n-weak px-3 py-2" @click="draft.discard">{{ t('CRM.CREATION.DISCARD') }}</button>
           <button
             type="button"
             :disabled="saving"

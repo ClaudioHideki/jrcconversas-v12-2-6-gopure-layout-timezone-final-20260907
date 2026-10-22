@@ -8,6 +8,7 @@ module JrcCrm
     def as_json(_options = {})
       data = {
         id: @product.id,
+        business_unit_id: @product.business_unit_id,
         name: @product.name,
         sku: @product.sku,
         product_type: @product.product_type,
@@ -45,6 +46,7 @@ module JrcCrm
         fiscal_service_code: @product.fiscal_service_code,
         available_for: Array(@product.available_for),
         integrations: Array(@product.integrations),
+        document_rules: @product.document_rules,
         proposal_template_name: @product.proposal_template_name,
         contract_template_name: @product.contract_template_name,
         sales_notes: @product.sales_notes,
@@ -59,11 +61,17 @@ module JrcCrm
 
       return data unless @include_commercial_sensitive
 
-      data.merge(
+      data.merge(commercial_sensitive_fields)
+    end
+
+    private
+
+    def commercial_sensitive_fields
+      {
         cost_cents: @product.cost_cents,
         estimated_margin_cents: @product.estimated_margin_cents,
         estimated_margin_percent: @product.estimated_margin_percent
-      )
+      }
     end
   end
 end

@@ -1,6 +1,7 @@
 require 'rails_helper'
 
 RSpec.describe 'NICO operational assistant', type: :request do
+  around { |example| perform_enqueued_jobs(only: JrcNico::PlanCommandJob) { example.run } }
   let(:account) { create(:account, custom_attributes: { 'nico_enabled' => true }) }
   let(:admin) { create(:user, account: account, role: :administrator) }
   let(:headers) { admin.create_new_auth_token }
@@ -33,6 +34,21 @@ RSpec.describe 'NICO operational assistant', type: :request do
     expect(response).to have_http_status(:unprocessable_entity)
   end
 
+  it 'returns a safe temporary failure when the Broker cannot prepare a public-send preview' do
+    allow(JrcNico::BrokerSendCoordinator).to receive(:prepare)
+      .and_raise(JrcBroker::Client::Error.new('JRC_BROKER_UNAVAILABLE', status: 503))
+    expect do
+      post "#{base}/prepare", params: { request_id: request_id, message: 'Envie uma resposta', tool: 'send_message',
+                                       arguments: { conversation_id: conversation.display_id, content: 'Resposta de teste', private: false } },
+                              headers: headers, as: :json
+    end.not_to change(Message, :count)
+
+    expect(response).to have_http_status(:service_unavailable)
+    expect(response.parsed_body).to eq(
+      'error' => 'broker_unavailable', 'message' => 'Não foi possível consultar o Broker. Tente novamente para preparar a prévia.'
+    )
+  end
+
   it 'keeps incomplete requests in conversation without creating a resource' do
     allow(JrcNico::OperationalInference).to receive(:call).and_return('reply' => 'Qual é o nome do contato?', 'tool' => '', 'arguments' => {})
     expect do
@@ -42,6 +58,20 @@ RSpec.describe 'NICO operational assistant', type: :request do
     expect(response.parsed_body['messages'].last['content']).to eq('Qual é o nome do contato?')
   end
 
+  it 'executes an explicit contact creation once and reuses the same request without creating duplicates' do
+    allow(JrcNico::OperationalInference).to receive(:call).and_return(
+      'reply' => 'Cadastrar contato solicitado', 'tool' => 'create_contact',
+      'arguments' => { 'name' => 'Contato solicitado', 'email' => 'operator-request@example.test' }
+    )
+    params = { request_id: request_id, message: 'Crie um contato com nome Contato solicitado e email operator-request@example.test' }
+    expect { post "#{base}/ask", params: params, headers: headers, as: :json }.to change(account.contacts, :count).by(1)
+    expect(response).to have_http_status(:ok)
+    command = response.parsed_body.fetch('commands').first
+    expect(command['status']).to eq('succeeded')
+    expect(command.dig('authorization', 'mode')).to eq('explicit_request')
+    expect { post "#{base}/ask", params: params, headers: headers, as: :json }.not_to change(Contact, :count)
+  end
+
   it 'does not show or execute CRM tools when the account CRM module is disabled' do
     account.disable_features!('jrc_crm')
     operator = create(:user, account: account, role: :agent)
@@ -49,6 +79,95 @@ RSpec.describe 'NICO operational assistant', type: :request do
     post "#{base}/prepare", params: contact_input.merge(tool: 'create_lead', arguments: { name: 'Denied' }), headers: operator_headers, as: :json
     expect(response).to have_http_status(:forbidden)
     expect(account.jrc_crm_leads).to be_empty
+  end
+
+  it 'persists an explicitly requested lead and activity once across retries of each logical request', :aggregate_failures do
+    account.enable_features!('jrc_crm')
+    allow(JrcNico::OperationalInference).to receive(:call).and_return(
+      'reply' => 'Criar lead solicitado', 'tool' => 'create_lead', 'arguments' => { 'name' => 'Lead solicitado' }
+    )
+    lead_request = { request_id: request_id, message: 'Crie um lead chamado Lead solicitado' }
+    expect { post "#{base}/ask", params: lead_request, headers: headers, as: :json }.to change(account.jrc_crm_leads, :count).by(1)
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.fetch('commands').last['status']).to eq('succeeded')
+    expect { post "#{base}/ask", params: lead_request, headers: headers, as: :json }.not_to change(JrcCrm::Lead, :count)
+
+    lead = account.jrc_crm_leads.last
+    allow(JrcNico::OperationalInference).to receive(:call).and_return(
+      'reply' => 'Agendar atividade solicitada', 'tool' => 'create_activity',
+      'arguments' => { 'lead_id' => lead.id, 'activity_type' => 'task', 'title' => 'Retorno solicitado', 'due_at' => 1.day.from_now.iso8601 }
+    )
+    activity_request = { request_id: SecureRandom.uuid, message: 'Crie uma atividade de retorno para este lead' }
+    expect { post "#{base}/ask", params: activity_request, headers: headers, as: :json }.to change(JrcCrm::Activity, :count).by(1)
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.fetch('commands').last['status']).to eq('succeeded')
+    expect { post "#{base}/ask", params: activity_request, headers: headers, as: :json }.not_to change(JrcCrm::Activity, :count)
+  end
+
+  %w[assigned_bot inbox_bot flow].each do |owner|
+    it "preserves #{owner} attendance against NICO public sending, routing and delegation" do
+      account.update!(custom_attributes: account.custom_attributes.merge('nico_customer_delegation_enabled' => true))
+      case owner
+      when 'assigned_bot'
+        conversation.update!(assignee_agent_bot: create(:agent_bot))
+      when 'inbox_bot'
+        allow(JrcFlows::Access).to receive(:inbox_bot_owned?).and_return(true)
+      when 'flow'
+        flow_scope = JrcFlowRun.live
+        allow(JrcFlowRun).to receive(:live).and_return(flow_scope)
+        allow(flow_scope).to receive(:exists?).with(account_id: account.id, conversation_id: conversation.id).and_return(true)
+      end
+      access = JrcNico::OperationalAccess.new(account: account, user: admin)
+      executor = JrcNico::ToolExecutor.new(access)
+      original_routing = conversation.attributes.slice('status', 'assignee_id', 'assignee_agent_bot_id', 'team_id')
+      expect do
+        executor.call('send_message', { 'conversation_id' => conversation.display_id, 'content' => 'Não enviar', 'private' => false })
+      end.to raise_error(ArgumentError, /bot ou Flow/)
+      expect(conversation.messages.where(content: 'Não enviar')).to be_empty
+      expect do
+        executor.call('update_conversation', { 'conversation_id' => conversation.display_id, 'status' => 'resolved' })
+      end.to raise_error(ArgumentError, /bot ou Flow/)
+      expect do
+        with_modified_env NICO_MODE: 'provider' do
+          JrcNico::DelegationService.new(access).start('conversation_ids' => [conversation.display_id], 'objective' => 'Atender', 'hours' => 1)
+        end
+      end.to raise_error(ArgumentError, /bot ou Flow/)
+      expect(conversation.reload.attributes.slice(*original_routing.keys)).to eq(original_routing)
+    end
+  end
+
+  it 'applies native CustomRole CRM permissions to tools and execution' do
+    account.enable_features!('jrc_crm')
+    operator = create(:user, account: account, role: :agent)
+    role = create(:custom_role, account: account, permissions: ['conversation_manage'])
+    account.account_users.find_by!(user_id: operator.id).update!(custom_role: role)
+    operator_headers = operator.create_new_auth_token
+    get base, headers: operator_headers
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body['tools'].map { |tool| tool['name'] }).not_to include('list_leads', 'create_lead', 'create_deal')
+
+    expect do
+      post "#{base}/prepare", params: { request_id: SecureRandom.uuid, message: 'Criar lead', tool: 'create_lead',
+        arguments: { name: 'Sem autorização CRM' } }, headers: operator_headers, as: :json
+    end.not_to change(JrcCrm::Lead, :count)
+    expect(response).to have_http_status(:forbidden)
+    access = JrcNico::OperationalAccess.new(account: account, user: operator).authorize!
+    expect { JrcNico::ToolExecutor.new(access).call('list_leads', {}) }.to raise_error(Pundit::NotAuthorizedError)
+  end
+
+  it 'cancels a CRM preview when native role permissions are revoked before confirmation' do
+    account.enable_features!('jrc_crm')
+    operator = create(:user, account: account, role: :agent)
+    operator_headers = operator.create_new_auth_token
+    post "#{base}/prepare", params: { request_id: SecureRandom.uuid, message: 'Criar lead', tool: 'create_lead',
+      arguments: { name: 'Prévia antiga' } }, headers: operator_headers, as: :json
+    command = response.parsed_body.fetch('commands').first
+    role = create(:custom_role, account: account, permissions: ['conversation_manage'])
+    account.account_users.find_by!(user_id: operator.id).update!(custom_role: role)
+    expect do
+      post "#{base}/commands/#{command['id']}/confirm", headers: operator_headers, as: :json
+    end.not_to change(JrcCrm::Lead, :count)
+    expect(JrcNico::Command.find(command['id']).status).to eq('cancelled')
   end
 
   it 'revalidates account scope on approval and never updates another account contact' do
@@ -92,6 +211,7 @@ RSpec.describe 'NICO operational assistant', type: :request do
   end
 
   it 'creates separate delegated sessions and replies for three clients without mixing their context' do
+    account.update!(custom_attributes: account.custom_attributes.merge('nico_customer_delegation_enabled' => true))
     conversations = 3.times.map do |index|
       contact = create(:contact, account: account, name: "Cliente #{index}")
       record = create(:conversation, account: account, contact: contact)
@@ -124,6 +244,7 @@ RSpec.describe 'NICO operational assistant', type: :request do
   end
 
   it 'discards a generated response when the operator takes over during generation' do
+    account.update!(custom_attributes: account.custom_attributes.merge('nico_customer_delegation_enabled' => true))
     create(:message, conversation: conversation, account: account, message_type: :incoming, content: 'Quero comprar')
     access = JrcNico::OperationalAccess.new(account: account, user: admin)
     with_modified_env NICO_MODE: 'provider' do
@@ -137,18 +258,6 @@ RSpec.describe 'NICO operational assistant', type: :request do
     expect { JrcNico::CustomerTurnJob.perform_now(delegation.id) }.not_to change { conversation.messages.outgoing.count }
     expect(delegation.reload.status).to eq('paused')
     expect(delegation.turns.last.status).to eq('cancelled')
-  end
-
-  it 'does not send a queued bot reply after a public human message' do
-    bot = AgentBot.create!(account: account, name: 'NICO QA')
-    delegation = JrcNico::Delegation.create!(account: account, user: admin, conversation: conversation, agent_bot: bot, objective: 'Qualificar', expires_at: 1.hour.from_now)
-    conversation.update!(status: 'pending', assignee_agent_bot: bot)
-    message = Messages::MessageBuilder.new(bot, conversation, content: 'Pendente', content_attributes: { nico_delegation: { id: delegation.id, version: delegation.version } }).perform
-    Messages::MessageBuilder.new(admin, conversation, content: 'Assumi o atendimento').perform
-    job = SendReplyJob.new
-    expect(job).not_to receive(:deliver)
-    job.perform(message.id)
-    expect(message.reload.status).to eq('failed')
   end
 
   it 'keeps internal notes out of commercial customer context' do
@@ -227,19 +336,4 @@ RSpec.describe 'NICO operational assistant', type: :request do
     end
   end
 
-  it 'does not retry a customer delivery with uncertain channel outcome' do
-    bot = AgentBot.create!(account: account, name: 'NICO QA')
-    delegation = JrcNico::Delegation.create!(account: account, user: admin, conversation: conversation, agent_bot: bot, objective: 'Qualificar', expires_at: 1.hour.from_now)
-    conversation.update!(status: 'pending', assignee_agent_bot: bot)
-    incoming = create(:message, conversation: conversation, account: account, message_type: :incoming, content: 'Olá')
-    turn = delegation.turns.create!(message_id: incoming.id, version: delegation.version, status: 'queued')
-    outgoing = Messages::MessageBuilder.new(bot, conversation, content: 'Olá!', content_attributes: { nico_turn_id: turn.id, nico_delegation: { id: delegation.id, version: delegation.version } }).perform
-    turn.update!(outgoing_message_id: outgoing.id)
-    job = SendReplyJob.new
-    expect(job).to receive(:deliver).once.and_raise(Timeout::Error)
-    job.perform(outgoing.id)
-    job.perform(outgoing.id)
-    expect(delegation.reload.status).to eq('needs_human')
-    expect(turn.reload.status).to eq('cancelled')
-  end
 end

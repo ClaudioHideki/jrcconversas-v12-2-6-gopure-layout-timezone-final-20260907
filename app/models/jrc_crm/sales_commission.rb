@@ -51,7 +51,8 @@ module JrcCrm
     belongs_to :user
 
     enum status: { forecast: 'forecast', pending_approval: 'pending_approval', released: 'released', paid: 'paid', reversed: 'reversed' }
-    before_validation :calculate_amount, unless: :calculation_supplied?
+    before_validation :calculate_amount, unless: :skip_amount_calculation?
+    validate :preserve_final_commission
 
     validates :rate_percent, numericality: { greater_than_or_equal_to: 0 }
     validates :share_percent, numericality: { greater_than: 0, less_than_or_equal_to: 100 }, allow_nil: true
@@ -63,8 +64,24 @@ module JrcCrm
 
     private
 
+    def skip_amount_calculation?
+      (persisted? && CommissionProtection.final?(attribute_in_database('status'))) || calculation_supplied?
+    end
+
+    def preserve_final_commission
+      return unless persisted? && CommissionProtection.final?(attribute_in_database('status'))
+      changed = CommissionProtection.changed_fields(changes_to_save)
+      errors.add(:base, "Comissao finalizada: campos financeiros imutaveis (#{changed.join(', ')}). Estorne explicitamente para registrar um ajuste separado.") if changed.any?
+      if attribute_in_database('status') == 'paid' && !%w[paid reversed].include?(status)
+        errors.add(:status, 'comissao paga somente permite estorno explicito')
+      end
+      if attribute_in_database('status') == 'reversed' && will_save_change_to_status?
+        errors.add(:status, 'uma comissao estornada nao pode ser reaberta')
+      end
+    end
+
     def calculation_supplied?
-      calculation.is_a?(Hash) && calculation['commission_cents'].present?
+      calculation.is_a?(Hash) && (calculation['commission_cents'].present? || calculation[:commission_cents].present?)
     end
 
     def associations_belong_to_account

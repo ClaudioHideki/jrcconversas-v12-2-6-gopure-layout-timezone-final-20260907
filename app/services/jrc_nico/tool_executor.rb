@@ -1,12 +1,21 @@
 class JrcNico::ToolExecutor
-  def initialize(access, customer_notice: nil)
+  def initialize(access, customer_notice: nil, command: nil)
     @access = access.authorize!
-    @account, @user = access.account, access.user
+    @account = access.account
+    @user = access.user
     @customer_conversation = customer_notice && @access.conversation(customer_notice.conversation.display_id)
+    @customer_notice = customer_notice
+    @command = command
   end
 
   def call(name, arguments)
+    JrcNico::Helpdesk::ExecutionGuard.authorize!(@access, @command)
     JrcNico::ToolCatalog.new(@access).validate!(name, arguments)
+    raise Pundit::NotAuthorizedError if internal_tool?(name) && (@customer_notice || @command&.source_notice_id)
+
+    return JrcNico::DomainActions.new(@access, command: @command).call(name, arguments) if JrcNico::DomainToolCatalog::TOOLS.key?(name)
+    return JrcNico::HelpdeskToolActions.new(@access, command: @command).call(name, arguments) if JrcNico::HelpdeskToolCatalog::TOOLS.key?(name)
+    return JrcNico::AutomationActions.new(@access).call(name, arguments) if JrcNico::AutomationActions::TOOLS.key?(name)
     return JrcNico::CommercialActions.new(@access).call(name, arguments) if JrcNico::CommercialActions::TOOLS.include?(name)
     return JrcNico::ModuleActions.new(@access).prepare(name, arguments) if JrcNico::ModuleActions::TOOLS.key?(name)
 
@@ -15,19 +24,24 @@ class JrcNico::ToolExecutor
     public_send(name)
   end
 
+  def internal_tool?(name)
+    JrcNico::DomainToolCatalog::TOOLS.key?(name) || JrcNico::HelpdeskToolCatalog::TOOLS.key?(name) ||
+      JrcNico::ModuleActions::PROJECT_TASK_TOOLS.include?(name)
+  end
+
   def search_contacts
     query = "%#{ActiveRecord::Base.sanitize_sql_like(@args.fetch('query'))}%"
     scope = @account.contacts
     scope = scope.where(id: @customer_conversation.contact_id) if @customer_conversation
     scope.where('name ILIKE :q OR email ILIKE :q OR phone_number ILIKE :q', q: query).limit(20)
-            .select { |c| @access.policy(c).show? }.map { |c| c.slice(:id, :name, :email, :phone_number) }
+         .select { |c| @access.policy(c).show? }.map { |c| contact_snapshot(c) }
   end
 
   def list_contacts
     scope = @account.contacts
     scope = scope.where(id: @customer_conversation.contact_id) if @customer_conversation
     scope.order(id: :desc).limit(20)
-         .select { |c| @access.policy(c).show? }.map { |c| c.slice(:id, :name, :email, :phone_number) }
+         .select { |c| @access.policy(c).show? }.map { |c| contact_snapshot(c) }
   end
 
   def count_contacts
@@ -64,16 +78,47 @@ class JrcNico::ToolExecutor
     end.first(20).map { |c| conversation_snapshot(c) }
   end
 
+  def conversation_opportunity_batch
+    conversations = @customer_conversation ? [@customer_conversation] : @access.conversations
+    conversations = conversations.select { |record| record.status == @args['status'] } if @args['status'].present?
+    page = @args.fetch('page', 1)
+    batch = conversations.slice((page - 1) * 10, 10) || []
+    { scope: 'Amostra das 200 conversas recentes da conta, filtrada pelas permissões do operador; não representa todo o histórico.',
+      visible_in_sample: conversations.size, page: page, next_page: page * 10 < conversations.size ? page + 1 : nil,
+      statuses: @args['status'].presence || 'all', message_limit: 5,
+      conversations: batch.map do |conversation|
+        leads = @access.crm? ? @access.crm_scope(JrcCrm::Lead).where(contact_id: conversation.contact_id).limit(20).pluck(:id) : []
+        conversation_snapshot(conversation).merge(lead_ids: leads,
+                                                  messages: conversation_sample_messages(conversation))
+      end }
+  end
+
+  def conversation_sample_messages(conversation)
+    conversation.messages.where(private: false, message_type: [:incoming, :outgoing]).reorder(id: :desc).limit(5).reverse.map do |message|
+      { id: message.id, message_type: message.message_type, content: message.content.to_s.first(300), created_at: message.created_at }
+    end
+  end
+
   def read_conversation
     conversation = @access.conversation(@args.fetch('conversation_id'))
-    conversation_snapshot(conversation).merge(messages: conversation.messages.where(private: false).order(id: :desc).limit(30).reverse.map do |m|
+    conversation_snapshot(conversation).merge(messages: conversation.messages.where(private: false).reorder(id: :desc).limit(30).reverse.map do |m|
       m.slice(:id, :message_type, :content, :status, :created_at)
     end)
   end
 
   def send_message
     conversation = @access.conversation(@args.fetch('conversation_id'))
-    message = Messages::MessageBuilder.new(@user, conversation, @args.slice('content', 'private').symbolize_keys).perform
+    message = conversation.with_lock do
+      if @args['private'] != true && JrcNico::BrokerSendBinding.resolve(account_id: @account.id, inbox_id: conversation.inbox_id)
+        raise ArgumentError, 'Esta caixa possui um vínculo Flow/Broker. Prepare uma nova prévia de envio coordenado.'
+      end
+      if @args['private'] != true && (conversation.assignee_agent_bot_id.present? || JrcFlows::Access.inbox_bot_owned?(conversation) ||
+                                  JrcFlowRun.live.exists?(account_id: @account.id, conversation_id: conversation.id))
+        raise ArgumentError, 'Esta conversa está sob atendimento de um bot ou Flow. Use a transferência para humano antes de enviar pelo NICO.'
+      end
+
+      Messages::MessageBuilder.new(@user, conversation, @args.slice('content', 'private').symbolize_keys).perform
+    end
     { message: @args['private'] ? 'Nota interna registrada' : 'Mensagem registrada para envio pelo canal',
       id: message.id, status: message.status, conversation_id: conversation.display_id, route_name: 'home' }
   end
@@ -81,6 +126,11 @@ class JrcNico::ToolExecutor
   def update_conversation
     conversation = @access.conversation(@args.fetch('conversation_id'))
     conversation.with_lock do
+      if @args.keys.intersect?(%w[status assignee_id team_id]) &&
+         (conversation.assignee_agent_bot_id.present? || JrcFlows::Access.inbox_bot_owned?(conversation) ||
+          JrcFlowRun.live.exists?(account_id: @account.id, conversation_id: conversation.id))
+        raise ArgumentError, 'Esta conversa pertence a um bot ou Flow. Faça a transferência para humano no fluxo responsável.'
+      end
       JrcNico::DelegationService.stop(conversation, reason: 'operator_action')
       conversation.reload
       if @args['assignee_id']
@@ -109,12 +159,14 @@ class JrcNico::ToolExecutor
 
   def search_knowledge
     JrcNico::KnowledgeDocument.where(account: @account).approved
-      .where("to_tsvector('portuguese', title || ' ' || body) @@ plainto_tsquery('portuguese', ?)", @args.fetch('query'))
-      .limit(5).map { |d| { id: d.id, resource_type: d.class.name, title: d.title, body: d.body.first(4000) } }
+                              .where("to_tsvector('portuguese', title || ' ' || body) @@ plainto_tsquery('portuguese', ?)", @args.fetch('query'))
+                              .limit(5).map { |d| { id: d.id, resource_type: d.class.name, title: d.title, body: d.body.first(4000) } }
   end
 
   def delegate_conversations
-    JrcNico::DelegationService.new(@access).start(@args)
+    delegations = JrcNico::DelegationService.new(@access).start(@args)
+    { message: "Atendimento temporário delegado em #{delegations.size} conversa(s). Nenhuma regra recorrente foi criada.",
+      operation_kind: 'temporary_delegation', conversations: delegations }
   end
 
   def take_over
@@ -146,16 +198,10 @@ class JrcNico::ToolExecutor
       attrs['name'] ||= contact&.name
       attrs['email'] ||= contact&.email
       attrs['phone'] ||= contact&.phone_number
-      result = JrcCrm::LeadCreationService.new(
-        account: @account, actor: @user, attributes: attrs.merge(contact_id: contact&.id, owner: @user, source: 'nico')
-      ).call do |resolved_contact|
-        action = resolved_contact.new_record? ? :create? : :show?
-        raise Pundit::NotAuthorizedError unless @access.policy(resolved_contact).public_send(action)
+      existing = contact && @access.crm_scope(JrcCrm::Lead).where(contact_id: contact.id).limit(21).to_a
+      raise ArgumentError, "Há vários leads para este contato. Selecione o ID: #{existing.map(&:id).join(', ')}." if existing && existing.size > 1
 
-        existing = @account.jrc_crm_leads.where(contact_id: resolved_contact.id).first if resolved_contact.persisted?
-        @access.crm_scope(JrcCrm::Lead).find(existing.id) if existing
-      end
-      lead = result.fetch(:lead)
+      lead = existing&.first || @account.jrc_crm_leads.create!(attrs.merge(contact: contact, owner: @user, source: 'nico'))
     end
     record_result(lead, 'Lead criado ou reutilizado', 'crm_leads')
   end
@@ -218,12 +264,13 @@ class JrcNico::ToolExecutor
     if @args['activity_type'] == 'meeting' && @account.jrc_crm_activities.where(user: @user, activity_type: 'meeting', status: 'scheduled', due_at: due_at).exists?
       raise ArgumentError, 'Já existe uma reunião do operador neste horário. Confirme outro horário antes de agendar.'
     end
+
     activity = @account.jrc_crm_activities.new(@args.slice('title', 'activity_type', 'description').merge(
       user: @user, lead: lead, deal: deal, due_at: due_at))
     result = JrcCrm::ActivityDispatchService.new(activity: activity, actor: @user).call
     raise ArgumentError, result[:error].to_s unless result[:success]
 
-    record_result(activity, 'Atividade agendada; não envia mensagem nem inicia ligação', 'crm_activities')
+    record_result(activity, 'Atividade agendada; nenhum convite externo foi enviado', 'crm_activities')
   end
 
   def update_activity
@@ -331,7 +378,19 @@ class JrcNico::ToolExecutor
     name = @args.fetch('route_name')
     raise ArgumentError, 'Módulo desconhecido.' unless JrcCopilot::TaskCatalog::ROUTE_GUIDES.key?(name)
 
-    { route_name: name, message: "Abrir #{JrcCopilot::TaskCatalog::ROUTE_GUIDES[name][:title]}" }
+    { route_name: name, navigate: true, message: "Abrir #{JrcCopilot::TaskCatalog::ROUTE_GUIDES[name][:title]}" }
+  end
+
+  def open_conversation
+    conversation = @access.conversation(@args.fetch('conversation_id'))
+    { route_name: 'inbox_dashboard', conversation_id: conversation.display_id, navigate: true,
+      message: "Abrir conversa ##{conversation.display_id}" }
+  end
+
+  def analyze_conversation_sentiment
+    raise Pundit::NotAuthorizedError if @customer_notice || @command&.source_notice_id
+
+    JrcAi::ConversationSentiment.call(@access, @args.fetch('conversation_id'))
   end
 
   def account_profile
@@ -360,13 +419,15 @@ class JrcNico::ToolExecutor
   end
 
   def record_result(record, message, route)
-    { message: "#{message}: #{record.attributes['name'] || record.attributes['title']} (##{record.id})", resource_type: record.class.name, record: record.attributes.slice('id', 'name', 'title', 'status', 'phone_number', 'email',
-      'contact_id', 'lead_id', 'deal_id', 'due_at', 'total_cents'), route_name: route }
+    JrcNico::ToolResultProjection.new(@access, account: @account).record_result(record, message, route)
+  end
+
+  def contact_snapshot(contact)
+    JrcNico::ToolResultProjection.new(@access, account: @account).contact_snapshot(contact)
   end
 
   def conversation_snapshot(conversation)
-    { conversation_id: conversation.display_id, contact_id: conversation.contact_id, contact_name: conversation.contact.name,
-      status: conversation.status, inbox_id: conversation.inbox_id, channel: conversation.inbox.channel_type }
+    JrcNico::ToolResultProjection.new(@access, account: @account).conversation_snapshot(conversation)
   end
 
   def parse_time(value)

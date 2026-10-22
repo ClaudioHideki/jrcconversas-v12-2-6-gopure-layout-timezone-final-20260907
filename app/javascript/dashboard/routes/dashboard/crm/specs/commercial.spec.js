@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   },
   contacts: { get: vi.fn(), search: vi.fn(), show: vi.fn() },
   products: { list: vi.fn() },
-  orders: { preview: vi.fn(), create: vi.fn() },
+  orders: { preview: vi.fn(), create: vi.fn(), selectionOptions: vi.fn() },
   push: vi.fn(),
   alert: vi.fn(),
 }));
@@ -51,7 +51,15 @@ const wrappers = [];
 const render = (component, extra = {}) => {
   const wrapper = mount(component, {
     global: {
-      plugins: [i18n()],
+      plugins: [
+        i18n(),
+        {
+          install: app => {
+            app.config.globalProperties.$store = { getters: mocks.getters };
+          },
+        },
+      ],
+      mocks: { $store: { getters: mocks.getters } },
       stubs: { RouterLink: { template: '<a><slot /></a>' }, ...extra },
     },
   });
@@ -83,8 +91,22 @@ const pickerStub = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
   mocks.route = reactive({ params: { accountId: '2' }, query: {} });
   mocks.getters.getCurrentRole = 'administrator';
+  mocks.getters.getCurrentUser = { id: 9 };
+  mocks.getters['accounts/isFeatureEnabledonAccount'] = () => false;
+  mocks.orders.selectionOptions.mockResolvedValue({
+    data: {
+      selected_contact: {
+        id: 141,
+        name: 'Cliente real',
+        phone_number: '+5511999888877',
+      },
+      deals: [],
+      proposals: [],
+    },
+  });
   mocks.contacts.get.mockResolvedValue({
     data: { payload: [{ id: 10, name: 'Página um' }], meta: { count: 94 } },
   });
@@ -185,20 +207,33 @@ describe('Customer selector across pages', () => {
     expect(wrapper.text()).toContain('João página 30');
   });
   it('removes already displayed contacts immediately while the next account is loading', async () => {
-    mocks.contacts.get.mockResolvedValueOnce({ data: {payload: [{id: 991, name: 'Contato conta anterior'}], meta: {count: 1}} });
+    mocks.contacts.get.mockResolvedValueOnce({
+      data: {
+        payload: [{ id: 991, name: 'Contato conta anterior' }],
+        meta: { count: 1 },
+      },
+    });
     const wrapper = render(ContactPicker);
     await flushPromises();
     expect(wrapper.text()).toContain('Contato conta anterior');
     let finish;
-    mocks.contacts.get.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    mocks.contacts.get.mockReturnValueOnce(
+      new Promise(resolve => {
+        finish = resolve;
+      })
+    );
     mocks.route.params.accountId = '3';
     await nextTick();
     expect(wrapper.text()).not.toContain('Contato conta anterior');
-    finish({ data: {payload: [{id: 992, name: 'Contato conta nova'}], meta: {count: 1}} });
+    finish({
+      data: {
+        payload: [{ id: 992, name: 'Contato conta nova' }],
+        meta: { count: 1 },
+      },
+    });
     await flushPromises();
     expect(wrapper.text()).toContain('Contato conta nova');
   });
-
 });
 
 describe('Sales order workflow', () => {

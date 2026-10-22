@@ -17,11 +17,15 @@ import { openVideoConferencePopup } from 'dashboard/helper/videoConference';
 import { useCallsStore } from 'dashboard/stores/calls';
 import { useSipWebphone } from 'dashboard/routes/dashboard/webphone/useSipWebphone';
 import { useJrcCopilot } from './useJrcCopilot';
-import { useNicoVoice } from './useNicoVoice';
+import { useNicoVoiceConversation } from './useNicoVoiceConversation';
 import JrcCopilotQuickPanel from './JrcCopilotQuickPanel.vue';
 import NicoComposer from './NicoComposer.vue';
 import NicoInteractionStatus from './NicoInteractionStatus.vue';
+import NicoWorkflowSummary from './NicoWorkflowSummary.vue';
+import NicoChatMessages from './NicoChatMessages.vue';
+import NicoAnalysisProvenance from './NicoAnalysisProvenance.vue';
 import { nicoInteractionState } from './nicoInteractionState';
+import { createNicoAsyncCompletion } from './nicoAsyncCompletion';
 import NicoKnowledgePanel from './NicoKnowledgePanel.vue';
 import NicoConversationPanel from './NicoConversationPanel.vue';
 import { runNicoBrowserAction } from './nicoBrowserActions';
@@ -73,7 +77,11 @@ const input = ref('');
 const busy = ref(false);
 const phase = ref('submitting');
 const error = ref('');
+const syncError = ref('');
+let pendingRequest;
+let submittingRequest = false;
 const emptyState = () => ({
+  capacity: null,
   messages: [],
   commands: [],
   delegations: [],
@@ -81,6 +89,12 @@ const emptyState = () => ({
   tools: [],
 });
 const state = ref(emptyState());
+const completions = createNicoAsyncCompletion();
+const processing = computed(
+  () =>
+    busy.value ||
+    state.value.commands.some(command => command.status === 'planning')
+);
 const scroller = ref(null);
 const scrollToCurrent = () => {
   const target =
@@ -91,6 +105,26 @@ const scrollToCurrent = () => {
 const panelRoot = ref(null);
 const delegateForm = ref(false);
 const knowledgeOpen = ref(false);
+const secondaryOpen = ref(false);
+const secondaryPanel = ref(null);
+const delegationPanel = ref(null);
+const knowledgePanel = ref(null);
+const focusPanel = async panel => {
+  await nextTick();
+  panel.value?.scrollIntoView({ block: 'nearest' });
+  const control = panel.value?.querySelector('input, textarea, select, button');
+  (control || panel.value)?.focus();
+};
+const toggleKnowledge = async () => {
+  knowledgeOpen.value = !knowledgeOpen.value;
+  if (knowledgeOpen.value) await focusPanel(knowledgePanel);
+};
+const openOptions = async () => {
+  secondaryOpen.value = true;
+  open();
+  await nextTick();
+  secondaryPanel.value?.scrollIntoView({ block: 'nearest' });
+};
 const choices = ref([]);
 const selected = ref([]);
 const objective = ref('');
@@ -113,17 +147,32 @@ const sip = useSipWebphone();
 const whatsapp = useWhatsappCallSession();
 const calls = useCallsStore();
 const inCall = computed(
-  () => sip.hasCall.value || calls.hasActiveCall || calls.hasIncomingCall
+  () =>
+    sip.hasCall.value ||
+    calls.hasActiveCall ||
+    calls.hasIncomingCall ||
+    whatsapp.isInitiating?.value
 );
-const voice = useNicoVoice({
+const voice = useNicoVoiceConversation({
   transcribe: (audio, signal) => api.transcribe(accountId.value, audio, signal),
   onTranscript: text => {
     input.value = text;
   },
   // eslint-disable-next-line no-use-before-define -- The callback runs after setup and shares the manual ask handler.
-  onSubmit: text => ask(text),
+  onSubmit: text => ask(text, { voiceTurn: true }),
   context: computed(() => `${accountId.value}:${conversationId.value || ''}`),
-  canSubmit: computed(() => visible.value && !busy.value),
+  canSubmit: computed(() => visible.value && !processing.value),
+  active: visible,
+  pendingApproval: computed(() =>
+    state.value.commands.some(command =>
+      [
+        'awaiting_confirmation',
+        'browser_pending',
+        'executing',
+        'unknown',
+      ].includes(command.status)
+    )
+  ),
   inCall,
 });
 const pending = computed(() =>
@@ -150,13 +199,10 @@ const activeCommand = computed(() =>
       )
     : latest.value
 );
-const hasOperation = computed(() =>
-  Boolean((busy.value || activeCommand.value) && !voice.error.value)
-);
 const interactionState = computed(() =>
   nicoInteractionState({
     voice,
-    busy: busy.value,
+    busy: processing.value,
     phase: phase.value,
     error: error.value,
     command: activeCommand.value,
@@ -167,9 +213,27 @@ const unreadNotices = computed(() =>
 );
 const quickReply = computed(
   () =>
-    state.value.messages.filter(message => message.role === 'assistant').at(-1)
-      ?.content || ''
+    (activeCommand.value?.result?.broker_send
+      ? activeCommand.value.reply
+      : state.value.messages
+          .filter(message => message.role === 'assistant')
+          .at(-1)?.content) || ''
 );
+const brokerReceipt = computed(() => latest.value?.result?.broker_send);
+const brokerDeliveryLabel = computed(() => {
+  switch (brokerReceipt.value?.delivery) {
+    case 'sent':
+      return t('JRC_NICO.OPERATOR.BROKER_DELIVERY.sent');
+    case 'delivered':
+      return t('JRC_NICO.OPERATOR.BROKER_DELIVERY.delivered');
+    case 'read':
+      return t('JRC_NICO.OPERATOR.BROKER_DELIVERY.read');
+    case 'failed':
+      return t('JRC_NICO.OPERATOR.BROKER_DELIVERY.failed');
+    default:
+      return t('JRC_NICO.OPERATOR.BROKER_DELIVERY.unknown');
+  }
+});
 const receipts = computed(() =>
   state.value.commands
     .filter(c => c.status === 'succeeded' && c.result?.record?.id)
@@ -179,33 +243,67 @@ let version = 0;
 let loadVersion = 0;
 let poll;
 let abort;
-const apply = data => {
+const apply = async data => {
   state.value = data;
   suggestionCount.value =
     data.suggestions.length +
     data.delegations.filter(d => d.status === 'needs_human').length;
+  const current = version;
+  await completions.consume(data.commands).reduce(async (previous, command) => {
+    await previous;
+    if (!visible.value || current !== version) return;
+    if (command.reply) voice.speak(command.reply);
+    if (command.status === 'succeeded' && command.result?.navigate) {
+      try {
+        if (command.result.conversation_id) {
+          // eslint-disable-next-line no-use-before-define
+          await openConversation(command.result.conversation_id);
+        } else {
+          // eslint-disable-next-line no-use-before-define
+          await navigate(command.result);
+        }
+      } catch {
+        error.value = t('JRC_NICO.UX.NAVIGATION_ERROR');
+      }
+    }
+  }, Promise.resolve());
 };
 const load = async () => {
-  if (!accountId.value || busy.value) return;
+  if (!accountId.value || busy.value || (abort && !abort.signal.aborted))
+    return;
   const current = version;
   loadVersion += 1;
   const currentLoad = loadVersion;
-  abort?.abort();
-  abort = new AbortController();
+  const request = new AbortController();
+  abort = request;
   try {
-    const { data } = await api.show(accountId.value, abort.signal);
-    if (current === version && currentLoad === loadVersion) apply(data);
+    const { data } = await api.show(accountId.value, request.signal);
+    if (current === version && currentLoad === loadVersion) {
+      await apply(data);
+      syncError.value = '';
+    }
   } catch (e) {
     if (
       current === version &&
       currentLoad === loadVersion &&
       e.code !== 'ERR_CANCELED'
     )
-      error.value = label('LOAD_ERROR');
+      syncError.value = label('LOAD_ERROR');
+  } finally {
+    if (abort === request) abort = undefined;
   }
 };
+const refresh = () => {
+  if (document.visibilityState === 'hidden') return;
+  const running =
+    state.value.delegations.some(item => item.status === 'active') ||
+    state.value.commands.some(item =>
+      ['planning', 'executing'].includes(item.status)
+    );
+  if (visible.value || running) load();
+};
 const perform = async (action, nextPhase = 'working') => {
-  if (busy.value) return;
+  if (busy.value) return undefined;
   const current = version;
   loadVersion += 1;
   abort?.abort();
@@ -214,37 +312,64 @@ const perform = async (action, nextPhase = 'working') => {
   error.value = '';
   try {
     const { data } = await action();
-    if (current !== version) return;
-    apply(data);
-    if (visible.value) voice.speak(data.messages.at(-1)?.content);
+    if (current !== version) return undefined;
+    await apply(data);
+    syncError.value = '';
+    if (visible.value && nextPhase !== 'submitting')
+      voice.speak(data.messages.at(-1)?.content);
     await nextTick();
     if (fullVisible.value) scrollToCurrent();
     return data;
-  } catch {
+  } catch (failure) {
     if (current === version) {
-      error.value = label('ACTION_ERROR');
+      const message = failure.response?.data?.message;
+      error.value =
+        typeof message === 'string' ? message : label('ACTION_ERROR');
       busy.value = false;
       await load();
     }
   } finally {
     if (current === version) busy.value = false;
   }
+  return undefined;
 };
-const ask = async prompt => {
+const ask = async (prompt, { voiceTurn = false } = {}) => {
   const message = String(prompt ?? input.value).trim();
-  if (!message || busy.value) return;
+  if (!message || processing.value || submittingRequest) return false;
+  submittingRequest = true;
+  const current = version;
   focusedNoticeId.value = null;
-  input.value = '';
-  voice.stop();
-  await perform(
+  if (voiceTurn) voice.suspendCapture();
+  else voice.stop();
+  const requestContext = `${accountId.value}:${conversationId.value || ''}:${String(route.name || '')}`;
+  if (
+    pendingRequest?.message !== message ||
+    pendingRequest?.context !== requestContext
+  ) {
+    pendingRequest = {
+      message,
+      context: requestContext,
+      requestId: crypto.randomUUID(),
+    };
+  }
+  const requestId = pendingRequest.requestId;
+  completions.track(requestId);
+  const result = await perform(
     () =>
       api.ask(accountId.value, {
         message,
-        request_id: crypto.randomUUID(),
+        request_id: requestId,
         conversation_id: conversationId.value,
+        route_name: route.name,
       }),
     'submitting'
   );
+  if (result && current === version) {
+    if (input.value.trim() === message) input.value = '';
+    pendingRequest = undefined;
+  }
+  if (current === version) submittingRequest = false;
+  return Boolean(result && current === version);
 };
 const navigate = async result => {
   if (!result?.route_name || !router.hasRoute(result.route_name)) return;
@@ -268,19 +393,32 @@ const navigate = async result => {
   });
   if (window.innerWidth < 640) close();
 };
+const downloadSentiment = report => {
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })
+  );
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `sentimento-conversa-${report.conversation_id}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+};
 const openConversation = async id => {
   await router.push(`/app/accounts/${accountId.value}/conversations/${id}`);
   if (window.innerWidth < 640) close();
 };
 const prepareDelegation = async () => {
+  const current = version;
   delegateForm.value = true;
   objective.value ||= label('DEFAULT_OBJECTIVE');
   if (conversationId.value) selected.value = [conversationId.value];
   try {
-    choices.value = (await api.conversations(accountId.value)).data;
+    const { data } = await api.conversations(accountId.value);
+    if (current === version) choices.value = data;
   } catch {
-    error.value = label('LOAD_ERROR');
+    if (current === version) error.value = label('LOAD_ERROR');
   }
+  if (current === version) await focusPanel(delegationPanel);
 };
 const submitDelegation = async () => {
   await perform(() =>
@@ -340,7 +478,7 @@ const browserAction = async command => {
           status,
           detail,
         });
-        if (current === version) apply(data);
+        if (current === version) await apply(data);
       } else if (current === version)
         error.value = label('BROWSER_CLAIM_ERROR');
     } catch {
@@ -376,7 +514,8 @@ const formatValue = (value, field) => {
       .map(action => t(`JRC_NICO.OPERATOR.ACTIONS.${action}`))
       .join(', ');
   if (typeof value === 'boolean') return label(value ? 'YES' : 'NO');
-  return Array.isArray(value) ? value.join(', ') : String(value);
+  if (value && typeof value === 'object') return JSON.stringify(value, null, 2);
+  return String(value);
 };
 const toolLabel = command =>
   state.value.tools.find(tool => tool.name === command.tool)?.description ||
@@ -391,12 +530,19 @@ watch(
     input.value = '';
     busy.value = false;
     error.value = '';
+    syncError.value = '';
+    pendingRequest = undefined;
+    submittingRequest = false;
+    choices.value = [];
     selected.value = [];
     allowCrm.value = false;
     allowedActions.value = [];
     automaticAttempts.clear();
+    completions.clear();
     delegateForm.value = false;
     knowledgeOpen.value = false;
+    secondaryOpen.value = false;
+    expandedHistory.value = false;
     state.value = emptyState();
     suggestionCount.value = 0;
     await load();
@@ -449,12 +595,14 @@ watch(focusedNoticeId, () => load());
 onMounted(async () => {
   await load();
   if (pendingPrompt.value) await ask(consumePrompt());
-  poll = setInterval(load, 5000);
+  poll = setInterval(refresh, 5000);
+  document.addEventListener('visibilitychange', refresh);
 });
 onBeforeUnmount(() => {
   version += 1;
   abort?.abort();
   clearInterval(poll);
+  document.removeEventListener('visibilitychange', refresh);
 });
 </script>
 
@@ -463,13 +611,15 @@ onBeforeUnmount(() => {
     v-if="!embedded && mode === 'quick'"
     v-model="input"
     :voice="voice"
-    :busy="busy"
+    :busy="processing"
     :in-call="inCall"
     :context-label="contextLabel"
     :interaction-state="interactionState"
-    :has-operation="hasOperation"
+    :messages="activeCommand?.result?.broker_send ? [] : messages"
+    :has-earlier-messages="state.messages.length > 8"
     :reply="quickReply"
-    :error="error"
+    :error="error || syncError"
+    :workflow="state.workflow"
     :needs-review="
       pending.some(command =>
         ['awaiting_confirmation', 'browser_pending'].includes(command.status)
@@ -480,6 +630,8 @@ onBeforeUnmount(() => {
     @expand="open"
     @close="close"
     @notice="openNotice(unreadNotices[0].id)"
+    @history="expandedHistory = !expandedHistory"
+    @options="openOptions"
   />
   <aside
     v-if="fullVisible"
@@ -503,7 +655,7 @@ onBeforeUnmount(() => {
     >
       <img :src="avatarUrl" alt="" class="size-9 rounded-full" />
       <div class="min-w-0 flex-1">
-        <h2 class="text-sm font-semibold">{{ t('JRC_NICO.UX.FULL_TITLE') }}</h2>
+        <h2 class="text-sm font-semibold">{{ t('JRC_NICO.CHAT.TITLE') }}</h2>
         <p class="truncate text-xs text-n-slate-11">
           {{ contextLabel }}
         </p>
@@ -511,19 +663,11 @@ onBeforeUnmount(() => {
       <button
         type="button"
         class="rounded p-2 hover:bg-n-alpha-3"
-        :aria-label="label('DELEGATE')"
-        @click="prepareDelegation"
+        :aria-label="t('JRC_NICO.CHAT.OPTIONS')"
+        :aria-expanded="secondaryOpen"
+        @click="secondaryOpen ? (secondaryOpen = false) : openOptions()"
       >
-        <span class="i-lucide-bot size-5" />
-      </button>
-      <button
-        v-if="state.can_manage_knowledge"
-        type="button"
-        class="rounded p-2 hover:bg-n-alpha-3"
-        :aria-label="label('KNOWLEDGE')"
-        @click="knowledgeOpen = !knowledgeOpen"
-      >
-        <span class="i-lucide-book-open size-5" />
+        <span class="i-lucide-ellipsis size-5" aria-hidden="true" />
       </button>
       <button
         v-if="!embedded"
@@ -535,10 +679,18 @@ onBeforeUnmount(() => {
         <span class="i-lucide-chevron-down size-5" />
       </button>
     </header>
-    <div class="shrink-0 px-3 pt-3">
-      <NicoInteractionStatus
-        :state="interactionState"
-        :show-timeline="hasOperation"
+    <div
+      v-if="
+        !['idle', 'answered', 'success', 'cancelled'].includes(
+          interactionState
+        ) || ['partial', 'failed'].includes(state.workflow?.state)
+      "
+      class="shrink-0 px-3 pt-3"
+    >
+      <NicoInteractionStatus :state="interactionState" />
+      <NicoWorkflowSummary
+        v-if="['partial', 'failed'].includes(state.workflow?.state)"
+        :workflow="state.workflow"
       />
     </div>
     <div
@@ -546,14 +698,16 @@ onBeforeUnmount(() => {
       class="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3"
     >
       <p
-        v-if="error"
+        v-if="error || syncError"
         role="alert"
         class="rounded bg-n-ruby-3 p-2 text-sm text-n-ruby-11"
       >
-        {{ error }}
+        {{ error || syncError }}
       </p>
       <form
         v-if="delegateForm"
+        ref="delegationPanel"
+        tabindex="-1"
         class="space-y-3 rounded border border-n-weak p-3"
         @submit.prevent="submitDelegation"
       >
@@ -631,13 +785,16 @@ onBeforeUnmount(() => {
           </button>
         </div>
       </form>
-      <NicoKnowledgePanel
+      <div
         v-if="knowledgeOpen && state.can_manage_knowledge"
-        :account-id="accountId"
-      />
+        ref="knowledgePanel"
+        tabindex="-1"
+      >
+        <NicoKnowledgePanel :account-id="accountId" />
+      </div>
       <h3 class="sr-only">{{ t('JRC_NICO.UX.CHAT_TITLE') }}</h3>
       <p v-if="!state.messages.length" class="text-sm text-n-slate-11">
-        {{ label('GREETING') }}
+        {{ t('JRC_NICO.CHAT.GREETING') }}
       </p>
       <button
         v-if="state.messages.length > 8"
@@ -647,22 +804,7 @@ onBeforeUnmount(() => {
       >
         {{ label('HISTORY') }}
       </button>
-      <div
-        v-for="(message, index) in messages"
-        :key="`${message.at}-${index}`"
-        :data-nico-last-message="
-          index === messages.length - 1 ? 'true' : undefined
-        "
-        class="flex"
-        :class="message.role === 'user' ? 'justify-end' : ''"
-      >
-        <p
-          class="max-w-full whitespace-pre-wrap break-words rounded-xl px-3 py-2 text-sm"
-          :class="message.role === 'user' ? 'bg-n-blue-3' : 'bg-n-alpha-2'"
-        >
-          {{ message.content }}
-        </p>
-      </div>
+      <NicoChatMessages :messages="messages" />
       <article
         v-for="command in pending"
         :key="command.id"
@@ -696,6 +838,22 @@ onBeforeUnmount(() => {
           {{ t(`JRC_NICO.OPERATOR.STATES.${command.status}`) }}
         </p>
         <p class="text-sm">{{ toolLabel(command) }}</p>
+        <p v-if="command.result?.broker_send" class="text-sm" role="status">
+          {{ command.reply }}
+        </p>
+        <button
+          v-if="command.result?.broker_send?.conversation_id"
+          type="button"
+          class="text-xs text-n-blue-11"
+          @click="openConversation(command.result.broker_send.conversation_id)"
+        >
+          {{
+            t('JRC_NICO.OPERATOR.BROKER_RECIPIENT', {
+              contact: command.result.broker_send.contact,
+              conversation: command.result.broker_send.conversation_id,
+            })
+          }}
+        </button>
         <p
           v-if="command.status === 'awaiting_confirmation'"
           class="text-xs text-n-slate-11"
@@ -743,7 +901,7 @@ onBeforeUnmount(() => {
             v-if="
               ['awaiting_confirmation', 'browser_pending'].includes(
                 command.status
-              )
+              ) || command.result?.broker_send?.cancelable === true
             "
             type="button"
             :disabled="busy"
@@ -754,6 +912,24 @@ onBeforeUnmount(() => {
           </button>
         </div>
       </article>
+      <section
+        v-if="brokerReceipt?.message_id"
+        data-testid="nico-broker-message-receipt"
+        class="space-y-2 rounded-xl border border-n-weak p-3 text-sm"
+        role="status"
+      >
+        <p>{{ latest.reply }}</p>
+        <p class="font-medium">
+          {{ brokerDeliveryLabel }}
+        </p>
+        <button
+          type="button"
+          class="text-xs text-n-blue-11"
+          @click="openConversation(brokerReceipt.conversation_id)"
+        >
+          {{ label('OPEN_CONVERSATION') }}
+        </button>
+      </section>
       <button
         v-if="latest?.status === 'succeeded' && latest.result?.route_name"
         type="button"
@@ -789,14 +965,75 @@ onBeforeUnmount(() => {
           </button>
         </article>
       </details>
-      <details
-        class="rounded-xl border border-n-weak p-3"
-        :open="Boolean(focusedNoticeId)"
+      <section
+        v-if="latest?.result?.sentiment_report"
+        class="space-y-2 rounded-xl border border-n-weak p-3 text-sm"
+        data-testid="nico-sentiment-report"
       >
-        <summary class="cursor-pointer text-xs font-semibold text-n-slate-11">
-          {{ t('JRC_NICO.UX.SECONDARY') }}
-        </summary>
+        <h3 class="font-semibold text-n-slate-12">
+          {{ t('JRC_NICO.UX.SENTIMENT_REPORT') }}
+        </h3>
+        <p>{{ latest.result.sentiment_report.summary }}</p>
+        <NicoAnalysisProvenance :report="latest.result.sentiment_report" />
+        <dl class="grid grid-cols-2 gap-2 text-xs text-n-slate-11">
+          <dt>{{ t('JRC_NICO.UX.CUSTOMER_SENTIMENT') }}</dt>
+          <dd>{{ latest.result.sentiment_report.customer_sentiment }}</dd>
+          <dt>{{ t('JRC_NICO.UX.AGENT_SENTIMENT') }}</dt>
+          <dd>{{ latest.result.sentiment_report.agent_sentiment }}</dd>
+        </dl>
+        <p class="text-xs text-n-slate-11">
+          {{ latest.result.sentiment_report.scope }}
+        </p>
+        <details>
+          <summary class="cursor-pointer text-xs text-n-blue-11">
+            {{ t('JRC_NICO.UX.REPORT_DETAILS') }}
+          </summary>
+          <pre class="mt-2 whitespace-pre-wrap break-words text-xs">{{
+            JSON.stringify(latest.result.sentiment_report, null, 2)
+          }}</pre>
+        </details>
+        <button
+          type="button"
+          class="rounded-lg bg-n-blue-9 px-3 py-2 text-xs font-semibold text-white"
+          @click="downloadSentiment(latest.result.sentiment_report)"
+        >
+          {{ t('JRC_NICO.UX.DOWNLOAD_REPORT') }}
+        </button>
+      </section>
+      <section
+        v-if="secondaryOpen || focusedNoticeId"
+        ref="secondaryPanel"
+        data-testid="nico-secondary-options"
+        class="rounded-xl border border-n-weak p-3"
+      >
+        <h3 class="text-xs font-semibold text-n-slate-11">
+          {{ t('JRC_NICO.CHAT.OPTIONS') }}
+        </h3>
         <div class="mt-3 space-y-3">
+          <button
+            v-if="
+              state.tools.some(tool => tool.name === 'delegate_conversations')
+            "
+            type="button"
+            class="text-xs text-n-blue-11"
+            :aria-label="label('DELEGATE')"
+            @click="prepareDelegation"
+          >
+            {{ label('DELEGATE') }}
+          </button>
+          <button
+            v-if="state.can_manage_knowledge"
+            type="button"
+            class="text-xs text-n-blue-11"
+            :aria-label="label('KNOWLEDGE')"
+            @click="toggleKnowledge"
+          >
+            {{ label('KNOWLEDGE') }}
+          </button>
+          <NicoWorkflowSummary
+            v-if="!['partial', 'failed'].includes(state.workflow?.state)"
+            :workflow="state.workflow"
+          />
           <section
             v-if="notices.length"
             class="space-y-2 rounded border border-n-weak p-2"
@@ -941,12 +1178,12 @@ onBeforeUnmount(() => {
             </button>
           </details>
         </div>
-      </details>
+      </section>
     </div>
     <NicoComposer
       v-model="input"
       :voice="voice"
-      :busy="busy"
+      :busy="processing"
       :in-call="inCall"
       @send="ask()"
     />

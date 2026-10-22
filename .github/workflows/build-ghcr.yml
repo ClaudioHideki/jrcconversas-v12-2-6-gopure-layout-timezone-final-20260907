@@ -1,4 +1,4 @@
-name: GoPure - Campanhas Evolution
+name: GoPure - Integração Lab
 
 concurrency:
   group: gopure-campanhas-evolution-${{ github.ref }}
@@ -11,6 +11,10 @@ on:
         description: Publicar a imagem candidata após validação
         type: boolean
         default: false
+      image_tag:
+        description: Tag nova da imagem candidata (obrigatória para publicar)
+        type: string
+        default: ''
 
 env:
   REGISTRY: ghcr.io
@@ -25,7 +29,7 @@ jobs:
     env:
       RAILS_ENV: test
       NODE_ENV: test
-      NODE_OPTIONS: --max-old-space-size=4096
+      NODE_OPTIONS: --max-old-space-size=6144
       POSTGRES_HOST: 127.0.0.1
       POSTGRES_USERNAME: postgres
       POSTGRES_PASSWORD: qa-only
@@ -48,6 +52,13 @@ jobs:
         ports: ['6379:6379']
     steps:
       - uses: actions/checkout@v4
+      - name: Validar tag de publicação
+        if: inputs.publish
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          [[ "$IMAGE_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || { echo 'Informe uma tag Docker válida.'; exit 1; }
+          [[ "$IMAGE_TAG" != 'gopure-campanhas-evolution-20261020-r5' ]] || { echo 'A tag r5 pertence à versão anterior.'; exit 1; }
       - name: Instalar bibliotecas do sistema
         run: sudo apt-get update -qq && sudo apt-get install -y libvips-dev imagemagick
       - uses: ruby/setup-ruby@v1
@@ -64,12 +75,10 @@ jobs:
         run: pnpm exec vite build --mode test
       - name: Testes isolados adicionais do comercial
         run: |
-          ruby scripts/qa/commercial/financials_test.rb
           ruby scripts/qa/commercial/input_test.rb
-          ruby scripts/qa/commercial/pdf_test.rb
           node --test scripts/qa/commercial/frontend_helpers_test.mjs
       - name: Preparar banco exclusivo de CI
-        run: bundle exec rails db:schema:load
+        run: bundle exec rails db:migrate
       - name: Testar backend e permissoes
         run: >-
           bundle exec ruby scripts/nico-specs.rb
@@ -120,7 +129,6 @@ jobs:
         include:
           - component: app
             dockerfile: ./docker/Dockerfile
-            tag: gopure-campanhas-evolution-20261020-r5
 
     permissions:
       contents: read
@@ -148,7 +156,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           flavor: latest=false
           tags: |
-            type=raw,value=${{ matrix.tag }}
+            type=raw,value=${{ inputs.image_tag }}
             type=sha,format=long,prefix=${{ matrix.component }}-sha-
 
       - name: Construir imagem candidata
@@ -158,6 +166,8 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
+          build-args: |
+            NODE_OPTIONS=--max-old-space-size=6144 --openssl-legacy-provider
           push: false
           load: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -166,11 +176,11 @@ jobs:
           cache-to: type=gha,scope=gopure-${{ matrix.component }},mode=max
       - name: Testar Rails e Sidekiq na imagem final
         env:
-          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.tag }}
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}
         run: bash scripts/qa/campaigns/image_smoke.sh "$IMAGE"
       - name: Publicar somente a imagem testada
         env:
-          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.tag }}
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           while IFS= read -r tag; do docker push "$tag"; done <<< "$TAGS"

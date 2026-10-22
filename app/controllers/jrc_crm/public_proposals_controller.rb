@@ -1,13 +1,23 @@
 module JrcCrm
   class PublicProposalsController < ApplicationController
     before_action :set_proposal
+    before_action :ensure_public_availability, only: %i[accept reject]
 
     def show
+      unless @proposal.public_availability[:available]
+        @proposal.record_expiration!
+        render :unavailable, layout: false
+        return
+      end
       record_view! unless ActiveModel::Type::Boolean.new.cast(params[:preview])
       render layout: false
     end
 
     def pdf
+      unless @proposal.public_availability[:available]
+        render :unavailable, layout: false, status: :unprocessable_entity
+        return
+      end
       pdf = JrcCrm::ProposalPdfService.new(@proposal).call
       @proposal.events.create!(
         account_id: @proposal.account_id,
@@ -31,6 +41,7 @@ module JrcCrm
       end
 
       if @proposal.accepted?
+        JrcCrm::AcceptedProposalLifecycleService.new(proposal: @proposal, actor: @proposal.owner).call
         redirect_to jrc_crm_public_proposal_path(account_id: @proposal.account_id, token: params[:token], accepted: 1)
         return
       end
@@ -53,9 +64,8 @@ module JrcCrm
           event_type: 'accepted',
           description: 'Proposta aceita pelo cliente com evidência digital'
         )
-        won_stage = @proposal.deal.pipeline.stages.active.find_by(is_won: true)
-        JrcCrm::DealPipelineService.new(deal: @proposal.deal, stage: won_stage, actor: nil).call if won_stage
       end
+      JrcCrm::AcceptedProposalLifecycleService.new(proposal: @proposal.reload, actor: @proposal.owner).call
       redirect_to jrc_crm_public_proposal_path(account_id: @proposal.account_id, token: params[:token], accepted: 1)
     end
 
@@ -86,19 +96,20 @@ module JrcCrm
 
     private
 
+    def ensure_public_availability
+      return if @proposal.public_availability[:available]
+
+      render :unavailable, layout: false, status: :unprocessable_entity
+    end
+
     def set_proposal
-      @proposal = JrcCrm::Proposal.includes(:account, :owner, :deal, proposal_items: :product).find_by_raw_token(params[:token])
+      @proposal = JrcCrm::Proposal.includes(:account, :owner, :deal, proposal_items: :product).find_by_raw_token(params[:token], allow_unavailable: true)
       raise ActiveRecord::RecordNotFound if @proposal.blank? || @proposal.account_id != params[:account_id].to_i || !@proposal.account.feature_enabled?('jrc_crm')
     end
 
     def record_view!
-      first_view = @proposal.viewed_count.to_i.zero?
-      @proposal.record_customer_view!
-      @proposal.events.create!(
-        account_id: @proposal.account_id,
-        event_type: first_view ? 'viewed' : 'viewed_again',
-        description: first_view ? 'Proposta visualizada pelo cliente' : 'Proposta visualizada novamente pelo cliente'
-      )
+      @proposal.record_customer_view!(origin: 'public_html', channel: 'web')
     end
+
   end
 end

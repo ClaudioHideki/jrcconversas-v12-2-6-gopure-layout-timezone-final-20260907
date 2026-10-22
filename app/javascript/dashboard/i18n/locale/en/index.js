@@ -1,4 +1,11 @@
+import jrcOperator from './jrcOperator.json';
+import jrcApprovals from './jrcApprovals.json';
+import jrcContactCenter from './jrcContactCenter.json';
+import jrcHome from './jrcHome.json';
+import relationship from './relationship.json';
+import jrcServiceDesk from './jrcServiceDesk.json';
 import advancedFilters from './advancedFilters.json';
+import jrcBroker from './jrcBroker.json';
 import agentBots from './agentBots.json';
 import agentMgmt from './agentMgmt.json';
 import attributesMgmt from './attributesMgmt.json';
@@ -49,9 +56,17 @@ import crm from './crm.json';
 import whatsappCalling from './whatsappCalling.json';
 import jrcCampaigns from './jrcCampaigns.json';
 import jrcNico from './jrcNico.json';
+import jrcNicoHelpdesk from './jrcNicoHelpdesk.json';
+import jrcCustomerRelations from './jrcCustomerRelations.json';
 
 export default {
+  ...jrcOperator,
+  ...relationship,
+  ...jrcHome,
+  ...jrcServiceDesk,
   ...jrcNico,
+  ...jrcNicoHelpdesk,
+  ...jrcCustomerRelations,
   ...advancedFilters,
   ...agentBots,
   ...agentMgmt,
@@ -102,4 +117,7 @@ export default {
   ...crm,
   ...whatsappCalling,
   ...jrcCampaigns,
+  ...jrcBroker,
+  ...jrcApprovals,
+  ...jrcContactCenter,
 };

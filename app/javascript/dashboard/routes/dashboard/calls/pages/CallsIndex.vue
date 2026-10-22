@@ -127,11 +127,13 @@ onMounted(async () => {
   <CallsEmptyState v-else-if="!isVoiceEnabled" />
   <section
     v-else
-    class="jrc-visible-scrollbar flex h-full w-full flex-col overflow-y-auto" style="background:linear-gradient(135deg,#eff6ff 0%,#ffffff 48%,#f8fafc 100%)"
+    class="flex flex-col w-full h-full overflow-hidden bg-n-surface-1"
   >
-    <header class="mx-6 mt-6 shrink-0 rounded-3xl border p-6 shadow-sm" style="background:linear-gradient(135deg,#dbeafe,#eff6ff);border-color:#60a5fa">
-      <div class="w-full">
-        <div class="flex items-center gap-4"><span class="flex size-12 items-center justify-center rounded-2xl text-white shadow-md" style="background:#2563eb;color:#ffffff"><span class="i-lucide-history size-6"></span></span><div><h1 class="text-3xl font-bold text-n-slate-12">Histórico de ligações</h1><p class="mt-1 text-sm text-n-slate-10">Consulte as ligações realizadas e recebidas pelos agentes.</p></div></div>
+    <header class="shrink-0">
+      <div class="w-full px-6 pt-6">
+        <h1 class="text-xl font-medium text-n-slate-12">
+          {{ t('CALLS_PAGE.HEADER') }}
+        </h1>
       </div>
       <CallsFilterBar
         v-model:activity="activity"
@@ -144,7 +146,6 @@ onMounted(async () => {
         :show-assignee="isAdmin"
       />
     </header>
-    <section class="mx-6 mt-5 grid shrink-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"><article class="rounded-2xl border p-5 shadow-sm" style="background:#dbeafe;border-color:#60a5fa;border-top:4px solid #2563eb"><span class="text-sm font-semibold text-blue-700">Total de ligações</span><strong class="mt-2 block text-3xl text-blue-700">{{ meta.summary?.total || 0 }}</strong></article><article class="rounded-2xl border p-5 shadow-sm" style="background:#dcfce7;border-color:#4ade80;border-top:4px solid #16a34a"><span class="text-sm font-semibold text-green-700">Atendidas</span><strong class="mt-2 block text-3xl text-green-700">{{ meta.summary?.answered || 0 }}</strong></article><article class="rounded-2xl border p-5 shadow-sm" style="background:#fee2e2;border-color:#f87171;border-top:4px solid #dc2626"><span class="text-sm font-semibold text-red-700">Perdidas</span><strong class="mt-2 block text-3xl text-red-700">{{ meta.summary?.missed || 0 }}</strong></article><article class="rounded-2xl border p-5 shadow-sm" style="background:#fef3c7;border-color:#f59e0b;border-top:4px solid #d97706"><span class="text-sm font-semibold text-amber-700">Sem resposta</span><strong class="mt-2 block text-3xl text-amber-700">{{ meta.summary?.noReply || 0 }}</strong></article></section>
     <main class="flex-1 px-6 overflow-y-auto">
       <div class="w-full">
         <div v-if="isFetching" class="flex items-center justify-center py-16">

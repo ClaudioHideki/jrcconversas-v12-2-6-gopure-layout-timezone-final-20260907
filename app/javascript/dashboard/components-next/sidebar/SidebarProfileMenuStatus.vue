@@ -1,10 +1,7 @@
 <script setup>
 import { computed, h } from 'vue';
 import { useMapGetter, useStore } from 'dashboard/composables/store';
-import {
-  AVAILABILITY_STATUSES,
-  getAvailabilityStatus,
-} from 'dashboard/helper/availabilityStatus';
+import wootConstants from 'dashboard/constants/globals';
 import { useAlert } from 'dashboard/composables';
 import { useI18n } from 'vue-i18n';
 import { useImpersonation } from 'dashboard/composables/useImpersonation';
@@ -27,18 +24,33 @@ const currentUserAutoOffline = useMapGetter('getCurrentUserAutoOffline');
 
 const { isImpersonating } = useImpersonation();
 
+const { AVAILABILITY_STATUS_KEYS } = wootConstants;
+const statusDefinitions = [
+  { label: 'Disponível', value: 'online', color: 'bg-n-teal-9' },
+  { label: 'Indisponível', value: 'offline', color: 'bg-n-slate-9' },
+  { label: 'Reunião', value: 'meeting', color: 'bg-n-blue-9' },
+  { label: 'Feedback', value: 'feedback', color: 'bg-n-violet-9' },
+  { label: 'Fim do turno', value: 'end_shift', color: 'bg-n-gray-9' },
+  { label: 'Treinamento', value: 'training', color: 'bg-n-purple-9' },
+  { label: 'Pausa banheiro', value: 'bathroom_break', color: 'bg-n-cyan-9' },
+  { label: 'Pausa almoço', value: 'lunch_break', color: 'bg-n-amber-9' },
+  { label: 'Chamada Manual', value: 'manual_call', color: 'bg-n-rose-9' },
+];
+
 const availabilityStatuses = computed(() =>
-  AVAILABILITY_STATUSES.map(status => ({
-    ...status,
-    icon: h('span', {
-      class: [status.color, 'size-3 shrink-0 rounded-full'],
-    }),
-  }))
+  statusDefinitions
+    .filter(status => AVAILABILITY_STATUS_KEYS.includes(status.value))
+    .map(status => ({
+      ...status,
+      icon: h('span', { class: [status.color, 'size-[12px] rounded-full'] }),
+      active: currentUserAvailability.value === status.value,
+    }))
 );
 
-const activeStatus = computed(() =>
-  getAvailabilityStatus(currentUserAvailability.value)
-);
+const activeStatus = computed(() => {
+  return availabilityStatuses.value.find(status => status.active);
+});
+
 const autoOfflineToggle = computed({
   get: () => currentUserAutoOffline.value,
   set: autoOffline => {
@@ -90,10 +102,7 @@ function changeAvailabilityStatus(availability) {
             >
               <div class="flex gap-1 items-center min-w-0 text-sm">
                 <div class="p-1 flex-shrink-0">
-                  <div
-                    class="size-2 rounded-full"
-                    :class="activeStatus.color"
-                  />
+                  <div class="size-2 rounded-sm" :class="activeStatus.color" />
                 </div>
                 <span class="truncate max-w-[7rem]">
                   {{ activeStatus.label }}
@@ -103,7 +112,7 @@ function changeAvailabilityStatus(availability) {
           </template>
           <DropdownBody
             strong
-            class="w-52 z-20 [&>ul]:max-h-[min(28rem,65vh)] [&>ul]:overflow-y-auto [&>ul]:!border-[#d8e4f0] [&>ul]:!bg-white [&>ul]:!shadow-xl [&_.n-dropdown-item>*]:!text-[#173a5e]"
+            class="min-w-36 z-20 [&>ul]:!border-[#d8e4f0] [&>ul]:!bg-white [&>ul]:!shadow-xl [&_.n-dropdown-item>*]:!text-[#173a5e]"
           >
             <DropdownItem
               v-for="status in availabilityStatuses"

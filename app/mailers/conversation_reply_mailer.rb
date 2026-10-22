@@ -8,6 +8,7 @@ class ConversationReplyMailer < ApplicationMailer
   include EmailAddressParseable
   default from: ENV.fetch('MAILER_SENDER_EMAIL', 'Chatwoot <accounts@chatwoot.com>')
   layout :choose_layout
+  helper_method :jrc_email_reply_body_with_history
 
   def reply_with_summary(conversation, last_queued_id)
     return unless smtp_config_set_or_development?
@@ -96,6 +97,37 @@ class ConversationReplyMailer < ApplicationMailer
     else
       I18n.t('conversations.reply.email.header.professional_name', business_name: business_name, from_email: sender_email)
     end
+  end
+
+  # JRC: mantém a resposta como continuação do e-mail recebido e inclui o
+  # conteúdo anterior para que o destinatário tenha o contexto quando precisar.
+  # In-Reply-To/References continuam preservados pelo mailer.
+  def jrc_email_reply_body_with_history
+    reply_body = @message.content_attributes.dig('email', 'html_content', 'reply').presence ||
+                 @message.outgoing_content.presence || @message.content.to_s
+
+    previous_message = @conversation.messages.chat.where('id < ?', @message.id).last
+    return reply_body.to_s if previous_message.blank?
+
+    previous_body = previous_message.content_attributes.dig('email', 'html_content', 'full').presence ||
+                    previous_message.content_attributes.dig('email', 'html_content', 'reply').presence ||
+                    previous_message.outgoing_content.presence || previous_message.content.to_s
+    return reply_body.to_s if previous_body.blank?
+
+    previous_sender = previous_message.sender
+    sender_name = previous_sender&.try(:available_name).presence || previous_sender&.try(:name).presence ||
+                  previous_sender&.try(:email).presence || @contact&.name.presence || 'Mensagem anterior'
+    sender = ERB::Util.html_escape(sender_name)
+    date = I18n.l(previous_message.created_at, format: :short) rescue previous_message.created_at.to_s
+
+    <<~HTML
+      #{reply_body}
+      <br>
+      <div class="jrc-email-history" style="margin-top:16px;border-top:1px solid #ddd;padding-top:12px;">
+        <div style="margin-bottom:8px;color:#666;font-size:12px;">Em #{ERB::Util.html_escape(date)}, #{sender} escreveu:</div>
+        <blockquote style="margin:0 0 0 8px;padding-left:12px;border-left:3px solid #ddd;">#{previous_body}</blockquote>
+      </div>
+    HTML
   end
 
   def current_message

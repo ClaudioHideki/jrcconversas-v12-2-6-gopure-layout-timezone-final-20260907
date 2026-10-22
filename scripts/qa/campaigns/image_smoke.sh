@@ -24,7 +24,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-docker run --rm "${runtime[@]}" "$image" bundle exec rails db:prepare
+docker run --rm "${runtime[@]}" "$image" bundle exec rails db:migrate
 docker run -d --name gopure-evolution-rails-smoke "${runtime[@]}" "$image" bundle exec rails server -b 127.0.0.1 -p 3010
 docker run -d --name gopure-evolution-sidekiq-smoke "${runtime[@]}" "$image" bundle exec sidekiq -r ./config/environment.rb -C config/sidekiq.yml
 

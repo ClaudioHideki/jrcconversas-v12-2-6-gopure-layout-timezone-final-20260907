@@ -59,8 +59,10 @@ module JrcCrm
         return order.total_cents.to_i
       end
 
-      column = key == 'monthly_cents' ? :recurring_cents : :one_time_cents
-      order.order_items.where(product_id: product_ids).sum(column).to_i
+      values = CommercialItemAllocation.call(items: order.order_items.to_a,
+        discount_cents: order.discount_cents, monthly_enabled: order.monthly_cents.to_i.positive?)
+      column = key == 'monthly_cents' ? :monthly_cents : :revenue_cents
+      values.select { |row| product_ids.include?(row[:product_id].to_i) }.sum { |row| row[column] }
     end
 
     def product_restriction?

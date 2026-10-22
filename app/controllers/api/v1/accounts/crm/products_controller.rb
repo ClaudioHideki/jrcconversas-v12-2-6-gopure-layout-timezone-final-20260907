@@ -6,7 +6,7 @@ module Api
           before_action :set_product, only: [:show, :update, :destroy, :toggle_active]
 
           def index
-            products = crm_scope.jrc_crm_products
+            products = corporate_records(:jrc_crm_products)
             products = products.where(active: ActiveModel::Type::Boolean.new.cast(params[:active])) if params[:active].present?
             products = products.where(category: params[:category]) if params[:category].present?
             products = products.where(product_type: params[:product_type]) if params[:product_type].present?
@@ -38,6 +38,7 @@ module Api
           def update
             ensure_crm_admin!
             if @product.update(product_params)
+              JrcApprovals::CommercialInvalidation.reference_changed!(product: @product, user: Current.user)
               render json: serialize(@product)
             else
               render json: { errors: @product.errors.full_messages }, status: :unprocessable_entity
@@ -56,6 +57,7 @@ module Api
           def toggle_active
             ensure_crm_admin!
             if @product.update(active: !@product.active)
+              JrcApprovals::CommercialInvalidation.reference_changed!(product: @product, user: Current.user)
               render json: serialize(@product)
             else
               render json: { errors: @product.errors.full_messages }, status: :unprocessable_entity
@@ -65,7 +67,7 @@ module Api
           private
 
           def set_product
-            @product = crm_scope.jrc_crm_products.find(params[:id])
+            @product = corporate_records(:jrc_crm_products).find(params[:id])
           end
 
           def serialize(product)
@@ -85,7 +87,8 @@ module Api
               :allow_standalone_sale, :requires_contract, :requires_implementation, :fiscal_service_code,
               :proposal_template_name, :contract_template_name, :sales_notes,
               :technical_requirements, :scope_included, :scope_excluded,
-              :currency, :active, tags: [], available_for: [], integrations: []
+              :currency, :active, :business_unit_id, tags: [], available_for: [], integrations: [],
+                                                     document_rules: [:key, :source, :label, :required, :blocking]
             )
           end
         end

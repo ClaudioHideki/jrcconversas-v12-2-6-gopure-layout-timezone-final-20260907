@@ -1,0 +1,1004 @@
+<script setup>
+import ImpactUrgencySelect from '../components/ImpactUrgencySelect.vue';
+import TicketCreationReceipt from '../components/TicketCreationReceipt.vue';
+import {
+  confirmedCreationTicket,
+  selectAutomaticRouting,
+  selectTicketAssignment,
+} from '../helpers/ticketReceipt';
+import { T } from 'dashboard/routes/dashboard/jrcCustomers/copy';
+import CompanyPicker from 'dashboard/routes/dashboard/jrcCustomers/components/CompanyPicker.vue';
+import { useCustomerMaster } from 'dashboard/routes/dashboard/jrcCustomers/useCustomerMaster';
+import RelationshipAPI from 'dashboard/api/jrcRelationship';
+const props = defineProps({ screen: { type: String, default: 'new' } });
+const { canAccess: mayUseMasterDirectory } = useCustomerMaster();
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
+import Button from 'dashboard/components-next/button/Button.vue';
+import Input from 'dashboard/components-next/input/Input.vue';
+import TextArea from 'dashboard/components-next/textarea/TextArea.vue';
+import Banner from 'dashboard/components-next/banner/Banner.vue';
+import Panel from '../components/ServiceDeskPanel.vue';
+import State from '../components/ServiceDeskState.vue';
+import ScopeBar from '../components/ScopeBar.vue';
+import ServiceDefinitionSelect from '../components/ServiceDefinitionSelect.vue';
+import CatalogueAnswers from '../components/CatalogueAnswers.vue';
+import LookupSelect from '../components/LookupSelect.vue';
+import { useServiceDesk } from '../composables/useServiceDesk';
+import { canAct, canonicalId } from '../helpers/access';
+import Feedback from '../components/WriteFeedback.vue';
+import {
+  createTicketDraft,
+  updateTicketDraft,
+  newRequestKey,
+  ticketFileFingerprints,
+} from '../helpers/drafts';
+import { serviceDeskRouteName } from '../routeDefinitions';
+import {
+  ticketListReturn,
+  ticketNavigationContext,
+} from '../helpers/ticketNavigation';
+const { t, tm } = useI18n();
+const session = useServiceDesk();
+const hasCustomerMaster = computed(
+  () =>
+    mayUseMasterDirectory.value &&
+    session.state.context?.effective_permissions?.includes(
+      'jrc_service_desk_customers_view'
+    ) === true
+);
+const route = useRoute();
+const router = useRouter();
+const key = 'ticket:edit';
+const writeKey = 'ticket:form:write';
+let requestKey = null;
+const localError = ref(false);
+const creationReceipt = ref(null);
+const createdTicket = computed(() =>
+  confirmedCreationTicket(
+    creationReceipt.value,
+    session.state,
+    session.accountId.value,
+    session.userId.value
+  )
+);
+const mutation = computed(
+  () => session.operations?.mutation(writeKey) || { status: 'idle' }
+);
+const hashingFiles = ref(false);
+const busy = computed(
+  () => mutation.value.status === 'saving' || hashingFiles.value
+);
+const step = ref(0);
+const operatorId = ref('');
+const blank = () => ({
+  company_id: null,
+  unit_id: '',
+  requester_id: '',
+  priority_id: '',
+  impact_code: '',
+  urgency_code: '',
+  use_channel_routing: false,
+  category_id: '',
+  ticket_type_id: '',
+  subcategory_id: '',
+  contract_id: '',
+  assignee_id: '',
+  team_id: '',
+  queue_id: '',
+  title: '',
+  description: '',
+  conversation_id: '',
+  service_id: '',
+  service_fields: {},
+});
+const serviceReady = ref(true);
+const catalogue = ref(null);
+const files = ref([]);
+const draft = reactive(blank());
+watch(
+  [
+    () => draft.service_id,
+    () => draft.ticket_type_id,
+    () => draft.category_id,
+    () => draft.subcategory_id,
+  ],
+  values => {
+    serviceReady.value = !values.some(Boolean);
+  }
+);
+const edit = computed(() => props.screen === 'edit');
+const result = computed(() => session.resource(key));
+const record = computed(() => result.value.record);
+const unit = computed(() =>
+  session.state.context?.units.find(item => item.id === draft.unit_id)
+);
+const mayEdit = computed(() =>
+  edit.value
+    ? !!record.value && canAct(record.value, 'update')
+    : unit.value?.permissions.create_ticket === true
+);
+const steps = computed(() => tm('JRC_SERVICE_DESK.FORM.steps'));
+const selectedNames = reactive({
+  requester: null,
+  priority: null,
+  category: null,
+  ticket_type: null,
+  subcategory: null,
+  contract: null,
+  assignee: null,
+  queue: null,
+  team: null,
+});
+const applyCatalogue = value => {
+  catalogue.value = value;
+  if (!value || edit.value) return;
+  ['category', 'ticket_type'].forEach(field => {
+    if (!draft[`${field}_id`] && value[field]) {
+      draft[`${field}_id`] = value[field].id;
+      selectedNames[field] = value[field];
+    }
+  });
+  ['priority', 'queue', 'assignee'].forEach(field => {
+    const defaultKey =
+      field === 'assignee' ? 'assignee_account_user_id' : `${field}_id`;
+    if (
+      !draft[`${field}_id`] &&
+      value.defaults[defaultKey] &&
+      (field === 'priority' ||
+        (draft.use_channel_routing !== true &&
+          unit.value?.permissions.assign_ticket === true))
+    ) {
+      draft[`${field}_id`] = value.defaults[defaultKey];
+      if (field === 'priority')
+        selectedNames.priority = value.defaults.priority;
+    }
+  });
+};
+watch(
+  () => draft.category_id,
+  (value, previous) => {
+    if (previous && value !== previous) {
+      draft.subcategory_id = '';
+      selectedNames.subcategory = null;
+    }
+  }
+);
+watch(
+  [() => draft.company_id, () => draft.requester_id],
+  (values, previous) => {
+    if (
+      previous.some(Boolean) &&
+      values.some((value, index) => value !== previous[index])
+    ) {
+      draft.contract_id = '';
+      selectedNames.contract = null;
+    }
+  }
+);
+const catalogueAccess = computed(() => {
+  if (!catalogue.value) return true;
+  const companies = catalogue.value.allowed_company_ids;
+  const contracts = catalogue.value.allowed_contract_ids;
+  return (
+    (!companies.length || companies.includes(canonicalId(draft.company_id))) &&
+    (!contracts.length || contracts.includes(draft.contract_id))
+  );
+});
+const relationshipCustomer = ref(null);
+let relationshipEpoch = 0;
+const applyRelationshipCustomer = () => {
+  if (edit.value || !relationshipCustomer.value || !hasCustomerMaster.value)
+    return;
+  draft.requester_id = relationshipCustomer.value.id;
+  draft.company_id = relationshipCustomer.value.company_id;
+  selectedNames.requester = relationshipCustomer.value;
+};
+const loadRelationshipCustomer = async () => {
+  relationshipEpoch += 1;
+  const epoch = relationshipEpoch;
+  relationshipCustomer.value = null;
+  const assignmentId = canonicalId(route.query.relationship_assignment_id);
+  const requesterId = canonicalId(route.query.requester_id);
+  if (edit.value || !hasCustomerMaster.value || !assignmentId || !requesterId)
+    return;
+  try {
+    const { data } = await RelationshipAPI.channels(
+      route.params.accountId,
+      assignmentId
+    );
+    if (epoch !== relationshipEpoch || !data.can_service_desk) return;
+    const contact = data.contacts.find(
+      item => canonicalId(item.id) === requesterId
+    );
+    if (!contact) return;
+    relationshipCustomer.value = {
+      id: requesterId,
+      name: contact.name,
+      phone_number: contact.phone_number,
+      company_id: data.company_id || null,
+    };
+    applyRelationshipCustomer();
+  } catch {
+    /* Native form stays available without an unauthorized prefill. */
+  }
+};
+const resetNames = () => {
+  Object.keys(selectedNames).forEach(field => {
+    selectedNames[field] = null;
+  });
+};
+const lookupLabels = computed(() =>
+  Object.fromEntries(
+    Object.keys(selectedNames).map(field => {
+      const id = draft[`${field}_id`];
+      const selected = selectedNames[field];
+      const persisted = record.value?.[field];
+      const matching = [selected, persisted].find(item => item?.id === id);
+      const label = matching?.name || '';
+      return [
+        field,
+        id
+          ? label || t('JRC_SERVICE_DESK.COMMON.selected_identifier', { id })
+          : t('JRC_SERVICE_DESK.COMMON.no_value'),
+      ];
+    })
+  )
+);
+const requesterPhone = computed(() => {
+  const selected = [selectedNames.requester, record.value?.requester].find(
+    item => item?.id === draft.requester_id
+  );
+  return selected?.phone_number || '';
+});
+const changeUnit = value => {
+  if (!busy.value && value !== draft.unit_id) {
+    Object.assign(draft, blank(), { unit_id: value });
+    files.value = [];
+    resetNames();
+    applyRelationshipCustomer();
+  }
+};
+const load = () => {
+  creationReceipt.value = null;
+  session.operations?.dismissConfirmation(writeKey);
+  localError.value = false;
+  step.value = 0;
+  resetNames();
+  operatorId.value = '';
+  requestKey = null;
+  Object.assign(draft, blank());
+  files.value = [];
+  applyRelationshipCustomer();
+  if (edit.value)
+    return session.load(key, 'tickets', {}, route.params.ticketId);
+  return undefined;
+};
+watch([() => route.params.ticketId, () => session.state.status], load, {
+  immediate: true,
+});
+watch(
+  [
+    () => route.params.accountId,
+    () => route.query.relationship_assignment_id,
+    () => route.query.requester_id,
+    () => session.userId?.value,
+    hasCustomerMaster,
+    edit,
+  ],
+  loadRelationshipCustomer,
+  { immediate: true }
+);
+watch(record, value => {
+  if (!value || !edit.value || !canAct(value, 'update')) return;
+  Object.assign(draft, {
+    company_id: value.company?.id || null,
+    unit_id: value.unit_id,
+    service_id: value.service?.id || '',
+    requester_id: value.requester?.id || '',
+    priority_id: value.priority?.id || '',
+    category_id: value.category?.id || '',
+    ticket_type_id: value.ticket_type?.id || '',
+    subcategory_id: value.subcategory?.id || '',
+    contract_id: value.contract?.id || '',
+    assignee_id: value.assignee?.id || '',
+    team_id: value.team?.id || '',
+    queue_id: value.queue?.id || '',
+    title: value.title,
+    description: value.description,
+    service_fields: { ...(value.service_fields || {}) },
+  });
+  Object.keys(selectedNames).forEach(field => {
+    selectedNames[field] = value[field] || null;
+  });
+  operatorId.value =
+    session.state.context?.units.find(item => item.id === value.unit_id)
+      ?.operator_company.id || '';
+});
+onBeforeUnmount(() => {
+  creationReceipt.value = null;
+  relationshipEpoch += 1;
+  relationshipCustomer.value = null;
+  Object.assign(draft, blank());
+  files.value = [];
+  session.resetResource(key);
+  session.operations?.cancel(writeKey);
+});
+const cancel = () => {
+  if (busy.value) return undefined;
+  return router.push({
+    name: serviceDeskRouteName(
+      edit.value ? 'detail' : ticketListReturn(route.query).screen
+    ),
+    params: {
+      accountId: session.accountId.value,
+      ...(edit.value ? { ticketId: route.params.ticketId } : {}),
+    },
+    query: edit.value
+      ? ticketNavigationContext(route.query)
+      : ticketListReturn(route.query).query,
+  });
+};
+defineExpose({ busy, cancel });
+
+const maySave = computed(
+  () =>
+    !!session.operations &&
+    !creationReceipt.value &&
+    mayEdit.value &&
+    !busy.value &&
+    !hashingFiles.value &&
+    files.value.length <= 5 &&
+    draft.title.trim() &&
+    (edit.value || draft.description.trim()) &&
+    (draft.priority_id ||
+      (!edit.value && draft.impact_code && draft.urgency_code)) &&
+    serviceReady.value &&
+    catalogueAccess.value &&
+    (edit.value || (draft.requester_id && unit.value?.initial_status?.id))
+);
+const openCreatedTicket = ticketId =>
+  router.push({
+    name: serviceDeskRouteName('detail'),
+    params: { accountId: session.accountId.value, ticketId },
+    query: ticketNavigationContext(route.query),
+  });
+const chooseAssignment = (field, selected) => {
+  if (field === 'team' && selectedNames.team?.id !== selected?.id) {
+    draft.assignee_id = '';
+    selectedNames.assignee = null;
+  }
+  selectTicketAssignment(draft, selectedNames, field, selected);
+};
+const chooseRouting = event =>
+  selectAutomaticRouting(draft, selectedNames, event.target.checked);
+const submit = async () => {
+  if (!maySave.value) return;
+  const submissionContext = session.state.context;
+  const submissionAccount = session.accountId.value;
+  const submissionUser = session.userId.value;
+  localError.value = false;
+  try {
+    if (!edit.value) requestKey ||= newRequestKey();
+    const payload = edit.value
+      ? updateTicketDraft(draft, record.value, hasCustomerMaster.value)
+      : createTicketDraft(
+          draft,
+          unit.value,
+          requestKey,
+          hasCustomerMaster.value
+        );
+    if (!edit.value && files.value.length) {
+      hashingFiles.value = true;
+      const context = session.state.context;
+      const selected = [...files.value];
+      const fingerprints = await ticketFileFingerprints(selected);
+      if (
+        context !== session.state.context ||
+        selected.some((file, index) => file !== files.value[index]) ||
+        selected.length !== files.value.length
+      )
+        return;
+      payload.files = selected;
+      payload.file_fingerprints = fingerprints;
+    }
+    const confirmed = await session.operations.write(
+      writeKey,
+      edit.value ? 'update' : 'create',
+      payload,
+      record.value
+    );
+    if (
+      confirmed &&
+      session.state.context === submissionContext &&
+      session.accountId.value === submissionAccount &&
+      session.userId.value === submissionUser
+    ) {
+      if (edit.value) {
+        await openCreatedTicket(confirmed.id);
+      } else {
+        creationReceipt.value = {
+          ticket: confirmed,
+          account_id: submissionContext.account_id,
+          user_id: submissionContext.user_id,
+        };
+      }
+    }
+  } catch {
+    localError.value = true;
+  } finally {
+    hashingFiles.value = false;
+  }
+};
+</script>
+
+<template>
+  <section>
+    <header class="sd-page-heading">
+      <div>
+        <h2 id="sd-ticket-form-title" class="sd-page-title">
+          {{ t(`JRC_SERVICE_DESK.SCREENS.${screen}`) }}
+        </h2>
+        <p class="sd-page-subtitle">
+          {{ t('JRC_SERVICE_DESK.FORM.subtitle') }}
+        </p>
+      </div>
+      <Button
+        color="slate"
+        variant="ghost"
+        :label="
+          createdTicket
+            ? t('JRC_SERVICE_DESK.SCREENS.tickets')
+            : t('JRC_SERVICE_DESK.COMMON.cancel')
+        "
+        :disabled="busy"
+        @click="cancel"
+      />
+    </header>
+    <Banner v-if="!createdTicket" color="amber" class="mb-4">
+      {{ t('JRC_SERVICE_DESK.FORM.draft_notice') }}
+    </Banner>
+    <TicketCreationReceipt
+      v-if="createdTicket"
+      :ticket="createdTicket"
+      @open="openCreatedTicket"
+      @list="cancel"
+      @create-another="load"
+    />
+    <State
+      v-else-if="edit && result.status !== 'ready'"
+      :status="result.status"
+      retry
+      @retry="session.state.status === 'ready' ? load() : session.retry()"
+    />
+    <State v-else-if="edit && !mayEdit" status="denied" />
+    <template v-else>
+      <div
+        v-if="edit"
+        class="sd-wizard-steps"
+        :aria-label="t('JRC_SERVICE_DESK.SCREENS.new')"
+      >
+        <button
+          v-for="(label, index) in steps"
+          :key="index"
+          type="button"
+          class="sd-wizard-step !rounded-xl !p-3 transition focus-visible:ring-2 focus-visible:ring-n-blue-9"
+          :class="
+            index === step
+              ? '!bg-blue-700 !text-white'
+              : '!bg-n-blue-3 !text-n-blue-11'
+          "
+          :disabled="busy"
+          :aria-current="index === step ? 'step' : undefined"
+          @click="step = index"
+        >
+          <span class="sd-badge !bg-transparent !text-current font-bold">
+            {{ index + 1 }}
+          </span>
+          <span>
+            {{ label }}
+          </span>
+        </button>
+      </div>
+      <div class="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_18rem]">
+        <Panel :title="edit ? steps[step] : t('JRC_SERVICE_DESK.SCREENS.new')">
+          <form @submit.prevent="submit">
+            <Feedback
+              :status="localError ? 'invalid_input' : mutation.status"
+            />
+            <Banner
+              v-if="!edit && unit && !unit.initial_status"
+              color="amber"
+              class="mb-4"
+            >
+              {{ t('JRC_SERVICE_DESK.FORM.initial_status_required') }}
+            </Banner>
+            <section
+              v-if="!edit || step === 0"
+              class="grid gap-4"
+              :class="
+                !edit
+                  ? 'mb-5 rounded-2xl border border-n-blue-6 bg-n-blue-2/20 p-4 sm:p-5'
+                  : ''
+              "
+            >
+              <h3
+                v-if="!edit"
+                class="flex items-center gap-2 text-base font-semibold text-n-blue-11"
+              >
+                <span
+                  class="i-lucide-users-round size-5"
+                  aria-hidden="true"
+                />{{ steps[0] }}
+              </h3>
+              <ScopeBar
+                v-if="!edit"
+                v-model:operator-id="operatorId"
+                :unit-id="draft.unit_id"
+                required
+                :disabled="busy"
+                @update:unit-id="changeUnit"
+              />
+              <p v-else class="text-sm text-n-slate-11">
+                {{ unit?.operator_company.name }} / {{ unit?.name }}
+              </p>
+              <p class="text-xs text-n-slate-11">
+                {{ t('JRC_SERVICE_DESK.FORM.client_help') }}
+              </p>
+              <div v-if="hasCustomerMaster">
+                <p class="mb-1 text-sm font-medium">{{ T.servedCompany }}</p>
+                <CompanyPicker
+                  v-model="draft.company_id"
+                  :disabled="!mayEdit || busy"
+                />
+              </div>
+              <Input
+                v-else
+                :label="t('JRC_SERVICE_DESK.COMMON.client_company')"
+                :placeholder="t('JRC_SERVICE_DESK.NATIVE.company_from_contact')"
+                disabled
+              />
+              <LookupSelect
+                v-model="draft.requester_id"
+                resource="requesters"
+                :label="t('JRC_SERVICE_DESK.FIELDS.requester')"
+                :unit-id="draft.unit_id"
+                :disabled="edit || !mayEdit || busy"
+                :current-name="
+                  selectedNames.requester?.name || record?.requester?.name || ''
+                "
+                :current-phone="requesterPhone"
+                @selected="selectedNames.requester = $event"
+              />
+              <template v-if="edit">
+                <Input
+                  v-model="draft.title"
+                  :label="t('JRC_SERVICE_DESK.FIELDS.title')"
+                  :placeholder="t('JRC_SERVICE_DESK.FORM.title_placeholder')"
+                  :disabled="!mayEdit || busy"
+                  maxlength="255"
+                />
+                <TextArea
+                  v-model="draft.description"
+                  :max-length="20000"
+                  resize
+                  :label="t('JRC_SERVICE_DESK.FIELDS.description')"
+                  :placeholder="
+                    t('JRC_SERVICE_DESK.FORM.description_placeholder')
+                  "
+                  :disabled="!mayEdit || busy"
+                />
+              </template>
+              <p v-if="!mayEdit" class="text-xs text-n-slate-11">
+                {{ t('JRC_SERVICE_DESK.FORM.no_permission') }}
+              </p>
+            </section>
+            <section
+              v-if="!edit || step === 1"
+              class="grid gap-4"
+              :class="
+                !edit
+                  ? 'mb-5 rounded-2xl border border-n-iris-6 bg-n-iris-2/20 p-4 sm:p-5'
+                  : ''
+              "
+            >
+              <h3
+                v-if="!edit"
+                class="flex items-center gap-2 text-base font-semibold text-n-iris-11"
+              >
+                <span class="i-lucide-tags size-5" aria-hidden="true" />{{
+                  steps[1]
+                }}
+              </h3>
+              <ImpactUrgencySelect
+                v-if="!edit"
+                v-model:impact="draft.impact_code"
+                v-model:urgency="draft.urgency_code"
+                :unit-id="draft.unit_id"
+                :disabled="!mayEdit || busy"
+              />
+              <label
+                v-if="!edit && unit?.permissions.assign_ticket === true"
+                class="flex items-start gap-2 text-sm"
+              >
+                <input
+                  :checked="draft.use_channel_routing"
+                  type="checkbox"
+                  :disabled="!mayEdit || busy"
+                  @change="chooseRouting"
+                />
+                <span>{{ t('JRC_SERVICE_DESK.COMPLETION.routing_help') }}</span>
+              </label>
+              <p class="text-xs text-n-slate-11">
+                {{ t('JRC_SERVICE_DESK.FORM.classify_help') }}
+              </p>
+              <div class="sd-fields-grid">
+                <LookupSelect
+                  v-model="draft.priority_id"
+                  resource="priorities"
+                  :label="t('JRC_SERVICE_DESK.FIELDS.priority')"
+                  :unit-id="draft.unit_id"
+                  :disabled="
+                    !mayEdit ||
+                    busy ||
+                    (edit && record?.permissions.change_priority !== true) ||
+                    (!edit && !!draft.impact_code && !!draft.urgency_code)
+                  "
+                  :current-name="record?.priority?.name || ''"
+                  @selected="selectedNames.priority = $event"
+                />
+                <LookupSelect
+                  v-model="draft.category_id"
+                  resource="categories"
+                  roots-only
+                  :label="t('JRC_SERVICE_DESK.FIELDS.category')"
+                  :unit-id="draft.unit_id"
+                  :disabled="!mayEdit || busy"
+                  :current-name="record?.category?.name || ''"
+                  @selected="selectedNames.category = $event"
+                />
+                <LookupSelect
+                  v-model="draft.subcategory_id"
+                  resource="categories"
+                  :parent-id="draft.category_id"
+                  :label="t('JRC_SERVICE_DESK.FIELDS.subcategory')"
+                  :unit-id="draft.unit_id"
+                  :disabled="!mayEdit || busy || !draft.category_id"
+                  :current-name="record?.subcategory?.name || ''"
+                  @selected="selectedNames.subcategory = $event"
+                />
+                <LookupSelect
+                  v-model="draft.ticket_type_id"
+                  resource="ticket_types"
+                  :label="t('JRC_SERVICE_DESK.FIELDS.ticket_type')"
+                  :unit-id="draft.unit_id"
+                  :disabled="!mayEdit || busy"
+                  :current-name="record?.ticket_type?.name || ''"
+                  @selected="selectedNames.ticket_type = $event"
+                />
+                <fieldset
+                  class="col-span-full grid gap-3 rounded-xl border border-n-blue-6 bg-n-blue-2 p-4"
+                >
+                  <legend class="px-2 text-sm font-semibold text-n-blue-11">
+                    {{ t('JRC_SERVICE_DESK.FORM.assignment_title') }}
+                  </legend>
+                  <p class="m-0 text-xs text-n-slate-11">
+                    {{ t('JRC_SERVICE_DESK.FORM.assignment_help') }}
+                  </p>
+                  <div class="grid gap-4 md:grid-cols-2">
+                    <LookupSelect
+                      v-model="draft.team_id"
+                      resource="teams"
+                      :label="t('JRC_SERVICE_DESK.FIELDS.team')"
+                      :unit-id="draft.unit_id"
+                      :disabled="
+                        edit ||
+                        !mayEdit ||
+                        busy ||
+                        unit?.permissions.assign_ticket !== true
+                      "
+                      :current-name="
+                        selectedNames.team?.name || record?.team?.name || ''
+                      "
+                      @selected="chooseAssignment('team', $event)"
+                    />
+                    <LookupSelect
+                      v-model="draft.assignee_id"
+                      resource="assignees"
+                      :team-id="draft.team_id"
+                      :label="t('JRC_SERVICE_DESK.FIELDS.assignee')"
+                      :unit-id="draft.unit_id"
+                      :disabled="
+                        edit ||
+                        !mayEdit ||
+                        busy ||
+                        unit?.permissions.assign_ticket !== true
+                      "
+                      :current-name="
+                        selectedNames.assignee?.name ||
+                        record?.assignee?.name ||
+                        ''
+                      "
+                      @selected="chooseAssignment('assignee', $event)"
+                    />
+                  </div>
+                </fieldset>
+                <LookupSelect
+                  v-model="draft.queue_id"
+                  resource="queues"
+                  :label="t('JRC_SERVICE_DESK.FIELDS.queue')"
+                  :unit-id="draft.unit_id"
+                  :disabled="
+                    edit ||
+                    !mayEdit ||
+                    busy ||
+                    unit?.permissions.assign_ticket !== true
+                  "
+                  :current-name="
+                    selectedNames.queue?.name || record?.queue?.name || ''
+                  "
+                  @selected="chooseAssignment('queue', $event)"
+                />
+                <Input
+                  :model-value="
+                    record?.status?.name || unit?.initial_status?.name || ''
+                  "
+                  :label="t('JRC_SERVICE_DESK.FIELDS.status')"
+                  :placeholder="t('JRC_SERVICE_DESK.FORM.status_help')"
+                  disabled
+                />
+              </div>
+              <p class="text-xs text-n-slate-11">
+                {{ t('JRC_SERVICE_DESK.FORM.source_help') }}
+              </p>
+            </section>
+            <section
+              v-if="!edit"
+              class="mb-5 grid gap-4 rounded-2xl border border-n-blue-6 bg-n-solid-2 p-4 sm:p-5"
+            >
+              <h3
+                class="flex items-center gap-2 text-base font-semibold text-n-blue-11"
+              >
+                <span class="i-lucide-file-text size-5" aria-hidden="true" />{{
+                  t('JRC_SERVICE_DESK.FIELDS.description')
+                }}
+              </h3>
+              <Input
+                v-model="draft.title"
+                :label="t('JRC_SERVICE_DESK.FIELDS.title')"
+                :placeholder="t('JRC_SERVICE_DESK.FORM.title_placeholder')"
+                :disabled="!mayEdit || busy"
+                maxlength="255"
+              />
+              <TextArea
+                v-model="draft.description"
+                :max-length="20000"
+                resize
+                :label="t('JRC_SERVICE_DESK.FIELDS.description')"
+                :placeholder="
+                  t('JRC_SERVICE_DESK.FORM.description_placeholder')
+                "
+                :disabled="!mayEdit || busy"
+              />
+            </section>
+            <section
+              v-if="!edit || step === 2"
+              class="grid gap-4"
+              :class="
+                !edit
+                  ? 'mb-5 rounded-2xl border border-n-teal-6 bg-n-teal-2/20 p-4 sm:p-5'
+                  : ''
+              "
+            >
+              <h3
+                v-if="!edit"
+                class="flex items-center gap-2 text-base font-semibold text-n-teal-11"
+              >
+                <span class="i-lucide-link size-5" aria-hidden="true" />{{
+                  steps[2]
+                }}
+              </h3>
+              <p class="text-sm text-n-slate-11">
+                {{ t('JRC_SERVICE_DESK.FORM.relationships_help') }}
+              </p>
+              <div class="sd-fields-grid">
+                <p class="text-xs text-n-slate-11">
+                  {{ t('JRC_SERVICE_DESK.EXPERIENCE.links_after_creation') }}
+                </p>
+              </div>
+              <LookupSelect
+                v-model="draft.contract_id"
+                resource="contracts"
+                :label="t('JRC_SERVICE_DESK.FIELDS.contract')"
+                :unit-id="draft.unit_id"
+                :company-id="draft.company_id"
+                :contact-id="draft.requester_id"
+                :allowed-ids="catalogue?.allowed_contract_ids || []"
+                :disabled="!mayEdit || busy || !draft.requester_id"
+                :current-name="record?.contract?.name || ''"
+                @selected="selectedNames.contract = $event"
+              />
+              <ServiceDefinitionSelect
+                v-if="!edit"
+                v-model="draft.service_id"
+                :unit-id="draft.unit_id"
+                :disabled="!mayEdit || busy"
+              />
+              <p v-if="edit" class="text-xs">
+                {{
+                  record?.service?.name ||
+                  t('JRC_SERVICE_DESK.LIFECYCLE.unit_policy')
+                }}
+              </p>
+              <Input
+                v-if="!edit"
+                v-model="draft.conversation_id"
+                :label="t('JRC_SERVICE_DESK.OPS.conversation_id')"
+                :disabled="
+                  !mayEdit ||
+                  busy ||
+                  unit?.permissions.link_conversation !== true
+                "
+                maxlength="19"
+              />
+              <p class="text-xs text-n-slate-11">
+                {{ t('JRC_SERVICE_DESK.OPS.conversation_help') }}
+              </p>
+              <p class="text-xs text-n-slate-11">
+                {{ t('JRC_SERVICE_DESK.FORM.projects_help') }}
+              </p>
+            </section>
+            <div v-if="edit && step === 3" class="grid gap-4">
+              <p class="text-sm text-n-slate-11">
+                {{ t('JRC_SERVICE_DESK.FORM.review_help') }}
+              </p>
+              <h3 class="text-base break-words">
+                {{ draft.title || t('JRC_SERVICE_DESK.COMMON.no_value') }}
+              </h3>
+              <p class="whitespace-pre-wrap break-words text-sm">
+                {{ draft.description || t('JRC_SERVICE_DESK.COMMON.no_value') }}
+              </p>
+              <p class="text-xs text-n-slate-11">
+                {{ t('JRC_SERVICE_DESK.FORM.required_help') }}
+              </p>
+              <State
+                status="pending"
+                compact
+                :description="t('JRC_SERVICE_DESK.TICKET.sla_pending')"
+              />
+            </div>
+            <CatalogueAnswers
+              v-show="!edit || step === 2"
+              v-model="draft.service_fields"
+              :service-id="draft.service_id"
+              :ticket-type-id="draft.ticket_type_id"
+              :category-id="draft.category_id"
+              :subcategory-id="draft.subcategory_id"
+              :editing="edit"
+              :unit-id="draft.unit_id"
+              :disabled="!mayEdit || busy"
+              @ready="serviceReady = $event"
+              @catalogue="applyCatalogue"
+            />
+            <p
+              v-if="!catalogueAccess"
+              role="alert"
+              class="text-sm text-n-ruby-11"
+            >
+              {{ t('JRC_SERVICE_DESK.FORM.catalogue_restricted') }}
+            </p>
+            <div
+              class="sd-footer-actions sticky bottom-0 z-10 rounded-xl border border-n-weak bg-n-solid-2 p-3 shadow-sm"
+            >
+              <Button
+                type="button"
+                color="slate"
+                variant="outline"
+                v-if="edit"
+                :label="t('JRC_SERVICE_DESK.COMMON.previous')"
+                :disabled="step === 0 || busy"
+                @click="step -= 1"
+              />
+              <Button
+                v-if="edit && step < 3"
+                type="button"
+                :disabled="busy"
+                :label="t('JRC_SERVICE_DESK.COMMON.next')"
+                @click="step += 1"
+              />
+              <Button
+                v-else
+                type="submit"
+                :disabled="!maySave"
+                :label="
+                  t(
+                    edit
+                      ? 'JRC_SERVICE_DESK.COMMON.save'
+                      : 'JRC_SERVICE_DESK.COMMON.create'
+                  )
+                "
+              />
+            </div>
+          </form>
+        </Panel>
+        <aside class="grid gap-4 xl:sticky xl:top-4">
+          <Panel :title="t('JRC_SERVICE_DESK.FORM.summary')">
+            <dl class="sd-detail-list">
+              <dt>
+                {{ t('JRC_SERVICE_DESK.FIELDS.operator_company') }}
+              </dt>
+              <dd>
+                {{
+                  unit?.operator_company.name ||
+                  t('JRC_SERVICE_DESK.COMMON.no_value')
+                }}
+              </dd>
+              <dt>
+                {{ t('JRC_SERVICE_DESK.FIELDS.unit') }}
+              </dt>
+              <dd>
+                {{ unit?.name || t('JRC_SERVICE_DESK.COMMON.no_value') }}
+              </dd>
+              <template v-for="(value, field) in lookupLabels" :key="field">
+                <dt>
+                  {{ t(`JRC_SERVICE_DESK.FIELDS.${field}`) }}
+                </dt>
+                <dd>
+                  {{ value }}
+                  <span
+                    v-if="field === 'requester' && requesterPhone"
+                    class="block text-xs text-n-slate-11"
+                  >
+                    {{ requesterPhone }}
+                  </span>
+                </dd>
+              </template>
+              <dt>
+                {{ t('JRC_SERVICE_DESK.FIELDS.title') }}
+              </dt>
+              <dd>
+                {{ draft.title || t('JRC_SERVICE_DESK.COMMON.no_value') }}
+              </dd>
+            </dl>
+            <p class="text-xs text-n-slate-11 mt-4">
+              {{ t('JRC_SERVICE_DESK.FORM.draft_notice') }}
+            </p>
+            <State
+              status="pending"
+              compact
+              :description="t('JRC_SERVICE_DESK.TICKET.sla_pending')"
+            />
+          </Panel>
+          <Panel v-if="!edit" :title="t('JRC_SERVICE_DESK.TICKET.tabs.files')">
+            <div
+              class="grid gap-3 rounded-xl border border-dashed border-n-blue-6 bg-n-blue-2/20 p-4"
+            >
+              <span
+                class="i-lucide-cloud-upload mx-auto size-8 text-n-blue-11"
+                aria-hidden="true"
+              />
+              <label v-if="!edit" class="grid gap-1 text-sm">
+                {{ t('JRC_SERVICE_DESK.TICKET.upload') }}
+                <input
+                  type="file"
+                  multiple
+                  :disabled="!mayEdit || busy || hashingFiles"
+                  @change="files = Array.from($event.target.files)"
+                />
+              </label>
+              <ul v-if="files.length" class="m-0 text-xs text-n-slate-11">
+                <li v-for="(file, index) in files" :key="index">
+                  {{ file.name }}
+                </li>
+              </ul>
+              <p class="text-xs text-n-slate-11">
+                {{ t('JRC_SERVICE_DESK.FORM.attachments_help') }}
+              </p>
+            </div>
+          </Panel>
+        </aside>
+      </div>
+    </template>
+  </section>
+</template>

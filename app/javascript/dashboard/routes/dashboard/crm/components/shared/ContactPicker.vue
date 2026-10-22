@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n';
 import ContactsAPI from 'dashboard/api/contacts';
 
 const props = defineProps({
+  disabled: { type: Boolean, default: false },
   modelValue: { type: [Number, String], default: null },
 });
 const emit = defineEmits(['update:modelValue', 'select']);
@@ -44,6 +45,7 @@ const contactLabel = contact =>
     .filter(Boolean)
     .join(' · ');
 const choose = contact => {
+  if (props.disabled) return;
   selected.value = contact;
   emit('update:modelValue', contact.id);
   emit('select', contact);
@@ -99,7 +101,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="min-w-0 rounded-xl border border-n-weak bg-n-solid-2 p-3">
+  <fieldset
+    :disabled="disabled"
+    class="min-w-0 rounded-xl border border-n-weak bg-n-solid-2 p-3"
+  >
     <p v-if="selected" class="mb-2 break-words text-sm font-semibold">
       {{ contactLabel(selected) }}
     </p>
@@ -150,5 +155,5 @@ onBeforeUnmount(() => {
         {{ t('CRM.COMMERCIAL.NEXT') }}
       </button>
     </div>
-  </div>
+  </fieldset>
 </template>

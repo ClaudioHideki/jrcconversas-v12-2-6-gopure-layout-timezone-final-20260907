@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { useAccount } from 'dashboard/composables/useAccount';
 import { useKbd } from 'dashboard/composables/utils/useKbd';
 import { useMapGetter } from 'dashboard/composables/store';
-import { getAvailabilityStatus } from 'dashboard/helper/availabilityStatus';
+import SoftphoneDownload from './SoftphoneDownload.vue';
 
 import Avatar from 'next/avatar/Avatar.vue';
 import SidebarNotificationBell from 'dashboard/components-next/sidebar/SidebarNotificationBell.vue';
@@ -19,18 +19,30 @@ const SEARCH_PLACEHOLDER = 'Pesquisar conversas, contatos ou mensagens...';
 const currentUser = useMapGetter('getCurrentUser');
 const currentUserAvailability = useMapGetter('getCurrentUserAvailability');
 
-const availability = computed(() =>
-  getAvailabilityStatus(currentUserAvailability.value)
-);
+const availability = computed(() => {
+  const statuses = {
+    online: { label: 'Disponível', color: 'bg-n-teal-9' },
+    offline: { label: 'Indisponível', color: 'bg-n-slate-9' },
+    meeting: { label: 'Reunião', color: 'bg-n-blue-9' },
+    feedback: { label: 'Feedback', color: 'bg-n-violet-9' },
+    end_shift: { label: 'Fim do turno', color: 'bg-n-gray-9' },
+    training: { label: 'Treinamento', color: 'bg-n-purple-9' },
+    bathroom_break: { label: 'Pausa banheiro', color: 'bg-n-cyan-9' },
+    lunch_break: { label: 'Pausa almoço', color: 'bg-n-amber-9' },
+    manual_call: { label: 'Chamada Manual', color: 'bg-n-rose-9' },
+  };
+
+  return statuses[currentUserAvailability.value] || statuses.offline;
+});
 </script>
 
 <template>
   <header
-    class="hidden md:flex h-[78px] flex-shrink-0 items-center justify-between gap-8 border-b border-n-weak bg-n-solid-1 px-7"
+    class="hidden md:flex h-[78px] flex-shrink-0 items-center justify-between gap-3 border-b border-n-weak bg-n-solid-1 px-4 xl:gap-8 xl:px-7"
   >
     <RouterLink
       :to="{ name: 'search' }"
-      class="group flex h-12 w-full max-w-3xl items-center gap-3 rounded-xl border border-n-weak bg-n-surface-1 px-4 shadow-sm transition hover:border-n-blue-7 hover:shadow"
+      class="group flex h-12 min-w-0 w-full max-w-3xl items-center gap-3 rounded-xl border border-n-weak bg-n-surface-1 px-4 shadow-sm transition hover:border-n-blue-7 hover:shadow"
     >
       <span
         class="i-lucide-search size-5 flex-shrink-0 text-n-slate-10 group-hover:text-n-brand"
@@ -39,7 +51,7 @@ const availability = computed(() =>
         {{ SEARCH_PLACEHOLDER }}
       </span>
       <kbd
-        class="rounded-md border border-n-weak bg-n-solid-2 px-2 py-0.5 text-xs text-n-slate-10"
+        class="hidden rounded-md border border-n-weak bg-n-solid-2 px-2 py-0.5 text-xs text-n-slate-10 xl:block"
       >
         {{ searchShortcut }}
       </kbd>
@@ -63,6 +75,8 @@ const availability = computed(() =>
           <SidebarProfileMenuStatus />
         </DropdownBody>
       </DropdownContainer>
+
+      <SoftphoneDownload />
 
       <SidebarNotificationBell
         class="!size-10 !rounded-full !border !border-n-weak hover:!bg-n-alpha-1"

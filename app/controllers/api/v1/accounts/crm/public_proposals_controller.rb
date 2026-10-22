@@ -6,7 +6,12 @@ module Api
           before_action :find_valid_proposal
 
           def show
-            render json: JrcCrm::ProposalSerializer.new(@proposal).as_json.merge(
+            unless @proposal.public_availability[:available]
+              @proposal.record_expiration!
+              render json: { availability: @proposal.public_availability }, status: :ok
+              return
+            end
+            render json: JrcCrm::ProposalSerializer.new(@proposal, include_gratuity_intent: false).as_json.merge(
               account: { name: @proposal.account.name },
               customer: serialize_customer,
               items: @proposal.proposal_items.map { |item| serialize_item(item) }
@@ -14,19 +19,27 @@ module Api
           end
 
           def record_view
-            first_view = @proposal.viewed_count.to_i.zero?
-            @proposal.record_customer_view!
-            @proposal.events.create!(
-              account_id: @proposal.account_id,
-              event_type: first_view ? 'viewed' : 'viewed_again',
-              description: first_view ? 'Proposta visualizada pelo cliente' : 'Proposta visualizada novamente pelo cliente'
-            )
+            unless @proposal.record_customer_view!(origin: 'public_api', channel: 'web')
+              render json: { error: @proposal.public_availability[:message] || 'Esta proposta não permite registrar visualização.',
+                             availability: @proposal.public_availability }, status: :unprocessable_entity
+              return
+            end
             head :ok
           end
 
           def accept
+            unless @proposal.public_availability[:available]
+              render json: { error: 'Esta proposta ainda não está disponível para aceite.' }, status: :unprocessable_entity
+              return
+            end
+
             if @proposal.status == 'accepted'
-              render json: { message: 'Proposta já aceita' }, status: :ok
+              lifecycle = JrcCrm::AcceptedProposalLifecycleService.new(proposal: @proposal, actor: @proposal.owner).call
+              render json: {
+                message: 'Proposta já aceita',
+                sales_order: lifecycle[:order] && { id: lifecycle[:order].id, order_number: lifecycle[:order].order_number },
+                lifecycle_warnings: lifecycle[:warnings]
+              }, status: :ok
               return
             end
 
@@ -54,16 +67,16 @@ module Api
                 event_type: 'accepted',
                 description: 'Proposta aceita pelo cliente via link público com evidência digital'
               )
-
-              if @proposal.deal.present?
-                won_stage = @proposal.deal.pipeline.stages.active.find_by(is_won: true)
-                if won_stage
-                  JrcCrm::DealPipelineService.new(deal: @proposal.deal, stage: won_stage, actor: nil).call
-                end
-              end
             end
 
-            render json: { success: true, message: 'Proposta aceita com sucesso' }, status: :ok
+            lifecycle = JrcCrm::AcceptedProposalLifecycleService.new(proposal: @proposal.reload, actor: @proposal.owner).call
+            render json: {
+              success: true,
+              message: 'Proposta aceita com sucesso',
+              sales_order: lifecycle[:order] && { id: lifecycle[:order].id, order_number: lifecycle[:order].order_number },
+              lifecycle_warnings: lifecycle[:warnings],
+              lifecycle_error: lifecycle[:success] ? nil : lifecycle[:error]
+            }, status: :ok
           rescue ActiveRecord::StaleObjectError
             render json: { error: 'Conflito de versão na proposta', code: 'CONCURRENCY_CONFLICT' }, status: :conflict
           end
@@ -87,7 +100,7 @@ module Api
           private
 
           def find_valid_proposal
-            @proposal = JrcCrm::Proposal.find_by_raw_token(params[:token])
+            @proposal = JrcCrm::Proposal.find_by_raw_token(params[:token], allow_unavailable: true)
             if @proposal && (@proposal.account_id != params[:account_id].to_i || !@proposal.account.feature_enabled?('jrc_crm'))
               @proposal = nil
             end
@@ -100,7 +113,7 @@ module Api
           end
 
           def serialize_customer
-            contact = @proposal.deal.contact || @proposal.deal.contacts.first
+            contact = @proposal.customer_contact
             return nil unless contact
 
             { name: contact.name.presence || contact.identifier, email: contact.email }

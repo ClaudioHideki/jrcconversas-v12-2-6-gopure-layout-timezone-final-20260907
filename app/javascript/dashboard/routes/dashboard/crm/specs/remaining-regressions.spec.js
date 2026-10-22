@@ -18,7 +18,11 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 vi.mock('vuex', () => ({
-  useStore: () => ({ getters: {}, dispatch: mocks.dispatch, commit: vi.fn() }),
+  useStore: () => ({
+    getters: { 'accounts/isFeatureEnabledonAccount': () => false },
+    dispatch: mocks.dispatch,
+    commit: vi.fn(),
+  }),
 }));
 vi.mock('dashboard/composables', () => ({ useAlert: mocks.alert }));
 vi.mock('dashboard/api/contacts', () => ({ default: mocks.contacts }));
@@ -41,7 +45,23 @@ const wrappers = [];
 const render = component => {
   const wrapper = mount(component, {
     global: {
+      mocks: {
+        $store: {
+          getters: { 'accounts/isFeatureEnabledonAccount': () => false },
+          dispatch: mocks.dispatch,
+          commit: vi.fn(),
+        },
+      },
       plugins: [
+        {
+          install: app => {
+            app.config.globalProperties.$store = {
+              getters: { 'accounts/isFeatureEnabledonAccount': () => false },
+              dispatch: mocks.dispatch,
+              commit: vi.fn(),
+            };
+          },
+        },
         createI18n({
           legacy: false,
           locale: 'pt_BR',
@@ -56,6 +76,7 @@ const render = component => {
 };
 
 beforeEach(() => {
+  localStorage.clear();
   mocks.route = reactive({ params: { accountId: '2' }, query: { new: '1' } });
   mocks.contacts.get.mockImplementation(async page => ({
     data: {

@@ -5,8 +5,10 @@ class Api::V1::Accounts::JrcNico::OperationsController < Api::V1::Accounts::Base
   rescue_from ArgumentError, ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound, with: :invalid
   rescue_from JrcNico::OperatorSession::Busy, JrcNico::RunCapacity::Exceeded, with: :busy
   rescue_from JrcNico::RuntimeClient::Error, with: :unavailable
+  rescue_from JrcBroker::Client::Error, with: :broker_unavailable
 
   def show
+    @operator.session.reload
     delegations = JrcNico::Delegation.where(account: Current.account, user: Current.user).order(updated_at: :desc).limit(30)
                                     .select { |d| @operator.access.policy(d.conversation).show? }
     visible = @operator.access.conversations
@@ -16,9 +18,11 @@ class Api::V1::Accounts::JrcNico::OperationsController < Api::V1::Accounts::Base
       c.custom_attributes.dig('nico_assistance', 'status') == 'pending' && c.custom_attributes['nico_control'] != 'active' &&
         %w[open pending].include?(c.status) && c.custom_attributes.dig('nico_assistance', 'message_id').to_i > answered.fetch(c.id, 0)
     end.first(8).map { |c| { conversation_id: c.display_id, name: c.contact.name, recommendation: c.custom_attributes['nico_assistance'] } }
-    render json: { messages: @operator.session.messages,
+    render json: { messages: @operator.session.messages, capacity: JrcNico::RunCapacity.snapshot(Current.account),
+                   workflow: JrcNico::WorkflowSummary.for(@operator.session),
                    can_manage_knowledge: @operator.access.membership.administrator?,
                    commands: @operator.session.commands.where('created_at >= ?', @operator.session.context['visible_since'] || Time.current)
+                                      .includes(broker_send_operation: [:message, { conversation: :contact }])
                                       .order(id: :desc).limit(100).map(&:snapshot),
                    tools: JrcNico::ToolCatalog.new(@operator.access).available, delegations: delegations.map(&:snapshot), suggestions: suggestions }
   end
@@ -52,8 +56,9 @@ class Api::V1::Accounts::JrcNico::OperationsController < Api::V1::Accounts::Base
   end
 
   def ask
-    input = params.permit(:message, :request_id, :conversation_id)
-    @operator.ask(message: input.fetch(:message), request_id: input.fetch(:request_id), conversation_id: input[:conversation_id])
+    input = params.permit(:message, :request_id, :conversation_id, :route_name)
+    @operator.ask(message: input.fetch(:message), request_id: input.fetch(:request_id), conversation_id: input[:conversation_id],
+                  route_name: input[:route_name], async: true)
     show
   end
 
@@ -105,10 +110,12 @@ class Api::V1::Accounts::JrcNico::OperationsController < Api::V1::Accounts::Base
     forbidden
   rescue ArgumentError, ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound
     invalid
-  rescue JrcNico::OperatorSession::Busy, JrcNico::RunCapacity::Exceeded
-    busy
-  rescue JrcNico::RuntimeClient::Error
-    unavailable
+  rescue JrcNico::OperatorSession::Busy, JrcNico::RunCapacity::Exceeded => error
+    busy(error)
+  rescue JrcNico::RuntimeClient::Error => error
+    unavailable(error)
+  rescue JrcBroker::Client::Error
+    broker_unavailable
   end
 
   def operator_session
@@ -127,11 +134,20 @@ class Api::V1::Accounts::JrcNico::OperationsController < Api::V1::Accounts::Base
     render json: { error: 'invalid_operation' }, status: :unprocessable_entity
   end
 
-  def busy
-    render json: { error: 'capacity_unavailable' }, status: :too_many_requests
+  def busy(error)
+    if error.is_a?(JrcNico::RunCapacity::Exceeded)
+      render json: { error: error.code, message: error.user_message }, status: :too_many_requests
+    else
+      render json: { error: 'capacity_unavailable', message: 'O NICO está processando outra solicitação desta sessão. Aguarde.' }, status: :too_many_requests
+    end
   end
 
-  def unavailable
-    render json: { error: 'provider_unavailable' }, status: :service_unavailable
+  def unavailable(error)
+    render json: { error: error.code, message: error.user_message }, status: :service_unavailable
+  end
+
+  def broker_unavailable
+    render json: { error: 'broker_unavailable', message: 'Não foi possível consultar o Broker. Tente novamente para preparar a prévia.' },
+           status: :service_unavailable
   end
 end

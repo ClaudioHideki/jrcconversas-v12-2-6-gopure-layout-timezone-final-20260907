@@ -1,16 +1,16 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { useStore } from 'vuex';
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { pipelinesAPI, stagesAPI, lostReasonsAPI } from 'dashboard/api/crm';
-import { useCrmTheme } from '../../useCrmTheme';
+import { crmControlClasses } from '../../crmControlClasses';
+import OrganizationalStructureSettings from './OrganizationalStructureSettings.vue';
 
-const { crmControlClasses } = useCrmTheme();
 const { t } = useI18n();
 const store = useStore();
 const route = useRoute();
-const tab = ref('pipelines');
+const tab = ref('structure');
 const pipelines = ref([]);
 const stages = ref([]);
 const reasons = ref([]);
@@ -78,33 +78,23 @@ const remove = async (kind, record) => {
   catch (e) { error.value = errorMessage(e); }
   finally { saving.value = false; }
 };
-const moveStage = async (stage, delta) => {
-  const index = stages.value.findIndex(item => item.id === stage.id);
-  const target = index + delta;
-  if(target < 0 || target >= stages.value.length) return;
-  const ordered = [...stages.value];
-  [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
-  saving.value = true;
-  try { await stagesAPI.reorder(ordered.map((item, i) => ({ id: item.id, position: i + 1 }))); await load(); }
-  catch(e) { error.value = errorMessage(e); }
-  finally { saving.value = false; }
-};
-onMounted(load);
+watch(tab, value => { if (value !== 'structure' && !pipelines.value.length && !loading.value) load(); });
 </script>
 
 <template>
   <div class="h-full overflow-auto bg-n-background p-4 sm:p-6">
-    <header class="mb-5 flex flex-wrap items-center justify-between gap-3"><h2 class="text-2xl font-bold text-n-slate-12">{{ t('CRM.HOMOLOGATION.SETTINGS_TITLE') }}</h2><button class="rounded-xl border border-n-weak bg-n-solid-2 px-4 py-2 text-sm text-n-slate-12" :disabled="loading" @click="load">{{ t('CRM.HOMOLOGATION.REFRESH') }}</button></header>
+    <header class="mb-5 flex flex-wrap items-center justify-between gap-3"><h2 class="text-2xl font-bold text-n-slate-12">{{ t('CRM.HOMOLOGATION.SETTINGS_TITLE') }}</h2><button v-if="tab !== 'structure'" class="rounded-xl border border-n-weak bg-n-solid-2 px-4 py-2 text-sm text-n-slate-12" :disabled="loading" @click="load">{{ t('CRM.HOMOLOGATION.REFRESH') }}</button></header>
     <p v-if="!isAdmin" class="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{{ t('CRM.HOMOLOGATION.ADMIN_REQUIRED') }}</p>
     <p v-if="error && !editor" role="alert" class="mb-4 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">{{ error }}</p>
     <p v-if="notice" role="status" class="mb-4 rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800">{{ notice }}</p>
-    <nav class="mb-5 flex flex-wrap gap-2" role="tablist"><button v-for="key in ['pipelines', 'reasons', 'general']" :key="key" role="tab" :aria-selected="tab === key" class="rounded-xl border px-4 py-2 text-sm font-semibold" :class="tab === key ? 'border-n-brand bg-n-brand text-white' : 'border-n-weak bg-n-solid-2 text-n-slate-11 hover:bg-n-slate-3'" @click="tab = key">{{ t('CRM.HOMOLOGATION.SETTINGS_TABS.' + key) }}</button></nav>
-    <p v-if="loading" role="status" class="p-6 text-n-slate-11">{{ t('CRM.HOMOLOGATION.LOADING') }}</p>
+    <nav class="mb-5 flex flex-wrap gap-2" role="tablist"><button v-for="key in ['structure', 'pipelines', 'reasons', 'general']" :key="key" role="tab" :aria-selected="tab === key" class="rounded-xl border px-4 py-2 text-sm font-semibold" :class="tab === key ? 'border-n-brand bg-n-brand text-white' : 'border-n-weak bg-n-solid-2 text-n-slate-11 hover:bg-n-slate-3'" @click="tab = key">{{ t('CRM.HOMOLOGATION.SETTINGS_TABS.' + key) }}</button></nav>
+    <p v-if="loading && tab !== 'structure'" role="status" class="p-6 text-n-slate-11">{{ t('CRM.HOMOLOGATION.LOADING') }}</p>
+    <OrganizationalStructureSettings v-if="tab === 'structure'" />
     <section v-else-if="tab === 'pipelines'" class="grid gap-5 min-[1280px]:grid-cols-[260px_minmax(0,1fr)]">
       <aside class="rounded-xl border border-n-weak bg-n-solid-2 p-4"><button class="mb-4 w-full rounded-lg bg-n-brand px-3 py-2 text-sm font-semibold text-white" :disabled="!isAdmin" @click="openEditor('pipeline')">{{ t('CRM.HOMOLOGATION.ADD_PIPELINE') }}</button><button v-for="pipeline in pipelines" :key="pipeline.id" class="mb-2 flex w-full items-center justify-between gap-2 rounded-lg border p-3 text-left text-sm" :class="selectedPipeline === pipeline.id ? 'border-n-brand bg-n-blue-2 text-n-blue-11' : 'border-n-weak hover:bg-n-slate-3'" @click="selectPipeline(pipeline.id)"><strong class="break-words">{{ pipeline.name }}</strong><span>{{ pipeline.stages_count }}</span></button></aside>
       <article v-if="selectedPipeline" class="min-w-0 rounded-xl border border-n-weak bg-n-solid-2 p-4">
         <header class="mb-4 flex flex-wrap items-center justify-between gap-3"><h3 class="text-lg font-semibold">{{ pipelines.find(item => item.id === selectedPipeline)?.name }}</h3><div class="flex flex-wrap gap-2"><button :disabled="!isAdmin || saving" class="rounded-lg border px-3 py-2 text-sm" @click="openEditor('pipeline', pipelines.find(item => item.id === selectedPipeline))">{{ t('CRM.HOMOLOGATION.EDIT_PIPELINE') }}</button><button :disabled="!isAdmin || saving" class="rounded-lg border border-red-300 px-3 py-2 text-sm text-red-700" @click="remove('pipeline', pipelines.find(item => item.id === selectedPipeline))">{{ t('CRM.HOMOLOGATION.DELETE') }}</button><button :disabled="!isAdmin || saving" class="rounded-lg bg-n-brand px-3 py-2 text-sm text-white" @click="openEditor('stage')">{{ t('CRM.HOMOLOGATION.ADD_STAGE') }}</button></div></header>
-        <div class="overflow-x-auto"><table class="w-full min-w-[480px] text-sm"><thead class="bg-n-slate-2 text-left text-n-slate-11"><tr><th class="p-3">{{ t('CRM.HOMOLOGATION.POSITION') }}</th><th class="p-3">{{ t('CRM.HOMOLOGATION.NAME') }}</th><th class="p-3">{{ t('CRM.HOMOLOGATION.PROBABILITY') }}</th><th class="p-3">{{ t('CRM.HOMOLOGATION.ACTIONS') }}</th></tr></thead><tbody><tr v-for="stage in stages" :key="stage.id" class="border-t border-n-weak"><td class="p-3"><span>{{ stage.position }}</span><button class="ml-2 rounded border px-2" :disabled="!isAdmin || saving || stage.id === stages[0]?.id" :aria-label="t('CRM.COMMERCIAL.UP')" @click="moveStage(stage,-1)">↑</button><button class="ml-1 rounded border px-2" :disabled="!isAdmin || saving || stage.id === stages[stages.length-1]?.id" :aria-label="t('CRM.COMMERCIAL.DOWN')" @click="moveStage(stage,1)">↓</button></td><td class="p-3">{{ stage.name }}</td><td class="p-3">{{ stage.probability }}%</td><td class="p-3"><div class="flex gap-2"><button :disabled="!isAdmin || saving" class="rounded-lg border px-3 py-2" @click="openEditor('stage', stage)">{{ t('CRM.HOMOLOGATION.EDIT') }}</button><button :disabled="!isAdmin || saving" class="rounded-lg border border-red-300 px-3 py-2 text-red-700" @click="remove('stage', stage)">{{ t('CRM.HOMOLOGATION.DELETE') }}</button></div></td></tr></tbody></table></div>
+        <div class="overflow-x-auto"><table class="w-full min-w-[480px] text-sm"><thead class="bg-n-slate-2 text-left text-n-slate-11"><tr><th class="p-3">{{ t('CRM.HOMOLOGATION.POSITION') }}</th><th class="p-3">{{ t('CRM.HOMOLOGATION.NAME') }}</th><th class="p-3">{{ t('CRM.HOMOLOGATION.PROBABILITY') }}</th><th class="p-3">{{ t('CRM.HOMOLOGATION.ACTIONS') }}</th></tr></thead><tbody><tr v-for="stage in stages" :key="stage.id" class="border-t border-n-weak"><td class="p-3">{{ stage.position }}</td><td class="p-3">{{ stage.name }}</td><td class="p-3">{{ stage.probability }}%</td><td class="p-3"><div class="flex gap-2"><button :disabled="!isAdmin || saving" class="rounded-lg border px-3 py-2" @click="openEditor('stage', stage)">{{ t('CRM.HOMOLOGATION.EDIT') }}</button><button :disabled="!isAdmin || saving" class="rounded-lg border border-red-300 px-3 py-2 text-red-700" @click="remove('stage', stage)">{{ t('CRM.HOMOLOGATION.DELETE') }}</button></div></td></tr></tbody></table></div>
         <p v-if="!stages.length" class="p-6 text-center text-sm text-n-slate-11">{{ t('CRM.HOMOLOGATION.NO_STAGES') }}</p>
       </article>
     </section>

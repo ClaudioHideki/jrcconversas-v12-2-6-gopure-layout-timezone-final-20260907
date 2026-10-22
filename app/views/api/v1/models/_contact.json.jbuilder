@@ -6,7 +6,7 @@ json.name resource.name
 json.phone_number resource.phone_number
 json.blocked resource.blocked
 json.identifier resource.identifier
-json.company_id resource.company_id if Current.account&.feature_enabled?('companies')
+json.company_id resource.company_id if Current.account&.feature_enabled?('companies') || Current.account&.feature_enabled?('jrc_customer_master')
 json.thumbnail resource.avatar_url
 json.custom_attributes resource.custom_attributes
 json.last_activity_at resource.last_activity_at.to_i if resource[:last_activity_at].present?
@@ -19,6 +19,3 @@ if defined?(with_contact_inboxes) && with_contact_inboxes.present?
     end
   end
 end
-
-json.contact_type resource.contact_type
-json.crm_owners @relationship_owners[resource.id] if @relationship_owners

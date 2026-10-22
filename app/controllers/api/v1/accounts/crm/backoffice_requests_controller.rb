@@ -1,6 +1,8 @@
 module Api::V1::Accounts::Crm
   class BackofficeRequestsController < BaseController
-    before_action :set_request, only: %i[show update advance upload_documents download_document document_status add_issue resolve_issue confirm_provisioning reopen]
+    before_action :set_request, only: %i[show update advance upload_documents download_document document_status add_issue resolve_issue confirm_provisioning reopen decide_order]
+
+    around_action :lock_operational_change, only: %i[update advance document_status add_issue resolve_issue confirm_provisioning reopen]
 
     def index
       scope = visible_to_current_user(crm_scope.jrc_crm_backoffice_requests)
@@ -33,6 +35,8 @@ module Api::V1::Accounts::Crm
 
     def create
       attributes = request_params.to_h
+      attributes['stage'] = 'analysis'
+      attributes['status'] = 'pending'
       order = visible_to_current_user(crm_scope.jrc_crm_sales_orders).find(attributes.delete('sales_order_id'))
       contract_id = attributes.delete('contract_id')
       contract = contract_id.present? ? order.contracts.find(contract_id) : order.contracts.order(created_at: :desc).first
@@ -47,19 +51,44 @@ module Api::V1::Accounts::Crm
     end
 
     def update
+      if @request.order_approval?
+        return render json: { message: 'Use a decisão de aprovação do pedido.' }, status: :unprocessable_entity
+      end
       before = audit_snapshot(@request)
       attributes = request_params.except(:sales_order_id, :contract_id, :owner_id).to_h
       owner_id = request_params[:owner_id]
       attributes[:owner] = crm_scope.users.find(owner_id) if owner_id.present?
-      attributes[:completed_at] = Time.current if attributes['status'] == 'completed'
+      if (attributes['stage'].present? && attributes['stage'] != @request.stage) ||
+         (attributes['status'].present? && attributes['status'] != @request.status &&
+          !%w[pending in_progress waiting_customer blocked canceled approved rejected].include?(attributes['status']))
+        return render json: { message: 'Use Avancar etapa ou Reabrir para alterar a etapa/concluir o fluxo.' }, status: :unprocessable_entity
+      end
+      attributes.delete('stage')
+      incoming_metadata = (attributes.delete('metadata') || {}).except('document_statuses', 'provisioning_completed_at',
+        'provisioning_completion_mode', 'provisioning_external_reference', 'provisioning_confirmed_by_id', 'approval_decision',
+        'document_checklist', 'contract_required', 'source', 'implementation_project_id')
+      attributes[:metadata] = (@request.metadata || {}).deep_merge(incoming_metadata)
+      if %w[approved rejected].include?(attributes['status']) && attributes['status'] != @request.status
+        unless crm_admin? && (@request.request_kind.in?(%w[approval change cancellation]) || @request.stage_applicable?('approval'))
+          return render json: { message: 'Aprovacao requer administrador e solicitacao elegivel.' }, status: :forbidden
+        end
+        attributes[:metadata]['approval_decision'] = { 'status' => attributes['status'], 'actor_id' => Current.user.id,
+                                                     'at' => Time.current.iso8601 }
+      end
       @request.update!(attributes)
       audit!(@request, 'backoffice_updated', before, audit_snapshot(@request))
       render json: serialize(@request.reload)
     end
 
     def advance
+      if @request.order_approval?
+        return render json: { message: 'A aprovação do pedido exige decisão explícita.' }, status: :unprocessable_entity
+      end
       before = audit_snapshot(@request)
-      @request.advance!
+      JrcApprovals::CommercialGate.check!(resource: @request.sales_order, user: Current.user, key: 'crm.order_price')
+      JrcApprovals::CommercialGate.check!(resource: @request, user: Current.user, key: 'backoffice.release')
+      JrcCrm::BackofficeDocumentChecklist.new(request: @request, actor: Current.user).sync! if @request.fulfillment?
+      @request.advance!(actor: Current.user)
       audit!(@request, 'backoffice_stage_changed', before, audit_snapshot(@request))
       render json: serialize(@request.reload)
     rescue ActiveRecord::RecordInvalid => e
@@ -69,6 +98,9 @@ module Api::V1::Accounts::Crm
     def upload_documents
       uploads = Array(params[:files]).compact
       return render json: { message: 'Selecione ao menos um documento.' }, status: :unprocessable_entity if uploads.empty?
+      if uploads.length + @request.documents.count > 10 || uploads.any? { |file| !file.respond_to?(:size) || file.size > 20.megabytes }
+        return render json: { message: 'Limite de 10 arquivos, ate 20 MB por arquivo.' }, status: :unprocessable_entity
+      end
       uploads.each { |file| @request.documents.attach(file) }
       audit!(@request, 'backoffice_document_uploaded', {}, { filenames: uploads.map { |file| file.original_filename } })
       render json: { documents: documents_rows(@request.reload) }, status: :created
@@ -82,6 +114,8 @@ module Api::V1::Accounts::Crm
     def document_status
       key = params[:document_key].to_s.presence || params[:attachment_id].to_s
       status = params[:status].to_s
+      automatic = Array(@request.metadata['document_checklist']).any? { |row| row['key'] == key && row['source'] != 'manual' }
+      return render json: { message: 'Este requisito é verificado no módulo de origem.' }, status: :unprocessable_entity if automatic
       return render json: { message: 'Status inválido.' }, status: :unprocessable_entity unless status.in?(%w[pending received validating approved rejected expired])
 
       attachment = params[:attachment_id].present? ? @request.documents.find(params[:attachment_id]) : nil
@@ -104,6 +138,7 @@ module Api::V1::Accounts::Crm
       end
 
       @request.update!(metadata: metadata)
+      JrcCrm::BackofficeDocumentChecklist.new(request: @request, actor: Current.user).sync! if @request.fulfillment?
       audit!(@request, 'backoffice_document_status_changed', { key: key, status: previous }, { key: key, status: status, attachment_id: attachment&.id })
       render json: serialize(@request.reload)
     end
@@ -164,18 +199,47 @@ module Api::V1::Accounts::Crm
     end
 
     def reopen
+      ensure_crm_admin!
+      return render json: { message: 'Crie uma nova solicitação de aprovação para este pedido.' }, status: :unprocessable_entity if @request.order_approval?
       target_stage = params[:stage].to_s.presence || 'analysis'
       unless JrcCrm::BackofficeRequest::STAGES.include?(target_stage) && target_stage != 'completed'
         return render json: { message: 'Etapa de reabertura inválida.' }, status: :unprocessable_entity
       end
 
       before = audit_snapshot(@request)
+      if @request.fulfillment? && %w[implementation provisioning finance completed].include?(target_stage) &&
+         (@request.stage_applicable?('contract') && @request.contract&.signature_status != 'signed')
+        return render json: { message: 'A assinatura do contrato ainda está pendente.' }, status: :unprocessable_entity
+      end
       @request.update!(stage: target_stage, status: 'in_progress', completed_at: nil)
       audit!(@request, 'backoffice_reopened', before, audit_snapshot(@request))
       render json: serialize(@request.reload)
     end
 
+    def decide_order
+      ensure_crm_admin!
+      JrcCrm::OrderApprovalService.new(order: @request.sales_order, actor: Current.user)
+        .decide!(request: @request, decision: params[:decision].to_s, reason: params[:reason])
+      render json: serialize(@request.reload)
+    rescue ArgumentError => error
+      render json: { message: error.message }, status: :unprocessable_entity
+    end
+
     private
+
+    def lock_operational_change
+      @request.sales_order.with_lock do
+        @request.with_lock do
+          releasing = action_name == 'confirm_provisioning' ||
+            (action_name == 'update' && %w[approved completed].include?(params.dig(:backoffice_request, :status)))
+          if releasing
+            JrcApprovals::CommercialGate.check!(resource: @request.sales_order, user: Current.user, key: 'crm.order_price')
+            JrcApprovals::CommercialGate.check!(resource: @request, user: Current.user, key: 'backoffice.release')
+          end
+          yield
+        end
+      end
+    end
 
     def set_request
       @request = visible_to_current_user(crm_scope.jrc_crm_backoffice_requests).find(params[:id])

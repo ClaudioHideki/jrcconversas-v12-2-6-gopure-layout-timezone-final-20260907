@@ -77,11 +77,8 @@ class JrcCampaignsAPI extends ApiClient {
     return axios.post(`${this.url}/${id}/duplicate`);
   }
 
-  audiencePreview(payload, options = {}) {
-    return axios.post(`${this.url}/audience_preview`, {
-      campaign: payload,
-      ...options,
-    });
+  audiencePreview(payload) {
+    return axios.post(`${this.url}/audience_preview`, { campaign: payload });
   }
 
   analytics(params = {}) {

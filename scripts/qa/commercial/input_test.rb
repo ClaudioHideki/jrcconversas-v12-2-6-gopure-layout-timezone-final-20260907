@@ -26,7 +26,7 @@ class CommercialInputTest < Minitest::Test
   def test_contact_page_never_produces_a_negative_offset
     # Execute the exact current production method, independently of controller dependencies.
     source = File.read(File.expand_path('../../../app/controllers/api/v1/accounts/contacts_controller.rb', __dir__))
-    method = source[/^  def set_current_page\n.*?^  end/m]
+    method = source[/^  def set_current_page\r?\n.*?^  end/m]
     raise 'Production method not found' unless method
     receiver = Class.new { attr_accessor :params }.new
     receiver.singleton_class.class_eval(method, 'contacts_controller#set_current_page')

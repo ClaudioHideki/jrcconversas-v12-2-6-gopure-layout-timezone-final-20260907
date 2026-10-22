@@ -1,6 +1,12 @@
 <script setup>
 /* eslint-disable vue/no-bare-strings-in-template, @intlify/vue-i18n/no-raw-text */
+import ApprovalGateBadge from 'dashboard/routes/dashboard/approvals/ApprovalGateBadge.vue';
 import { computed, onMounted, reactive, ref } from 'vue';
+import CompanyPicker from 'dashboard/routes/dashboard/jrcCustomers/components/CompanyPicker.vue';
+import ContactPicker from 'dashboard/routes/dashboard/jrcCustomers/components/ContactPicker.vue';
+import ContactCreateModal from 'dashboard/routes/dashboard/jrcCustomers/components/ContactCreateModal.vue';
+import { useCustomerMaster } from 'dashboard/routes/dashboard/jrcCustomers/useCustomerMaster';
+import { useFormDraft } from '../../helpers/useFormDraft';
 import { useStore } from 'vuex';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
@@ -10,13 +16,18 @@ import CrmStatusBadge from '../../components/shared/CrmStatusBadge.vue';
 import CrmValueDisplay from '../../components/shared/CrmValueDisplay.vue';
 import CrmPageHeader from '../../components/shared/CrmPageHeader.vue';
 import CrmStatCard from '../../components/shared/CrmStatCard.vue';
+import ProposalRecipientDelivery from './ProposalRecipientDelivery.vue';
+import CommercialGratuityFields from './CommercialGratuityFields.vue';
 import { formatCrmDate } from '../../utils/dateTime';
 
 const store = useStore();
 const route = useRoute();
 const router = useRouter();
 const { t } = useI18n();
+const { canAccess: hasCustomerMaster } = useCustomerMaster();
 const pdfLoading = ref(false);
+const savedForm = ref('');
+const itemUpdateFailed = ref(false);
 const proposals = computed(
   () => store.getters['jrcCrm/proposals/allProposals'] || []
 );
@@ -29,6 +40,13 @@ const agents = computed(() => store.getters['agents/getAgents'] || []);
 const deals = ref([]);
 const products = ref([]);
 const dealId = ref('');
+const origin = ref('deal');
+const companyId = ref(null);
+const contactId = ref(null);
+const showContactForm = ref(false);
+const creationItems = ref([]);
+const operatingUnits = ref([]);
+const businessUnitId = ref(null);
 const showForm = ref(false);
 const saving = ref(false);
 const selectedProposal = ref(null);
@@ -37,7 +55,14 @@ const itemSaving = ref(false);
 const sendingChannel = ref('');
 const actionWorking = ref('');
 const proposalDiscount = ref('');
-const itemForm = reactive({ product_id: '', quantity: 1, unit_price: '' });
+const itemForm = reactive({
+  product_id: '',
+  quantity: 1,
+  unit_price: '',
+  discount: '',
+  commercial_gratuity: {},
+});
+const hasPendingItem = computed(() => Boolean(itemForm.product_id));
 const proposalForm = reactive({
   title: '',
   solution_description: '',
@@ -68,16 +93,69 @@ const proposalForm = reactive({
   follow_up_enabled: true,
   follow_up_days: 3,
 });
+const initialProposalForm = { ...proposalForm };
+const creationDraft = useFormDraft('crm:new_proposal', {
+  active: showForm,
+  snapshot: () => ({
+    origin: origin.value,
+    deal_id: dealId.value,
+    company_id: companyId.value,
+    contact_id: contactId.value,
+    business_unit_id: businessUnitId.value,
+    commercial: { ...proposalForm },
+    discount: proposalDiscount.value,
+    items: creationItems.value,
+    pending_item: { ...itemForm },
+  }),
+  restore: draft => {
+    origin.value = draft.origin || 'deal';
+    dealId.value = draft.deal_id || '';
+    companyId.value = draft.company_id || null;
+    contactId.value = draft.contact_id || null;
+    businessUnitId.value = draft.business_unit_id || null;
+    Object.assign(proposalForm, draft.commercial || {});
+    proposalDiscount.value = draft.discount || '';
+    creationItems.value = draft.items || [];
+    Object.assign(itemForm, draft.pending_item || {});
+  },
+  reset: () => {
+    origin.value = 'deal';
+    dealId.value = '';
+    companyId.value = null;
+    contactId.value = null;
+    businessUnitId.value = null;
+    creationItems.value = [];
+    proposalDiscount.value = '';
+    Object.assign(proposalForm, initialProposalForm);
+    Object.assign(itemForm, {
+      product_id: '',
+      quantity: 1,
+      unit_price: '',
+      discount: '',
+      commercial_gratuity: {},
+    });
+  },
+});
+const formSnapshot = () =>
+  JSON.stringify([proposalForm, proposalDiscount.value]);
+const hasUnsavedChanges = computed(
+  () => Boolean(selectedProposal.value) && savedForm.value !== formSnapshot()
+);
 const withoutMonthlyFee = computed({
   get: () => !proposalForm.has_monthly_fee,
-  set: value => { proposalForm.has_monthly_fee = !value; },
+  set: value => {
+    proposalForm.has_monthly_fee = !value;
+  },
 });
 const installmentPreview = computed(() => {
   const values = selectedProposal.value?.installment_plan_cents || [];
   if (!values.length) return '';
   const unique = [...new Set(values)];
-  if (unique.length === 1) return `${values.length} x R$ ${moneyInput(unique[0]).replace('.', ',')}`;
-  return values.map(value => `R$ ${moneyInput(value).replace('.', ',')}`).join(' + ');
+  if (unique.length === 1)
+    return `${values.length} x R$ ${moneyInput(unique[0]).replace('.', ',')}`;
+  return values
+    .map(value => `R$ ${moneyInput(value).replace('.', ',')}`)
+    .join(' + ');
 });
 const proposalStats = computed(() => [
   {
@@ -151,7 +229,9 @@ const billingLabel = value =>
     monthly: 'Mensal',
     annual: 'Anual',
     usage: 'Por uso',
-  })[value] || value || 'Cobrança única';
+  })[value] ||
+  value ||
+  'Cobrança única';
 
 const loadProducts = async () => {
   if (products.value.length) return;
@@ -160,14 +240,29 @@ const loadProducts = async () => {
 };
 
 const openForm = async () => {
+  if (selectedProposal.value) closeProposal();
   try {
     const { data } = await dealsAPI.list({ status: 'open' });
     const contactId = route.query.contactId;
-    deals.value = contactId
-      ? data.filter(deal => String(deal.contact?.id || deal.contact_id) === String(contactId))
-      : data;
-    if (deals.value.length === 1) dealId.value = deals.value[0].id;
-    if (route.query.dealId && deals.value.some(deal => String(deal.id) === String(route.query.dealId))) dealId.value = Number(route.query.dealId);
+    deals.value =
+      typeof contactId === 'string' && /^\d+$/.test(contactId)
+        ? data.filter(
+            deal =>
+              String(deal.contact_id) === contactId ||
+              deal.contacts?.some(contact => String(contact.id) === contactId)
+          )
+        : data;
+    const restored = creationDraft.open();
+    if (!restored)
+      dealId.value = deals.value.length === 1 ? deals.value[0].id : '';
+    else useAlert(t('CRM.CREATION.RECOVERED'));
+    if (proposalsAPI.creationOptions) {
+      const options = await proposalsAPI.creationOptions();
+      operatingUnits.value = options.data.business_units || [];
+      if (!businessUnitId.value && operatingUnits.value.length === 1)
+        businessUnitId.value = operatingUnits.value[0].id;
+    }
+    await loadProducts();
     showForm.value = true;
   } catch {
     useAlert('Não foi possível carregar os negócios.');
@@ -206,9 +301,36 @@ const hydrateProposalForm = data => {
   proposalForm.follow_up_enabled = data.follow_up?.enabled ?? true;
   proposalForm.follow_up_days = data.follow_up?.days ?? 3;
   proposalDiscount.value = moneyInput(data.discount_cents);
+  savedForm.value = formSnapshot();
 };
 
+const detailActive = ref(false);
+const detailDraftId = ref(null);
+const detailDraft = useFormDraft(
+  () => 'crm:proposal_edit:' + detailDraftId.value,
+  {
+    active: detailActive,
+    snapshot: () => ({
+      proposal_id: selectedProposal.value?.id,
+      commercial: { ...proposalForm },
+      discount: proposalDiscount.value,
+      pending_item: { ...itemForm },
+    }),
+    reset: () => {},
+    restore: draft => {
+      if (String(draft.proposal_id) === String(selectedProposal.value?.id)) {
+        Object.assign(proposalForm, draft.commercial || {});
+        proposalDiscount.value = draft.discount || '';
+        Object.assign(itemForm, draft.pending_item || {});
+      }
+    },
+  }
+);
 const openProposal = async proposal => {
+  detailDraft.flush();
+  detailActive.value = false;
+  detailDraftId.value = proposal.id;
+  itemUpdateFailed.value = false;
   loadingDetails.value = true;
   selectedProposal.value = proposal;
   try {
@@ -218,7 +340,12 @@ const openProposal = async proposal => {
     ]);
     selectedProposal.value = data;
     hydrateProposalForm(data);
+    if (!data.locked) {
+      detailDraft.open();
+      detailActive.value = true;
+    }
   } catch {
+    selectedProposal.value = null;
     useAlert('Não foi possível abrir a proposta.');
   } finally {
     loadingDetails.value = false;
@@ -226,6 +353,8 @@ const openProposal = async proposal => {
 };
 
 const closeProposal = () => {
+  if (selectedProposal.value && hasUnsavedChanges.value) detailDraft.flush();
+  detailActive.value = false;
   selectedProposal.value = null;
   itemForm.product_id = '';
   itemForm.quantity = 1;
@@ -233,14 +362,64 @@ const closeProposal = () => {
 };
 
 const createProposal = async () => {
+  const savingDraftKey = creationDraft.key.value;
+  if (saving.value) return;
   saving.value = true;
   try {
-    const { data } = await proposalsAPI.create({ deal_id: dealId.value });
+    const payload =
+      origin.value === 'deal'
+        ? { deal_id: dealId.value, business_unit_id: businessUnitId.value }
+        : {
+            company_id: companyId.value,
+            contact_id: contactId.value,
+            business_unit_id: businessUnitId.value,
+            proposal: {
+              title: proposalForm.title || undefined,
+              solution_description: proposalForm.solution_description,
+              commercial_notes: proposalForm.commercial_notes,
+              notes: proposalForm.notes,
+              payment_method: proposalForm.payment_method,
+              payment_condition: proposalForm.payment_condition,
+              installments_count: Number(proposalForm.installments_count || 1),
+              down_payment_cents: centsFromInput(proposalForm.down_payment),
+              discount_cents: centsFromInput(proposalDiscount.value),
+              valid_until: proposalForm.valid_until || undefined,
+              term_months: Number(proposalForm.term_months || 12),
+              next_steps: proposalForm.next_steps,
+              has_monthly_fee: proposalForm.has_monthly_fee,
+              monthly_cents: centsFromInput(proposalForm.monthly),
+              shipping_cents: centsFromInput(proposalForm.shipping),
+              shipping_mode: proposalForm.shipping_mode,
+              shipping_in_installments: proposalForm.shipping_in_installments,
+              issuer_company_name: proposalForm.issuer_company_name,
+              issuer_tax_id: proposalForm.issuer_tax_id || null,
+              issuer_unit: proposalForm.issuer_unit || null,
+              billing_day: proposalForm.billing_day
+                ? Number(proposalForm.billing_day)
+                : null,
+              first_billing_days: Number(proposalForm.first_billing_days || 0),
+              taxes_included: proposalForm.taxes_included,
+              annual_adjustment_index: proposalForm.annual_adjustment_index,
+              renewal_type: proposalForm.renewal_type,
+              cancellation_penalty_percent: Number(
+                proposalForm.cancellation_penalty_percent || 0
+              ),
+              follow_up_enabled: proposalForm.follow_up_enabled,
+              follow_up_days: Number(proposalForm.follow_up_days || 0),
+            },
+            items: creationItems.value,
+          };
+    const { data } = await proposalsAPI.create(payload);
+    if (!creationDraft.complete(savingDraftKey)) return;
     showForm.value = false;
     dealId.value = '';
     await refresh();
     await openProposal(data);
-    useAlert('Proposta criada com os dados do negócio.');
+    useAlert(
+      origin.value === 'deal'
+        ? 'Proposta criada com os dados do negócio.'
+        : 'Proposta criada para o cliente do Cadastro Mestre.'
+    );
   } catch (requestError) {
     useAlert(
       requestError.response?.data?.errors?.join(', ') ||
@@ -251,9 +430,42 @@ const createProposal = async () => {
   }
 };
 
-const applyProposalResponse = async data => {
+const addCreationItem = () => {
+  if (!itemForm.product_id) return;
+  creationItems.value.push({
+    product_id: itemForm.product_id,
+    quantity: Number(itemForm.quantity || 1),
+    unit_price_cents: centsFromInput(itemForm.unit_price),
+    discount_cents: centsFromInput(itemForm.discount),
+    commercial_gratuity: itemForm.commercial_gratuity,
+  });
+  Object.assign(itemForm, {
+    product_id: '',
+    quantity: 1,
+    unit_price: '',
+    discount: '',
+    commercial_gratuity: {},
+  });
+};
+const deleteProposal = async proposal => {
+  if (!window.confirm(t('CRM.CREATION.DELETE_CONFIRM'))) return;
+  try {
+    await proposalsAPI.delete(proposal.id);
+    if (selectedProposal.value?.id === proposal.id) closeProposal();
+    await refresh();
+    useAlert(t('CRM.CREATION.DELETED'));
+  } catch (requestError) {
+    useAlert(
+      requestError.response?.data?.errors?.join(', ') ||
+        t('CRM.CREATION.DELETE_ERROR')
+    );
+  }
+};
+
+const applyProposalResponse = async (data, preserveDraft = true) => {
+  const dirty = preserveDraft && hasUnsavedChanges.value;
   selectedProposal.value = data;
-  hydrateProposalForm(data);
+  if (!dirty) hydrateProposalForm(data);
   await refresh();
 };
 
@@ -266,7 +478,9 @@ const persistCommercialData = async (showSuccess = true) => {
         title: proposalForm.title,
         solution_description: proposalForm.solution_description,
         implementation_cents: centsFromInput(proposalForm.implementation),
-        monthly_cents: proposalForm.has_monthly_fee ? centsFromInput(proposalForm.monthly) : 0,
+        monthly_cents: proposalForm.has_monthly_fee
+          ? centsFromInput(proposalForm.monthly)
+          : 0,
         has_monthly_fee: proposalForm.has_monthly_fee,
         shipping_cents: centsFromInput(proposalForm.shipping),
         shipping_mode: proposalForm.shipping_mode,
@@ -289,8 +503,7 @@ const persistCommercialData = async (showSuccess = true) => {
           : null,
         first_billing_days: Number(proposalForm.first_billing_days || 0),
         taxes_included: proposalForm.taxes_included,
-        annual_adjustment_index:
-          proposalForm.annual_adjustment_index || 'IPCA',
+        annual_adjustment_index: proposalForm.annual_adjustment_index || 'IPCA',
         renewal_type: proposalForm.renewal_type,
         cancellation_penalty_percent: Number(
           proposalForm.cancellation_penalty_percent || 0
@@ -299,7 +512,8 @@ const persistCommercialData = async (showSuccess = true) => {
         follow_up_days: Number(proposalForm.follow_up_days || 0),
       },
     });
-    await applyProposalResponse(data);
+    await applyProposalResponse(data, false);
+    detailDraft.complete();
     if (showSuccess) useAlert('Dados comerciais da proposta atualizados.');
     return true;
   } catch (requestError) {
@@ -323,7 +537,7 @@ const selectProduct = () => {
 };
 
 const addItem = async () => {
-  if (!selectedProposal.value) return;
+  if (!selectedProposal.value || itemSaving.value) return;
   itemSaving.value = true;
   try {
     const { data } = await proposalsAPI.createItem(selectedProposal.value.id, {
@@ -331,12 +545,14 @@ const addItem = async () => {
         product_id: itemForm.product_id,
         quantity: Number(itemForm.quantity || 1),
         unit_price_cents: centsFromInput(itemForm.unit_price),
+        commercial_gratuity: itemForm.commercial_gratuity,
       },
     });
     await applyProposalResponse(data);
     itemForm.product_id = '';
     itemForm.quantity = 1;
     itemForm.unit_price = '';
+    itemForm.commercial_gratuity = {};
   } catch (requestError) {
     useAlert(
       requestError.response?.data?.errors?.join(', ') ||
@@ -348,7 +564,8 @@ const addItem = async () => {
 };
 
 const updateItem = async item => {
-  if (!selectedProposal.value) return;
+  if (!selectedProposal.value || itemSaving.value) return;
+  itemSaving.value = true;
   try {
     const { data } = await proposalsAPI.updateItem(
       selectedProposal.value.id,
@@ -358,12 +575,16 @@ const updateItem = async item => {
           quantity: Number(item.quantity || 1),
           unit_price_cents: Number(item.unit_price_cents || 0),
           discount_cents: Number(item.discount_cents || 0),
+          commercial_gratuity: item.commercial_gratuity || {},
         },
       }
     );
     await applyProposalResponse(data);
   } catch {
+    itemUpdateFailed.value = true;
     useAlert('Não foi possível atualizar o item.');
+  } finally {
+    itemSaving.value = false;
   }
 };
 
@@ -378,7 +599,8 @@ const updateItemDiscount = (item, value) => {
 };
 
 const removeItem = async item => {
-  if (!selectedProposal.value) return;
+  if (!selectedProposal.value || itemSaving.value) return;
+  itemSaving.value = true;
   try {
     const { data } = await proposalsAPI.deleteItem(
       selectedProposal.value.id,
@@ -387,6 +609,8 @@ const removeItem = async item => {
     await applyProposalResponse(data);
   } catch {
     useAlert('Não foi possível remover o item.');
+  } finally {
+    itemSaving.value = false;
   }
 };
 
@@ -406,27 +630,39 @@ const previewProposal = () => {
     );
 };
 
-const previewPdf = async (download = false) => {
-  if (!selectedProposal.value || pdfLoading.value) return;
-  const proposal = selectedProposal.value;
-  const preview = download ? null : window.open('', '_blank');
-  if (preview) preview.opener = null;
+const downloadPdf = async (proposal = selectedProposal.value) => {
+  if (
+    !proposal ||
+    pdfLoading.value ||
+    loadingDetails.value ||
+    saving.value ||
+    itemSaving.value
+  )
+    return;
+  if (
+    proposal.id === selectedProposal.value?.id &&
+    (hasUnsavedChanges.value || hasPendingItem.value || itemUpdateFailed.value)
+  ) {
+    useAlert(t('CRM.PROPOSAL_PDF.UNSAVED'));
+    return;
+  }
   pdfLoading.value = true;
   try {
     const { data } = await proposalsAPI.pdf(proposal.id);
-    const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
-    if (preview) {
-      preview.location.replace(url);
-    } else {
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${proposal.proposal_number || `proposta-${proposal.id}`}.pdf`;
+    const url = URL.createObjectURL(data);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `proposta-${proposal.id}-v${proposal.version_number || 1}.pdf`;
+    document.body.appendChild(link);
+    try {
       link.click();
+    } finally {
+      link.remove();
+      // Chromium needs the blob to remain alive while the download starts.
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     }
-    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
   } catch {
-    preview?.close();
-    useAlert(t('CRM.HOMOLOGATION.PDF_ERROR'));
+    useAlert(t('CRM.PROPOSAL_PDF.ERROR'));
   } finally {
     pdfLoading.value = false;
   }
@@ -543,6 +779,11 @@ const sendProposal = async channel => {
   }
 };
 
+const recipientDeliverySubmitted = async data => {
+  if (data.proposal?.id !== selectedProposal.value?.id) return;
+  await applyProposalResponse(data.proposal);
+};
+
 const convertProposalToOrder = async () => {
   if (!selectedProposal.value || actionWorking.value) return;
   if (selectedProposal.value.status !== 'accepted') {
@@ -551,11 +792,20 @@ const convertProposalToOrder = async () => {
   }
   actionWorking.value = 'order';
   try {
-    const { data } = await proposalsAPI.convertToOrder(selectedProposal.value.id);
+    const { data } = await proposalsAPI.convertToOrder(
+      selectedProposal.value.id
+    );
     useAlert(`Pedido ${data.order_number || data.id} criado com sucesso.`);
-    router.push({ name: 'crm_orders', params: { accountId: route.params.accountId }, query: { orderId: data.id } });
+    router.push({
+      name: 'crm_orders',
+      params: { accountId: route.params.accountId },
+      query: { orderId: data.id },
+    });
   } catch (requestError) {
-    useAlert(requestError.response?.data?.errors?.join(', ') || 'Não foi possível converter a proposta em pedido.');
+    useAlert(
+      requestError.response?.data?.errors?.join(', ') ||
+        'Não foi possível converter a proposta em pedido.'
+    );
   } finally {
     actionWorking.value = null;
   }
@@ -568,10 +818,11 @@ const sendFromRow = async (proposal, channel) => {
 
 onMounted(async () => {
   await Promise.all([refresh(), store.dispatch('agents/get')]);
-  if (route.query.new === '1') await openForm();
-  if (route.query.proposalId) {
-    const proposal = proposals.value.find(item => String(item.id) === String(route.query.proposalId));
-    if (proposal) await openProposal(proposal);
+  const { proposalId } = route.query;
+  if (typeof proposalId === 'string' && /^\d+$/.test(proposalId)) {
+    await openProposal({ id: proposalId });
+  } else if (route.query.new === '1') {
+    await openForm();
   }
 });
 </script>
@@ -619,7 +870,7 @@ onMounted(async () => {
         >
           <tr>
             <th class="px-5 py-3">Título</th>
-            <th class="px-5 py-3">Negócio</th>
+            <th class="px-5 py-3">{{ t('CRM.CREATION.ORIGIN') }}</th>
             <th class="px-5 py-3">Status</th>
             <th class="px-5 py-3">Itens</th>
             <th class="px-5 py-3">Total</th>
@@ -659,10 +910,24 @@ onMounted(async () => {
               </p>
             </td>
             <td class="px-5 py-4 text-n-slate-11">
-              {{ proposal.deal?.title || `Negócio - #${proposal.deal_id}` }}
+              {{
+                proposal.deal?.title ||
+                proposal.company?.name ||
+                proposal.customer?.name ||
+                'Cliente sem negócio'
+              }}
             </td>
             <td class="px-5 py-4">
               <CrmStatusBadge :value="proposal.status" />
+              <p
+                v-if="
+                  proposal.status === 'draft' &&
+                  proposal.approval?.status === 'approved'
+                "
+                class="mt-1 text-xs font-medium text-n-teal-11"
+              >
+                {{ $t('CRM.PROPOSALS.APPROVED_READY') }}
+              </p>
             </td>
             <td class="px-5 py-4 text-n-slate-11">
               {{ proposal.items_count || 0 }}
@@ -678,6 +943,15 @@ onMounted(async () => {
             </td>
             <td class="px-5 py-4">
               <div class="flex justify-end gap-1">
+                <button
+                  v-if="proposal.deletable"
+                  type="button"
+                  class="rounded-lg border border-n-weak p-2 text-n-ruby-11"
+                  :title="t('CRM.CREATION.DELETE')"
+                  @click="deleteProposal(proposal)"
+                >
+                  <i class="i-lucide-trash-2 size-4" />
+                </button>
                 <button
                   type="button"
                   class="rounded-lg border border-n-weak p-2"
@@ -697,8 +971,9 @@ onMounted(async () => {
                 <button
                   type="button"
                   class="rounded-lg border border-n-weak p-2"
-                  title="Visualizar PDF"
-                  @click="openProposal(proposal).then(() => previewPdf(false))"
+                  :title="t('CRM.PROPOSAL_PDF.DOWNLOAD')"
+                  :disabled="pdfLoading"
+                  @click="downloadPdf(proposal)"
                 >
                   <i class="i-lucide-file-text size-4" />
                 </button>
@@ -727,18 +1002,42 @@ onMounted(async () => {
 
     <div
       v-if="showForm"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
       @click.self="showForm = false"
+      @keydown.esc="showForm = false"
     >
       <form
-        class="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-xl bg-n-solid-2 p-6 shadow-xl"
+        class="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-xl bg-n-solid-2 p-6 shadow-xl"
         @submit.prevent="createProposal"
       >
-        <h3 class="text-lg font-bold text-n-slate-12">Criar proposta</h3>
-        <p class="mt-1 text-sm text-n-slate-10">
-          Produtos, descontos e cliente serão copiados do negócio selecionado.
-        </p>
-        <label class="mt-5 block text-sm font-medium text-n-slate-11"
+        <div class="flex items-center justify-between gap-3">
+          <h3 class="text-lg font-bold text-n-slate-12">Criar proposta</h3>
+          <button
+            type="button"
+            class="rounded-lg p-2"
+            :aria-label="t('CRM.CREATION.CLOSE')"
+            :disabled="saving"
+            @click="showForm = false"
+          >
+            <i class="i-lucide-x size-5" />
+          </button>
+        </div>
+        <fieldset class="mt-4 flex flex-wrap gap-3">
+          <legend class="mb-2 text-sm font-semibold">
+            {{ t('CRM.CREATION.ORIGIN') }}
+          </legend>
+          <label
+            ><input v-model="origin" type="radio" value="deal" />
+            {{ t('CRM.CREATION.FROM_DEAL') }}</label
+          >
+          <label v-if="hasCustomerMaster"
+            ><input v-model="origin" type="radio" value="customer" />
+            {{ t('CRM.CREATION.FROM_CUSTOMER') }}</label
+          >
+        </fieldset>
+        <label
+          v-if="origin === 'deal'"
+          class="mt-5 block text-sm font-medium text-n-slate-11"
           >Negócio
           <select
             v-model="dealId"
@@ -748,11 +1047,192 @@ onMounted(async () => {
             <option disabled value="">Selecione</option>
             <option v-for="deal in deals" :key="deal.id" :value="deal.id">
               {{ deal.title
-              }}{{ deal.contact?.name ? ` — ${deal.contact.name}` : '' }}
+              }}{{ deal.contact?.name ? ' — ' + deal.contact.name : '' }}
             </option>
           </select>
         </label>
+        <template v-if="operatingUnits.length">
+          <label class="mt-4 block text-sm"
+            >{{ t('CRM.CREATION.UNIT') }}
+            <select
+              v-model="businessUnitId"
+              required
+              class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
+            >
+              <option value="">Selecione</option>
+              <option
+                v-for="unit in operatingUnits"
+                :key="unit.id"
+                :value="unit.id"
+              >
+                {{ unit.name }}
+              </option>
+            </select>
+          </label>
+        </template>
+        <div v-if="origin === 'customer'" class="mt-4 space-y-4">
+          <div>
+            <span class="text-sm font-semibold">{{
+              t('CRM.CREATION.CUSTOMER')
+            }}</span
+            ><CompanyPicker v-model="companyId" />
+          </div>
+          <div>
+            <span class="text-sm font-semibold">{{
+              t('CRM.CREATION.CONTACT')
+            }}</span
+            ><ContactPicker v-model="contactId" :company-id="companyId" />
+            <button
+              type="button"
+              class="mt-2 rounded-lg border border-n-weak px-3 py-2"
+              @click="showContactForm = true"
+            >
+              {{ t('CRM.CREATION.NEW_CONTACT') }}
+            </button>
+          </div>
+          <label class="block"
+            >{{ t('CRM.CREATION.TITLE')
+            }}<input
+              v-model="proposalForm.title"
+              class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
+          /></label>
+          <fieldset class="space-y-2">
+            <legend class="text-sm font-semibold">
+              {{ t('CRM.CREATION.PRODUCTS') }}
+            </legend>
+            <select
+              v-model="itemForm.product_id"
+              class="w-full rounded-lg border border-n-weak px-3 py-2"
+              @change="selectProduct"
+            >
+              <option value="">Selecione produto</option>
+              <option
+                v-for="product in products"
+                :key="product.id"
+                :value="product.id"
+              >
+                {{ product.name }}
+              </option>
+            </select>
+            <div class="grid grid-cols-2 gap-2">
+              <label
+                >Quantidade<input
+                  v-model="itemForm.quantity"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  class="w-full rounded-lg border border-n-weak px-3 py-2"
+              /></label>
+              <label
+                >{{ t('CRM.CREATION.UNIT_PRICE')
+                }}<input
+                  v-model="itemForm.unit_price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="w-full rounded-lg border border-n-weak px-3 py-2"
+              /></label>
+              <label
+                >{{ t('CRM.CREATION.ITEM_DISCOUNT')
+                }}<input
+                  v-model="itemForm.discount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="w-full rounded-lg border border-n-weak px-3 py-2"
+              /></label>
+            </div>
+            <button
+              type="button"
+              class="rounded-lg border border-n-weak px-3 py-2"
+              @click="addCreationItem"
+            >
+              {{ t('CRM.CREATION.ADD_ITEM') }}
+            </button>
+            <CommercialGratuityFields v-model="itemForm.commercial_gratuity" />
+            <div
+              v-for="(item, index) in creationItems"
+              :key="index"
+              class="flex items-center justify-between gap-2 text-sm"
+            >
+              <span
+                >{{
+                  products.find(
+                    product => String(product.id) === String(item.product_id)
+                  )?.name
+                }}
+                · {{ item.quantity }} ×
+                {{ moneyInput(item.unit_price_cents) }}</span
+              >
+              <button
+                type="button"
+                class="rounded-lg p-2"
+                :aria-label="t('CRM.CREATION.DISCARD')"
+                @click="creationItems.splice(index, 1)"
+              >
+                <i class="i-lucide-trash-2 size-4" />
+              </button>
+            </div>
+          </fieldset>
+          <label class="block"
+            >Desconto geral<input
+              v-model="proposalDiscount"
+              type="number"
+              min="0"
+              step="0.01"
+              class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
+          /></label>
+          <label class="block"
+            >Condição de pagamento<select
+              v-model="proposalForm.payment_condition"
+              class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
+            >
+              <option value="cash">À vista</option>
+              <option value="installments">Parcelas</option>
+              <option value="down_payment_installments">
+                Entrada + parcelas
+              </option>
+            </select></label
+          >
+          <template v-if="proposalForm.payment_condition !== 'cash'">
+            <label class="block"
+              >Parcelas<input
+                v-model="proposalForm.installments_count"
+                type="number"
+                min="1"
+                max="120"
+                class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
+            /></label>
+          </template>
+          <label
+            v-if="
+              proposalForm.payment_condition === 'down_payment_installments'
+            "
+            class="block"
+            >Entrada<input
+              v-model="proposalForm.down_payment"
+              type="number"
+              min="0"
+              step="0.01"
+              class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
+          /></label>
+          <label class="block"
+            >{{ t('CRM.CREATION.NOTES')
+            }}<textarea
+              v-model="proposalForm.commercial_notes"
+              class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
+            />
+          </label>
+        </div>
         <div class="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            class="mr-auto rounded-lg border border-n-weak px-3 py-2"
+            :disabled="saving"
+            @click="creationDraft.discard"
+          >
+            {{ t('CRM.CREATION.DISCARD') }}
+          </button>
           <button
             type="button"
             class="rounded-lg border border-n-weak px-4 py-2"
@@ -760,7 +1240,9 @@ onMounted(async () => {
           >
             Cancelar</button
           ><button
-            :disabled="saving"
+            :disabled="
+              saving || (origin === 'customer' && !companyId && !contactId)
+            "
             class="rounded-lg bg-n-brand px-4 py-2 font-semibold text-white disabled:opacity-50"
           >
             Criar proposta
@@ -789,6 +1271,14 @@ onMounted(async () => {
               <h3 class="mt-1 text-2xl font-bold text-n-slate-12">
                 {{ selectedProposal.title }}
               </h3>
+              <ApprovalGateBadge
+                resource-key="crm.proposal_send"
+                :resource-id="selectedProposal.id"
+              />
+              <ApprovalGateBadge
+                resource-key="crm.proposal_convert"
+                :resource-id="selectedProposal.id"
+              />
               <p class="mt-1 text-sm text-n-slate-10">
                 {{
                   selectedProposal.customer?.name ||
@@ -810,18 +1300,15 @@ onMounted(async () => {
               <button
                 type="button"
                 class="rounded-xl bg-n-ruby-9 px-3 py-2 text-sm font-semibold text-white shadow-sm"
-                @click="previewPdf(false)"
-                :disabled="pdfLoading"
+                :disabled="pdfLoading || loadingDetails || saving || itemSaving"
+                @click="downloadPdf()"
               >
-                <i class="i-lucide-file-text mr-1" /> Gerar PDF
-              </button>
-              <button
-                type="button"
-                class="rounded-xl bg-n-iris-9 px-3 py-2 text-sm font-semibold text-white shadow-sm"
-                @click="previewPdf(true)"
-                :disabled="pdfLoading"
-              >
-                <i class="i-lucide-download mr-1" /> Baixar
+                <i class="i-lucide-file-text mr-1" />
+                {{
+                  pdfLoading
+                    ? t('CRM.PROPOSAL_PDF.LOADING')
+                    : t('CRM.PROPOSAL_PDF.DOWNLOAD')
+                }}
               </button>
               <button
                 type="button"
@@ -836,7 +1323,7 @@ onMounted(async () => {
                   selectedProposal.approval?.status !== 'pending'
                 "
                 type="button"
-                class="rounded-xl bg-n-amber-9 px-3 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-50"
+                class="rounded-xl bg-n-amber-9 px-3 py-2 text-sm font-semibold text-n-on-amber shadow-sm disabled:opacity-100"
                 :disabled="Boolean(actionWorking)"
                 @click="requestApproval"
               >
@@ -852,7 +1339,7 @@ onMounted(async () => {
               </button>
               <button
                 type="button"
-                class="rounded-xl bg-emerald-700 px-3 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-50"
+                class="rounded-xl bg-[#16a765] px-3 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-50"
                 :disabled="
                   Boolean(sendingChannel) ||
                   selectedProposal.status === 'accepted' ||
@@ -867,6 +1354,25 @@ onMounted(async () => {
                     : 'Enviar WhatsApp'
                 }}
               </button>
+              <ProposalRecipientDelivery
+                :key="`${route.params.accountId}:${store.getters.getCurrentUserID}:${selectedProposal.id}`"
+                :proposal-id="selectedProposal.id"
+                :public-url="publicProposalUrl(selectedProposal)"
+                :disabled="
+                  Boolean(sendingChannel) ||
+                  Boolean(actionWorking) ||
+                  saving ||
+                  itemSaving ||
+                  loadingDetails ||
+                  hasUnsavedChanges ||
+                  hasPendingItem ||
+                  itemUpdateFailed ||
+                  ['accepted', 'canceled', 'rejected', 'expired'].includes(
+                    selectedProposal.status
+                  )
+                "
+                @submitted="recipientDeliverySubmitted"
+              />
               <button
                 type="button"
                 class="rounded-xl bg-n-brand px-3 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-50"
@@ -901,6 +1407,13 @@ onMounted(async () => {
           </div>
         </div>
 
+        <p
+          v-if="hasUnsavedChanges || hasPendingItem || itemUpdateFailed"
+          role="status"
+          class="shrink-0 bg-n-amber-3 px-5 py-2 text-sm text-n-amber-11"
+        >
+          {{ t('CRM.PROPOSAL_PDF.UNSAVED') }}
+        </p>
         <div class="shrink-0 border-b border-n-weak bg-n-solid-2 px-5 py-3">
           <ol class="grid grid-cols-2 gap-2 sm:grid-cols-5">
             <li
@@ -948,6 +1461,15 @@ onMounted(async () => {
             <div>
               <p class="text-xs text-n-slate-10">Status</p>
               <CrmStatusBadge class="mt-1" :value="selectedProposal.status" />
+              <p
+                v-if="
+                  selectedProposal.status === 'draft' &&
+                  selectedProposal.approval?.status === 'approved'
+                "
+                class="mt-1 text-xs font-medium text-n-teal-11"
+              >
+                {{ $t('CRM.PROPOSALS.APPROVED_READY') }}
+              </p>
             </div>
             <div>
               <p class="text-xs text-n-slate-10">Implantação</p>
@@ -959,11 +1481,9 @@ onMounted(async () => {
             <div>
               <p class="text-xs text-n-slate-10">Mensalidade</p>
               <CrmValueDisplay
-                v-if="selectedProposal.has_monthly_fee"
                 class="mt-1 font-semibold text-n-iris-11"
                 :cents="selectedProposal.monthly_cents"
               />
-              <p v-else class="mt-1 font-semibold text-emerald-600">Sem mensalidade</p>
             </div>
             <div>
               <p class="text-xs text-n-slate-10">Descontos</p>
@@ -982,11 +1502,9 @@ onMounted(async () => {
             <div>
               <p class="text-xs text-n-slate-10">Recorrência mensal</p>
               <CrmValueDisplay
-                v-if="selectedProposal.has_monthly_fee"
                 class="mt-1 font-semibold text-n-teal-11"
                 :cents="selectedProposal.recurring_monthly_cents"
               />
-              <p v-else class="mt-1 text-sm font-semibold text-n-slate-11">Não se aplica</p>
             </div>
             <div>
               <p class="text-xs text-n-slate-10">Acompanhamento</p>
@@ -994,7 +1512,8 @@ onMounted(async () => {
                 {{ selectedProposal.viewed_count || 0 }} visualizações
               </p>
               <p class="text-xs text-n-slate-10">
-                Válida até {{ selectedProposal.valid_until_display || 'não definida' }}
+                Válida até
+                {{ selectedProposal.valid_until_display || 'não definida' }}
               </p>
             </div>
           </div>
@@ -1005,9 +1524,12 @@ onMounted(async () => {
           >
             <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h4 class="font-bold text-n-slate-12">Conteúdo e condições comerciais</h4>
+                <h4 class="font-bold text-n-slate-12">
+                  Conteúdo e condições comerciais
+                </h4>
                 <p class="text-xs text-n-slate-10">
-                  Dados usados na visualização, no PDF, no envio e no aceite digital.
+                  Dados usados na visualização, no PDF, no envio e no aceite
+                  digital.
                 </p>
               </div>
               <button
@@ -1022,47 +1544,93 @@ onMounted(async () => {
               v-if="selectedProposal.locked"
               class="mb-4 rounded-xl border border-n-amber-6 bg-n-amber-2 p-3 text-sm font-medium text-n-amber-11"
             >
-              <i class="i-lucide-lock-keyhole mr-1" /> Esta proposta foi aceita e está bloqueada. Use “Duplicar” para criar uma nova versão editável.
+              <i class="i-lucide-lock-keyhole mr-1" /> Esta proposta foi aceita
+              e está bloqueada. Use “Duplicar” para criar uma nova versão
+              editável.
             </div>
 
-            <fieldset :disabled="selectedProposal.locked" class="space-y-6 disabled:opacity-70">
+            <fieldset
+              :disabled="selectedProposal.locked || itemSaving"
+              class="space-y-6 disabled:opacity-70"
+            >
               <section>
-                <h5 class="mb-3 text-sm font-bold text-n-slate-12">Identificação e conteúdo</h5>
+                <h5 class="mb-3 text-sm font-bold text-n-slate-12">
+                  Identificação e conteúdo
+                </h5>
                 <div class="grid gap-4 md:grid-cols-2">
-                  <label class="text-sm font-medium text-n-slate-11">
+                  <label
+                    v-if="isAdmin"
+                    class="text-sm font-medium text-n-slate-11"
+                  >
                     Responsável da proposta
-                    <select v-model="proposalForm.owner_id" class="mt-1 w-full rounded-lg border border-n-weak bg-white px-3 py-2">
+                    <select
+                      v-model="proposalForm.owner_id"
+                      class="mt-1 w-full rounded-lg border border-n-weak bg-n-solid-2 px-3 py-2"
+                    >
                       <option value="">Responsável atual</option>
-                      <option v-for="agent in agents" :key="agent.id" :value="agent.id">{{ agent.name || agent.email }}</option>
+                      <option
+                        v-for="agent in agents"
+                        :key="agent.id"
+                        :value="agent.id"
+                      >
+                        {{ agent.name || agent.email }}
+                      </option>
                     </select>
                   </label>
-                  <div class="rounded-xl border border-n-weak bg-n-alpha-2 p-3 text-sm">
-                    <span class="block text-xs font-semibold uppercase text-n-slate-9">Responsável salvo</span>
-                    <strong class="mt-1 block text-n-slate-12">{{ selectedProposal.owner?.name || 'Não definido' }}</strong>
+                  <div
+                    class="rounded-xl border border-n-weak bg-n-alpha-2 p-3 text-sm"
+                  >
+                    <span
+                      class="block text-xs font-semibold uppercase text-n-slate-9"
+                      >Responsável salvo</span
+                    >
+                    <strong class="mt-1 block text-n-slate-12">{{
+                      selectedProposal.owner?.name || 'Não definido'
+                    }}</strong>
                   </div>
-                  <label class="text-sm font-medium text-n-slate-11 md:col-span-2">
+                  <label
+                    class="text-sm font-medium text-n-slate-11 md:col-span-2"
+                  >
                     Título
                     <input
                       v-model="proposalForm.title"
-                      :disabled="selectedProposal.locked"
+                      :disabled="selectedProposal.locked || itemSaving"
                       required
                       class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
                     />
                   </label>
-                  <label class="text-sm font-medium text-n-slate-11 md:col-span-2">
+                  <label
+                    class="text-sm font-medium text-n-slate-11 md:col-span-2"
+                  >
                     Descrição da solução
                     <textarea
                       v-model="proposalForm.solution_description"
-                      :disabled="selectedProposal.locked"
+                      :disabled="selectedProposal.locked || itemSaving"
                       rows="4"
                       class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
                     />
                   </label>
-                  <label class="flex items-center justify-between gap-3 rounded-xl border border-n-weak bg-n-alpha-2 p-3 text-sm font-medium text-n-slate-11 md:col-span-2">
-                    <span><strong class="block text-n-slate-12">Sem mensalidade</strong><span class="text-xs text-n-slate-9">Quando marcado, a proposta não possui cobrança recorrente.</span></span>
-                    <input v-model="withoutMonthlyFee" type="checkbox" class="size-5 accent-emerald-600" />
+                  <label
+                    class="flex items-center justify-between gap-3 rounded-xl border border-n-weak bg-n-alpha-2 p-3 text-sm font-medium text-n-slate-11 md:col-span-2"
+                  >
+                    <span
+                      ><strong class="block text-n-slate-12"
+                        >Sem mensalidade</strong
+                      ><span class="text-xs text-n-slate-9"
+                        >Quando marcado, a proposta não possui cobrança
+                        recorrente.</span
+                      ></span
+                    >
+                    <input
+                      v-model="withoutMonthlyFee"
+                      type="checkbox"
+                      class="size-5 accent-emerald-600"
+                    />
                   </label>
-                  <label v-if="proposalForm.has_monthly_fee" class="text-sm font-medium text-n-slate-11">
+                  <label
+                    v-if="proposalForm.has_monthly_fee"
+                    class="text-sm font-medium text-n-slate-11"
+                  >
                     Mensalidade (R$)
                     <input
                       v-model="proposalForm.monthly"
@@ -1072,37 +1640,103 @@ onMounted(async () => {
                       :readonly="selectedProposal.items_count > 0"
                       class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2 read-only:bg-n-alpha-2"
                     />
-                    <span v-if="selectedProposal.items_count > 0" class="mt-1 block text-xs text-n-slate-9">
+                    <span
+                      v-if="selectedProposal.items_count > 0"
+                      class="mt-1 block text-xs text-n-slate-9"
+                    >
                       Calculada automaticamente pelos itens recorrentes.
                     </span>
                   </label>
-                  <label v-if="proposalForm.shipping_mode === 'separate'" class="text-sm font-medium text-n-slate-11">
+                  <label
+                    v-if="proposalForm.shipping_mode === 'separate'"
+                    class="text-sm font-medium text-n-slate-11"
+                  >
                     Frete (R$)
-                    <input v-model="proposalForm.shipping" type="number" min="0" step="0.01" class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2" />
+                    <input
+                      v-model="proposalForm.shipping"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
+                    />
                   </label>
                   <label class="text-sm font-medium text-n-slate-11">
                     Condição do frete
-                    <select v-model="proposalForm.shipping_mode" class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"><option value="not_applicable">Sem frete</option><option value="included">Incluso</option><option value="separate">Cobrado à parte</option></select>
+                    <select
+                      v-model="proposalForm.shipping_mode"
+                      class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
+                    >
+                      <option value="not_applicable">Sem frete</option>
+                      <option value="included">Incluso</option>
+                      <option value="separate">Cobrado à parte</option>
+                    </select>
                   </label>
-                  <label v-if="proposalForm.shipping_mode === 'separate'" class="flex items-center gap-2 rounded-xl border border-n-weak p-3 text-sm font-medium text-n-slate-11 md:col-span-2">
-                    <input v-model="proposalForm.shipping_in_installments" type="checkbox" class="size-4 accent-n-brand" />
+                  <label
+                    v-if="proposalForm.shipping_mode === 'separate'"
+                    class="flex items-center gap-2 rounded-xl border border-n-weak p-3 text-sm font-medium text-n-slate-11 md:col-span-2"
+                  >
+                    <input
+                      v-model="proposalForm.shipping_in_installments"
+                      type="checkbox"
+                      class="size-4 accent-n-brand"
+                    />
                     Incluir o frete no valor parcelável
                   </label>
                   <label class="text-sm font-medium text-n-slate-11">
                     Condição de pagamento
-                    <select v-model="proposalForm.payment_condition" class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"><option value="cash">À vista</option><option value="down_payment_installments">Entrada + parcelas</option><option value="installments">Parcelado sem entrada</option></select>
+                    <select
+                      v-model="proposalForm.payment_condition"
+                      class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
+                    >
+                      <option value="cash">À vista</option>
+                      <option value="down_payment_installments">
+                        Entrada + parcelas
+                      </option>
+                      <option value="installments">
+                        Parcelado sem entrada
+                      </option>
+                    </select>
                   </label>
-                  <label v-if="proposalForm.payment_condition === 'down_payment_installments'" class="text-sm font-medium text-n-slate-11">
+                  <label
+                    v-if="
+                      proposalForm.payment_condition ===
+                      'down_payment_installments'
+                    "
+                    class="text-sm font-medium text-n-slate-11"
+                  >
                     Entrada (R$)
-                    <input v-model="proposalForm.down_payment" type="number" min="0" step="0.01" class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2" />
+                    <input
+                      v-model="proposalForm.down_payment"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
+                    />
                   </label>
-                  <label v-if="proposalForm.payment_condition !== 'cash'" class="text-sm font-medium text-n-slate-11">
+                  <label
+                    v-if="proposalForm.payment_condition !== 'cash'"
+                    class="text-sm font-medium text-n-slate-11"
+                  >
                     Quantidade de parcelas
-                    <input v-model.number="proposalForm.installments_count" type="number" min="1" max="60" class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2" />
+                    <input
+                      v-model.number="proposalForm.installments_count"
+                      type="number"
+                      min="1"
+                      max="60"
+                      class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
+                    />
                   </label>
-                  <div v-if="proposalForm.payment_condition !== 'cash'" class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
-                    <span class="block text-xs font-semibold uppercase text-emerald-700">Parcelamento calculado</span>
-                    <strong class="mt-1 block text-emerald-800">{{ installmentPreview || 'Salve para calcular as parcelas' }}</strong>
+                  <div
+                    v-if="proposalForm.payment_condition !== 'cash'"
+                    class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm"
+                  >
+                    <span
+                      class="block text-xs font-semibold uppercase text-emerald-700"
+                      >Parcelamento calculado</span
+                    >
+                    <strong class="mt-1 block text-emerald-800">{{
+                      installmentPreview || 'Salve para calcular as parcelas'
+                    }}</strong>
                   </div>
                   <label class="text-sm font-medium text-n-slate-11">
                     Implantação (R$)
@@ -1114,7 +1748,10 @@ onMounted(async () => {
                       :readonly="selectedProposal.items_count > 0"
                       class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2 read-only:bg-n-alpha-2"
                     />
-                    <span v-if="selectedProposal.items_count > 0" class="mt-1 block text-xs text-n-slate-9">
+                    <span
+                      v-if="selectedProposal.items_count > 0"
+                      class="mt-1 block text-xs text-n-slate-9"
+                    >
                       Calculada automaticamente pelos itens e setups.
                     </span>
                   </label>
@@ -1122,7 +1759,7 @@ onMounted(async () => {
                     Validade
                     <input
                       v-model="proposalForm.valid_until"
-                      :disabled="selectedProposal.locked"
+                      :disabled="selectedProposal.locked || itemSaving"
                       type="date"
                       class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
                     />
@@ -1136,20 +1773,24 @@ onMounted(async () => {
                       class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
                     />
                   </label>
-                  <label class="text-sm font-medium text-n-slate-11 md:col-span-2">
+                  <label
+                    class="text-sm font-medium text-n-slate-11 md:col-span-2"
+                  >
                     Observações comerciais
                     <textarea
                       v-model="proposalForm.commercial_notes"
-                      :disabled="selectedProposal.locked"
+                      :disabled="selectedProposal.locked || itemSaving"
                       rows="4"
                       class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
                     />
                   </label>
-                  <label class="text-sm font-medium text-n-slate-11 md:col-span-2">
+                  <label
+                    class="text-sm font-medium text-n-slate-11 md:col-span-2"
+                  >
                     Próximos passos
                     <textarea
                       v-model="proposalForm.next_steps"
-                      :disabled="selectedProposal.locked"
+                      :disabled="selectedProposal.locked || itemSaving"
                       rows="5"
                       class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
                     />
@@ -1158,12 +1799,15 @@ onMounted(async () => {
               </section>
 
               <section class="border-t border-n-weak pt-5">
-                <h5 class="mb-3 text-sm font-bold text-n-slate-12">Empresa emissora e faturamento</h5>
+                <h5 class="mb-3 text-sm font-bold text-n-slate-12">
+                  Empresa emissora e faturamento
+                </h5>
                 <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                   <label class="text-sm font-medium text-n-slate-11">
                     Empresa emissora
                     <input
                       v-model="proposalForm.issuer_company_name"
+                      :disabled="!!selectedProposal.issuer_company_id"
                       class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
                     />
                   </label>
@@ -1171,6 +1815,7 @@ onMounted(async () => {
                     CNPJ da emissora
                     <input
                       v-model="proposalForm.issuer_tax_id"
+                      :disabled="!!selectedProposal.issuer_company_id"
                       class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
                       placeholder="00.000.000/0000-00"
                     />
@@ -1179,6 +1824,7 @@ onMounted(async () => {
                     Unidade JRC
                     <input
                       v-model="proposalForm.issuer_unit"
+                      :disabled="!!selectedProposal.issuer_company_id"
                       class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
                     />
                   </label>
@@ -1246,22 +1892,45 @@ onMounted(async () => {
                   </label>
                 </div>
                 <div class="mt-4 grid gap-3 sm:grid-cols-2">
-                  <label class="flex items-center justify-between gap-3 rounded-xl border border-n-weak p-3">
+                  <label
+                    class="flex items-center justify-between gap-3 rounded-xl border border-n-weak p-3"
+                  >
                     <span>
-                      <span class="block text-sm font-semibold text-n-slate-12">Impostos inclusos</span>
-                      <span class="text-xs text-n-slate-10">Indica como os valores serão apresentados.</span>
+                      <span class="block text-sm font-semibold text-n-slate-12"
+                        >Impostos inclusos</span
+                      >
+                      <span class="text-xs text-n-slate-10"
+                        >Indica como os valores serão apresentados.</span
+                      >
                     </span>
-                    <input v-model="proposalForm.taxes_included" type="checkbox" class="size-5 accent-n-teal-9" />
+                    <input
+                      v-model="proposalForm.taxes_included"
+                      type="checkbox"
+                      class="size-5 accent-n-teal-9"
+                    />
                   </label>
-                  <label class="flex items-center justify-between gap-3 rounded-xl border border-n-weak p-3">
+                  <label
+                    class="flex items-center justify-between gap-3 rounded-xl border border-n-weak p-3"
+                  >
                     <span>
-                      <span class="block text-sm font-semibold text-n-slate-12">Acompanhamento automático</span>
-                      <span class="text-xs text-n-slate-10">Registrar lembrete após o envio.</span>
+                      <span class="block text-sm font-semibold text-n-slate-12"
+                        >Acompanhamento automático</span
+                      >
+                      <span class="text-xs text-n-slate-10"
+                        >Registrar lembrete após o envio.</span
+                      >
                     </span>
-                    <input v-model="proposalForm.follow_up_enabled" type="checkbox" class="size-5 accent-n-iris-9" />
+                    <input
+                      v-model="proposalForm.follow_up_enabled"
+                      type="checkbox"
+                      class="size-5 accent-n-iris-9"
+                    />
                   </label>
                 </div>
-                <label v-if="proposalForm.follow_up_enabled" class="mt-4 block text-sm font-medium text-n-slate-11">
+                <label
+                  v-if="proposalForm.follow_up_enabled"
+                  class="mt-4 block text-sm font-medium text-n-slate-11"
+                >
                   Acompanhamento após (dias)
                   <input
                     v-model.number="proposalForm.follow_up_days"
@@ -1291,7 +1960,7 @@ onMounted(async () => {
             >
               <select
                 v-model="itemForm.product_id"
-                :disabled="selectedProposal.locked"
+                :disabled="selectedProposal.locked || itemSaving"
                 required
                 class="rounded-lg border border-n-weak bg-n-solid-2 px-3 py-2 text-sm"
                 @change="selectProduct"
@@ -1307,7 +1976,7 @@ onMounted(async () => {
               </select>
               <input
                 v-model.number="itemForm.quantity"
-                :disabled="selectedProposal.locked"
+                :disabled="selectedProposal.locked || itemSaving"
                 min="1"
                 required
                 type="number"
@@ -1316,7 +1985,7 @@ onMounted(async () => {
               />
               <input
                 v-model="itemForm.unit_price"
-                :disabled="selectedProposal.locked"
+                :disabled="selectedProposal.locked || itemSaving"
                 min="0"
                 step="0.01"
                 required
@@ -1331,6 +2000,11 @@ onMounted(async () => {
               >
                 + Adicionar
               </button>
+              <CommercialGratuityFields
+                v-model="itemForm.commercial_gratuity"
+                class="md:col-span-4"
+                :disabled="itemSaving"
+              />
             </form>
 
             <div class="mt-4 overflow-auto rounded-xl border border-n-weak">
@@ -1361,6 +2035,23 @@ onMounted(async () => {
                       <p class="font-medium text-n-slate-12">
                         {{ item.name_snapshot }}
                       </p>
+                      <form
+                        v-if="!selectedProposal.locked"
+                        class="mt-3 space-y-2"
+                        @submit.prevent="updateItem(item)"
+                      >
+                        <CommercialGratuityFields
+                          v-model="item.commercial_gratuity"
+                          :disabled="itemSaving"
+                        />
+                        <button
+                          type="submit"
+                          :disabled="itemSaving"
+                          class="rounded-lg border border-n-weak px-3 py-2 text-sm"
+                        >
+                          {{ t('CRM.GRATUITY.SAVE') }}
+                        </button>
+                      </form>
                       <p
                         v-if="item.product?.sku"
                         class="text-xs text-n-slate-10"
@@ -1368,14 +2059,24 @@ onMounted(async () => {
                         SKU {{ item.product.sku }}
                       </p>
                       <div class="mt-2 flex flex-wrap gap-1 text-[11px]">
-                        <span class="rounded-full bg-n-iris-3 px-2 py-0.5 text-n-iris-11">
+                        <span
+                          class="rounded-full bg-n-iris-3 px-2 py-0.5 text-n-iris-11"
+                        >
                           {{ billingLabel(item.billing_model) }}
                         </span>
-                        <span v-if="item.setup_fee_cents" class="rounded-full bg-n-blue-3 px-2 py-0.5 text-n-blue-11">
-                          Implantação <CrmValueDisplay :cents="item.setup_fee_cents" />
+                        <span
+                          v-if="item.setup_fee_cents"
+                          class="rounded-full bg-n-blue-3 px-2 py-0.5 text-n-blue-11"
+                        >
+                          Implantação
+                          <CrmValueDisplay :cents="item.setup_fee_cents" />
                         </span>
-                        <span v-if="item.included_quantity" class="rounded-full bg-n-teal-3 px-2 py-0.5 text-n-teal-11">
-                          {{ item.included_quantity }} {{ item.included_unit || 'incluídos' }}
+                        <span
+                          v-if="item.included_quantity"
+                          class="rounded-full bg-n-teal-3 px-2 py-0.5 text-n-teal-11"
+                        >
+                          {{ item.included_quantity }}
+                          {{ item.included_unit || 'incluídos' }}
                         </span>
                       </div>
                     </td>
@@ -1385,7 +2086,7 @@ onMounted(async () => {
                         min="1"
                         type="number"
                         class="w-20 rounded border border-n-weak px-2 py-1 text-right"
-                        :disabled="selectedProposal.locked"
+                        :disabled="selectedProposal.locked || itemSaving"
                         @change="updateItem(item)"
                       />
                     </td>
@@ -1396,7 +2097,7 @@ onMounted(async () => {
                         step="0.01"
                         type="number"
                         class="w-28 rounded border border-n-weak px-2 py-1 text-right"
-                        :disabled="selectedProposal.locked"
+                        :disabled="selectedProposal.locked || itemSaving"
                         @change="updateItemPrice(item, $event.target.value)"
                       />
                     </td>
@@ -1407,14 +2108,18 @@ onMounted(async () => {
                         step="0.01"
                         type="number"
                         class="w-24 rounded border border-n-weak px-2 py-1 text-right"
-                        :disabled="selectedProposal.locked"
+                        :disabled="selectedProposal.locked || itemSaving"
                         @change="updateItemDiscount(item, $event.target.value)"
                       />
                     </td>
                     <td class="px-4 py-3 text-right font-semibold">
                       <CrmValueDisplay :cents="item.initial_total_cents" />
-                      <p v-if="item.recurring_total_cents" class="mt-1 text-xs font-normal text-n-teal-11">
-                        Recorrência <CrmValueDisplay :cents="item.recurring_total_cents" />
+                      <p
+                        v-if="item.recurring_total_cents"
+                        class="mt-1 text-xs font-normal text-n-teal-11"
+                      >
+                        Recorrência
+                        <CrmValueDisplay :cents="item.recurring_total_cents" />
                       </p>
                     </td>
                     <td class="px-4 py-3 text-right">
@@ -1422,7 +2127,7 @@ onMounted(async () => {
                         v-if="!selectedProposal.locked"
                         type="button"
                         class="rounded-lg border border-n-weak px-3 py-1.5 text-xs text-n-ruby-11 disabled:opacity-40"
-                        :disabled="selectedProposal.locked"
+                        :disabled="selectedProposal.locked || itemSaving"
                         @click="removeItem(item)"
                       >
                         Remover
@@ -1444,7 +2149,7 @@ onMounted(async () => {
                 min="0"
                 step="0.01"
                 class="rounded-lg border border-n-weak px-3 py-2"
-                :disabled="selectedProposal.locked"
+                :disabled="selectedProposal.locked || itemSaving"
               />
               <p class="text-xs text-n-slate-10">
                 Aplicado depois dos descontos individuais dos produtos. Clique
@@ -1517,8 +2222,12 @@ onMounted(async () => {
                   Comercial, financeiro e técnico antes do envio.
                 </p>
               </div>
-              <span class="rounded-full bg-n-amber-3 px-2.5 py-1 text-xs font-semibold text-n-amber-11">
-                {{ selectedProposal.approval?.status_display || 'Não requerida' }}
+              <span
+                class="rounded-full bg-n-amber-3 px-2.5 py-1 text-xs font-semibold text-n-amber-11"
+              >
+                {{
+                  selectedProposal.approval?.status_display || 'Não requerida'
+                }}
               </span>
             </div>
 
@@ -1533,27 +2242,36 @@ onMounted(async () => {
                 class="rounded-xl border border-n-weak p-3"
               >
                 <div class="flex items-center justify-between gap-3">
-                  <span class="text-sm font-semibold text-n-slate-12">{{ approvalItem.label }}</span>
+                  <span class="text-sm font-semibold text-n-slate-12">{{
+                    approvalItem.label
+                  }}</span>
                   <span
                     class="rounded-full px-2 py-0.5 text-xs font-semibold"
                     :class="
-                      selectedProposal.approval?.[approvalItem.key] === 'approved'
+                      selectedProposal.approval?.[approvalItem.key] ===
+                      'approved'
                         ? 'bg-n-teal-3 text-n-teal-11'
-                        : selectedProposal.approval?.[approvalItem.key] === 'rejected'
+                        : selectedProposal.approval?.[approvalItem.key] ===
+                            'rejected'
                           ? 'bg-n-ruby-3 text-n-ruby-11'
-                          : selectedProposal.approval?.[approvalItem.key] === 'pending'
+                          : selectedProposal.approval?.[approvalItem.key] ===
+                              'pending'
                             ? 'bg-n-amber-3 text-n-amber-11'
                             : 'bg-n-alpha-3 text-n-slate-10'
                     "
                   >
                     {{
-                      selectedProposal.approval?.[`${approvalItem.key}_display`] ||
-                      'Não requerida'
+                      selectedProposal.approval?.[
+                        `${approvalItem.key}_display`
+                      ] || 'Não requerida'
                     }}
                   </span>
                 </div>
                 <div
-                  v-if="isAdmin && selectedProposal.approval?.[approvalItem.key] === 'pending'"
+                  v-if="
+                    isAdmin &&
+                    selectedProposal.approval?.[approvalItem.key] === 'pending'
+                  "
                   class="mt-3 flex gap-2"
                 >
                   <button
@@ -1576,8 +2294,13 @@ onMounted(async () => {
               </div>
             </div>
 
-            <div v-if="selectedProposal.acceptance?.name" class="mt-4 rounded-xl bg-n-teal-2 p-3">
-              <p class="text-xs font-semibold uppercase text-n-teal-11">Aceite digital</p>
+            <div
+              v-if="selectedProposal.acceptance?.name"
+              class="mt-4 rounded-xl bg-n-teal-2 p-3"
+            >
+              <p class="text-xs font-semibold uppercase text-n-teal-11">
+                Aceite digital
+              </p>
               <p class="mt-1 text-sm font-semibold text-n-slate-12">
                 {{ selectedProposal.acceptance.name }}
               </p>
@@ -1591,4 +2314,15 @@ onMounted(async () => {
       </aside>
     </div>
   </div>
+  <ContactCreateModal
+    v-if="showForm && showContactForm"
+    :company-id="companyId"
+    @close="showContactForm = false"
+    @created="
+      contact => {
+        contactId = contact.id;
+        showContactForm = false;
+      }
+    "
+  />
 </template>

@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { useMapGetter } from 'dashboard/composables/store.js';
 import Icon from 'next/icon/Icon.vue';
+import SidebarNewBadge from './SidebarNewBadge.vue';
 
 const props = defineProps({
   to: { type: [Object, String], default: '' },
@@ -27,19 +28,22 @@ const count = computed(() =>
 
 <template>
   <component
-    :is="to && !disabled ? 'router-link' : 'div'"
+    :is="to && !disabled && !expandable ? 'router-link' : 'button'"
     class="flex items-center gap-2 px-2.5 py-2 rounded-xl h-10 min-w-0 transition-colors"
     role="button"
     draggable="false"
-    :to="disabled ? undefined : to"
+    :type="expandable || !to || disabled ? 'button' : undefined"
+    :aria-expanded="expandable ? isExpanded : undefined"
+    :aria-disabled="disabled || undefined"
+    :to="disabled || expandable ? undefined : to"
     :title="label"
     :class="{
-      'bg-[#087cf0] text-white font-medium shadow-[0_6px_18px_rgba(8,124,240,0.28)]':
+      'bg-sidebar-active text-white font-medium shadow-[0_6px_18px_rgba(8,124,240,0.28)]':
         isActive && !hasActiveChild,
       'bg-white/10 text-white font-medium': hasActiveChild,
-      'text-white/90 hover:bg-white/10 hover:text-white':
+      'text-sidebar-foreground hover:bg-white/10 hover:text-white':
         !isActive && !hasActiveChild && !disabled,
-      'cursor-not-allowed text-white/40 opacity-60': disabled,
+      'cursor-not-allowed text-sidebar-muted': disabled,
     }"
     @click.stop="disabled ? undefined : emit('toggle')"
   >
@@ -56,12 +60,7 @@ const count = computed(() =>
       <span class="truncate text-sm font-medium text-inherit">
         {{ label }}
       </span>
-      <span
-        v-if="newBadge"
-        class="inline-flex h-5 items-center rounded-full bg-n-ruby-9 px-2 text-xxs font-semibold text-white flex-shrink-0"
-      >
-        Novo
-      </span>
+      <SidebarNewBadge v-if="newBadge" />
       <span
         v-if="dynamicCount && !expandable"
         class="inline-grid h-5 min-w-5 place-items-center rounded-full bg-white/15 px-1 text-xxs font-medium leading-3 text-white flex-shrink-0"
@@ -70,10 +69,14 @@ const count = computed(() =>
       </span>
     </div>
     <span
-      v-if="expandable"
-      v-show="isExpanded"
-      class="i-lucide-chevron-up size-3"
-      @click.stop="emit('toggle')"
-    />
+      class="grid size-3 shrink-0 place-items-center"
+      data-testid="sidebar-trailing-slot"
+    >
+      <span
+        v-if="expandable"
+        class="i-lucide-chevron-down size-3"
+        :class="{ 'rotate-180': isExpanded }"
+      />
+    </span>
   </component>
 </template>

@@ -17,11 +17,11 @@ class JrcCampaigns::CampaignSerializer
   attr_reader :campaign
 
   def scalar_fields
-    [:id, :name, :delivery_channel, :status, :trigger_type, :scheduled_at, :audience_type, :audience_config, :message_body, :inbox_id,
+    [:id, :name, :status, :trigger_type, :scheduled_at, :audience_type, :audience_config, :message_body, :inbox_id,
      :rotation_mode, :delay_min_seconds, :delay_max_seconds, :sending_window, :conversation_mode, :recurrence_config, :follow_up_config,
      :estimated_recipients, :sent_count, :failed_count, :delivered_count, :read_count, :replied_count, :clicked_count, :started_at,
-     :review_digest, :approved_at, :approved_by_id, :approval_expires_at,
-     :paused_at, :completed_at, :last_execution_at, :last_error, :created_at, :updated_at]
+     :paused_at, :completed_at, :last_execution_at, :last_error, :created_at, :updated_at,
+     :review_digest, :approved_by_id, :approved_at, :approval_expires_at]
   end
 
   def inbox_json(link)
@@ -36,8 +36,7 @@ class JrcCampaigns::CampaignSerializer
   end
 
   def step_json(step)
-    step.as_json(only: [:id, :position, :kind, :subject, :body, :media_url, :file_name, :media_asset_id, :template_name, :template_namespace,
-                        :template_language,
+    step.as_json(only: [:id, :position, :kind, :body, :media_url, :file_name, :template_name, :template_namespace, :template_language,
                         :template_params, :inbox_overrides, :delay_after_seconds, :only_if_no_reply, :follow_up_after_hours])
   end
 

@@ -238,7 +238,8 @@ group :development do
   # Should install the associated chrome extension to view query logs
   gem 'meta_request', '>= 0.8.3'
 
-  gem 'tidewave'
+  # The static local pilot disables reloading and does not expose the development debugger.
+  gem 'tidewave', require: ENV['JRC_NICO_LOCAL_STATIC'] == 'true' ? false : 'tidewave'
 end
 
 group :test do

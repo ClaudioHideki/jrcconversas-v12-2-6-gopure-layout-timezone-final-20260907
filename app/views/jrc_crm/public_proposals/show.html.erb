@@ -1,11 +1,12 @@
+<% document_brand = JrcCrm::DocumentBranding.name(@proposal.account) %>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title><%= @proposal.proposal_number %> — <%= @proposal.title %> | JRC</title>
+  <title><%= @proposal.proposal_number %> — <%= @proposal.title %> | <%= document_brand %></title>
   <style>
-    :root{--jrc:#073d68;--blue:#0c73d6;--iris:#7758e8;--ink:#152536;--muted:#667789;--line:#dce4ec;--soft:#f4f8fb;--ok:#0c8b68;--warn:#e08a00;--danger:#c43d56}
+    :root{--jrc:#006b4b;--blue:#00a875;--iris:#7758e8;--ink:#152536;--muted:#667789;--line:#dce4ec;--soft:#f4f8fb;--ok:#0c8b68;--warn:#e08a00;--danger:#c43d56}
     *{box-sizing:border-box}body{margin:0;background:#eef3f7;color:var(--ink);font-family:Inter,Segoe UI,Arial,sans-serif}.shell{max-width:1120px;margin:30px auto;padding:0 18px}.proposal{overflow:hidden;border-radius:20px;background:#fff;box-shadow:0 18px 60px rgba(10,47,81,.12)}
     .hero{position:relative;min-height:320px;padding:44px 54px;border-left:8px solid var(--blue);background:radial-gradient(circle at 88% 12%,rgba(119,88,232,.13),transparent 30%),linear-gradient(135deg,#fff,#f7fbff)}.brand{display:flex;align-items:center;justify-content:space-between;gap:24px}.brand img{width:112px;max-height:76px;object-fit:contain}.eyebrow{font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--blue)}.proposal-id{margin-top:7px;color:var(--muted);font-size:13px}.hero h1{margin:40px 0 12px;color:var(--jrc);font-size:38px;line-height:1.08}.hero .desc{max-width:780px;color:var(--muted);font-size:17px;line-height:1.55}.meta{display:grid;grid-template-columns:2fr repeat(3,1fr);gap:18px;margin-top:30px;padding-top:24px;border-top:2px solid var(--blue)}
     .label{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}.value{margin-top:6px;font-weight:750}.body{padding:40px 54px}.section{margin-bottom:36px}.section h2{margin:0 0 16px;color:var(--jrc);font-size:21px}.section p{color:#33485b;line-height:1.65}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px}table{width:100%;min-width:900px;border-collapse:collapse}th{padding:13px 14px;background:var(--blue);color:#fff;text-align:left;font-size:12px}td{padding:14px;border-top:1px solid var(--line);vertical-align:top}.num{text-align:right;white-space:nowrap}.product-name{font-weight:750}.product-desc,.product-meta{margin-top:4px;color:var(--muted);font-size:12px}.summary{width:min(480px,100%);margin:24px 0 0 auto;padding:18px;border-radius:14px;background:var(--soft)}.row{display:flex;justify-content:space-between;gap:24px;padding:6px 0}.row.total{margin-top:8px;padding-top:13px;border-top:1px solid var(--line);color:var(--jrc);font-size:19px;font-weight:800}.discount{color:var(--danger)}
@@ -39,20 +40,20 @@
     <section class="hero">
       <div class="brand">
         <div>
-          <div class="eyebrow">Proposta Comercial JRC</div>
+          <div class="eyebrow">Proposta Comercial <%= document_brand %></div>
           <div class="proposal-id"><%= @proposal.proposal_number %> · versão <%= @proposal.version_number %></div>
         </div>
-        <%= image_tag('/brand-assets/logo-jrc.png', alt: 'JRC') %>
+        <%= image_tag("/brand-assets/#{File.basename(JrcCrm::DocumentBranding.logo_path(@proposal.account))}", alt: document_brand) %>
       </div>
       <h1><%= @proposal.title %></h1>
-      <div class="desc"><%= @proposal.solution_description.presence || 'Solução comercial integrada JRC.' %></div>
+      <div class="desc"><%= @proposal.solution_description.presence || 'Proposta comercial conforme o escopo abaixo.' %></div>
       <div class="meta">
         <div>
           <div class="label">Cliente</div>
-          <div class="value"><%= contact&.name.presence || @proposal.deal.title %></div>
+          <div class="value"><%= @proposal.customer_company&.name.presence || contact&.name.presence || @proposal.deal&.title %></div>
           <% if contact&.email.present? %><div class="product-meta"><%= contact.email %></div><% end %>
         </div>
-        <div><div class="label">Responsável</div><div class="value"><%= @proposal.owner&.name.presence || 'Equipe JRC' %></div></div>
+        <div><div class="label">Responsável</div><div class="value"><%= @proposal.owner&.name.presence || 'Equipe comercial' %></div></div>
         <div><div class="label">Validade</div><div class="value"><%= (@proposal.valid_until || 15.days.from_now.to_date).strftime('%d/%m/%Y') %></div></div>
         <div><div class="label">Vigência</div><div class="value"><%= @proposal.term_months %> meses</div></div>
       </div>
@@ -61,7 +62,7 @@
     <div class="body">
       <section class="section">
         <h2>Descrição da solução</h2>
-        <%= simple_format(@proposal.solution_description.presence || 'Solução comercial JRC conforme escopo do negócio.') %>
+        <%= simple_format(@proposal.solution_description.presence || 'Proposta conforme escopo do negócio.') %>
       </section>
 
       <section class="section">
@@ -166,7 +167,7 @@
         <% end %>
       </div>
     </div>
-    <div class="footer">JRC Conversas • <%= @proposal.proposal_number %> • versão <%= @proposal.version_number %> • <%= @proposal.account.name %></div>
+    <div class="footer"><%= document_brand %> • <%= @proposal.proposal_number %> • versão <%= @proposal.version_number %> • <%= @proposal.account.name %></div>
   </article>
 </div>
 </body>

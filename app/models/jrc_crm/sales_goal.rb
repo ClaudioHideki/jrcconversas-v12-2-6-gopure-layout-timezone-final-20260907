@@ -64,6 +64,28 @@ module JrcCrm
     validate { errors.add(:team, 'must belong to account') if team && team.account_id != account_id }
     validate :published_distribution_matches_target
     validate :published_products_match_target
+    validate :scope_records_belong_to_account
+
+    def scope_records_belong_to_account
+      errors.add(:business_unit, 'must belong to account') if business_unit && business_unit.account_id != account_id
+      errors.add(:product, 'must belong to account') if product && product.account_id != account_id
+      allocated_ids = Array(allocations).map { |row| (row['user_id'] || row[:user_id]).to_i }
+      if allocated_ids.uniq.length != allocated_ids.length || allocated_ids.any?(&:zero?) ||
+         (allocated_ids - account.users.where(id: allocated_ids).pluck(:id)).any?
+        errors.add(:allocations, 'must contain distinct users belonging to account')
+      end
+      product_ids = Array(product_targets).map { |row| (row['product_id'] || row[:product_id]).to_i }
+      if product_ids.uniq.length != product_ids.length || product_ids.any?(&:zero?) ||
+         (product_ids - account.jrc_crm_products.where(id: product_ids).pluck(:id)).any?
+        errors.add(:product_targets, 'must contain distinct products belonging to account')
+      end
+      return unless status == 'active'
+      errors.add(:team, 'is required for team scope') if scope_kind == 'team' && team_id.blank?
+      errors.add(:business_unit, 'is required for unit scope') if scope_kind == 'business_unit' && business_unit_id.blank?
+      errors.add(:product, 'is required for product scope') if scope_kind == 'product' && product_id.blank? && product_ids.empty?
+      errors.add(:user, 'or allocations is required for user scope') if scope_kind == 'user' && user_id.blank? && allocated_ids.empty?
+    end
+
 
     def published_distribution_matches_target
       return unless status == 'active' && allocations.present? && %w[revenue mrr ticket].include?(metric)

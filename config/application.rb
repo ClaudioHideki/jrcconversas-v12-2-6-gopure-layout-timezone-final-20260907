@@ -39,11 +39,6 @@ module Chatwoot
     config.load_defaults 7.0
     config.rails_i18n.enabled_modules = [:pluralization]
 
-    # JRC: timezone configuravel para operacoes locais (campanhas/agendamentos).
-    # O banco continua persistindo timestamps em UTC.
-    config.time_zone = ENV.fetch('APP_TIME_ZONE', 'UTC')
-    config.active_record.default_timezone = :utc
-
     config.eager_load_paths << Rails.root.join('lib')
     config.eager_load_paths << Rails.root.join('enterprise/lib')
     config.eager_load_paths << Rails.root.join('enterprise/listeners')

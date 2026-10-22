@@ -3,11 +3,14 @@ module Api
     module Accounts
       module Crm
         class ProposalsController < BaseController
+          include JrcCrm::CorporateProposalParameters
           before_action :set_proposal, only: [
             :show, :update, :destroy, :send_proposal, :pdf, :accept, :reject,
             :cancel, :duplicate, :request_approval, :approve, :convert_to_order
           ]
           before_action :ensure_unlocked_proposal!, only: [:update, :destroy, :request_approval, :approve, :accept, :reject, :cancel]
+
+          around_action :lock_proposal_mutation, only: %i[update destroy request_approval approve accept reject cancel send_proposal duplicate]
 
           def index
             proposals = visible_to_current_user(crm_scope.jrc_crm_proposals)
@@ -15,7 +18,7 @@ module Api
             proposals = proposals.where(status: params[:status]) if params[:status].present?
             proposals = proposals.where(owner_id: params[:owner_id]) if params[:owner_id].present?
 
-            render json: proposals.includes(:owner, :deal, { events: :user }, proposal_items: :product)
+            render json: proposals.includes(:owner, :deal, { events: :user }, { business_unit: :operating_company }, proposal_items: :product)
                                   .order(updated_at: :desc)
                                   .map { |proposal| serialize(proposal) }
           end
@@ -25,25 +28,35 @@ module Api
           end
 
           def create
-            deal = visible_to_current_user(crm_scope.jrc_crm_deals).find(params[:deal_id])
-            proposal = JrcCrm::ProposalBuilderService.new(deal: deal, actor: Current.user).call
+            deal = visible_to_current_user(crm_scope.jrc_crm_deals).find(params[:deal_id]) if params[:deal_id].present?
+            company = contact = nil
+            unless deal
+              authorize :directory, :access?, policy_class: JrcCustomers::DirectoryPolicy
+              company = corporate_records(:master_companies).find(params[:company_id]) if params[:company_id].present?
+              contact = crm_scope.contacts.find(params[:contact_id]) if params[:contact_id].present?
+              authorize contact, :show? if contact
+            end
+            unit = crm_scope.jrc_crm_business_units.find(params[:business_unit_id]) if params[:business_unit_id].present?
+            authorize_operating_unit!(unit)
+            attributes = params[:proposal].present? ? proposal_params.to_h.except('owner_id') : {}
+            attributes.delete('title') if attributes['title'].blank?
+            proposal = build_corporate_proposal(deal, company, contact, unit, attributes)
             render json: serialize(proposal), status: :created
-          rescue StandardError => e
+          rescue ActiveRecord::RecordInvalid, JrcCrm::CommercialFinancials::InvalidTerms => e
             render json: { errors: [e.message] }, status: :unprocessable_entity
           end
 
           def update
-            attributes = proposal_params.to_h.symbolize_keys
+            attributes = corporate_proposal_attributes
             validate_proposal_owner!(attributes[:owner_id]) if attributes[:owner_id].present?
             normalize_payment_attributes!(attributes)
-            if @proposal.proposal_items.exists?
-              attributes.except!(:implementation_cents, :monthly_cents, :subtotal_cents, :total_cents)
-            end
+            attributes.except!(:implementation_cents, :monthly_cents, :subtotal_cents, :total_cents) if @proposal.proposal_items.exists?
 
             if @proposal.update(attributes)
               commercial_changes = @proposal.saved_changes.keys - %w[updated_at]
               @proposal.reset_approvals! if commercial_changes.any?
               @proposal.recalculate_totals!
+              JrcApprovals::CommercialInvalidation.call(resource: @proposal.reload, user: Current.user)
               audit_event!('updated', 'Proposta atualizada no CRM')
               render json: serialize(@proposal.reload)
             else
@@ -52,11 +65,19 @@ module Api
           end
 
           def destroy
-            if @proposal.destroy
-              head :no_content
-            else
-              render json: { errors: @proposal.errors.full_messages }, status: :unprocessable_entity
+            authorize @proposal, :destroy?, policy_class: JrcCrm::ProposalPolicy
+            if @proposal.sales_orders.exists?
+              render json: { errors: ['A proposta possui pedido vinculado e não pode ser excluída.'], code: 'PROPOSAL_HAS_DEPENDENCIES' }, status: :conflict
+              return
             end
+            snapshot = @proposal.attributes.except('public_token_digest', 'accepted_from_ip', 'accepted_user_agent')
+            @proposal.destroy!
+            JrcCrm::AuditEvent.create!(account: crm_scope, actor_type: 'User', actor_id: Current.user.id,
+              event_type: 'proposal_deleted', resource_type: 'JrcCrm::Proposal', resource_id: @proposal.id,
+              from_value: snapshot, to_value: {}, metadata: { proposal_number: @proposal.proposal_number })
+            head :no_content
+          rescue ActiveRecord::RecordNotDestroyed, ActiveRecord::InvalidForeignKey
+            render json: { errors: ['A proposta possui vínculos que impedem a exclusão.'], code: 'PROPOSAL_HAS_DEPENDENCIES' }, status: :conflict
           end
 
           def duplicate
@@ -92,23 +113,28 @@ module Api
                 last_sent_conversation_id: nil,
                 title: "#{@proposal.title} - Versão #{@proposal.version_number.to_i + 1}"
               )
+              duplicate.down_payment_cents = 0 # Items are copied before restoring the accepted entry.
               duplicate.save!
 
               @proposal.proposal_items.find_each do |item|
                 attributes = item.attributes.except('id', 'proposal_id', 'created_at', 'updated_at')
                 duplicate.proposal_items.create!(attributes)
               end
+              duplicate.update!(down_payment_cents: @proposal.down_payment_cents)
               duplicate.recalculate_totals!
 
               duplicate.events.create!(
                 account_id: crm_scope.id,
                 event_type: 'duplicated',
                 user_id: Current.user.id,
+                metadata: { relationship_origin: @proposal.relationship_origin, source_proposal_id: @proposal.id },
                 description: "Nova versão criada a partir da proposta #{@proposal.proposal_number}"
               )
             end
 
             render json: serialize(duplicate.reload), status: :created
+          rescue JrcApprovals::Error => e
+            render json: { error: e.code, code: e.code }, status: :conflict
           rescue StandardError => e
             render json: { errors: [e.message] }, status: :unprocessable_entity
           end
@@ -192,8 +218,9 @@ module Api
               proposal: @proposal,
               actor: Current.user,
               channel: params[:channel].presence || 'auto',
-              base_url: request.base_url
-            ).call
+              base_url: request.base_url,
+              idempotency_key: params[:idempotency_key]
+            ).call(delivery: recipient_delivery_params)
 
             render json: {
               message: 'Proposta enviada com sucesso',
@@ -206,6 +233,12 @@ module Api
                 channel: result[:proposal].last_sent_channel
               }
             }
+          rescue Pundit::NotAuthorizedError
+            head :forbidden
+          rescue ActiveRecord::RecordNotFound
+            head :not_found
+          rescue JrcApprovals::Error => e
+            render json: { error: e.code, code: e.code }, status: :conflict
           rescue StandardError => e
             render json: { errors: [e.message] }, status: :unprocessable_entity
           end
@@ -226,7 +259,21 @@ module Api
               user_agent: request.user_agent
             )
             audit_event!('accepted', 'Proposta aceita internamente com evidência digital')
-            render json: { message: 'Proposta aceita', proposal: serialize(@proposal.reload) }
+            lifecycle = JrcCrm::AcceptedProposalLifecycleService.new(
+              proposal: @proposal.reload,
+              actor: Current.user
+            ).call
+            render json: {
+              message: 'Proposta aceita',
+              proposal: serialize(@proposal.reload),
+              sales_order: lifecycle[:order] && {
+                id: lifecycle[:order].id,
+                order_number: lifecycle[:order].order_number,
+                status: lifecycle[:order].status
+              },
+              lifecycle_warnings: lifecycle[:warnings],
+              lifecycle_error: lifecycle[:success] ? nil : lifecycle[:error]
+            }
           end
 
           def reject
@@ -256,15 +303,27 @@ module Api
           def convert_to_order
             order = JrcCrm::ProposalToOrderService.new(proposal: @proposal, actor: Current.user).call
             render json: { id: order.id, order_number: order.order_number, status: order.status, total_cents: order.total_cents }, status: :created
+          rescue JrcApprovals::Error => e
+            render json: { error: e.code, code: e.code }, status: :conflict
           rescue StandardError => e
             render json: { errors: [e.message] }, status: :unprocessable_entity
           end
 
           private
 
+          def lock_proposal_mutation
+            @proposal.with_lock do
+              if !%w[duplicate send_proposal].include?(action_name) && @proposal.locked_for_editing?
+                render json: { errors: ['A proposta aceita esta bloqueada. Crie uma nova versao.'] }, status: :unprocessable_entity
+              else
+                yield
+              end
+            end
+          end
+
           def set_proposal
             @proposal = visible_to_current_user(crm_scope.jrc_crm_proposals).includes(
-              :owner, :deal, { events: :user }, proposal_items: :product
+              :owner, :deal, { events: :user }, { business_unit: :operating_company }, proposal_items: :product
             ).find(params[:id])
           end
 
@@ -277,6 +336,12 @@ module Api
 
           def serialize(proposal)
             JrcCrm::ProposalSerializer.new(proposal, base_url: request.base_url).as_json
+          end
+
+          def recipient_delivery_params
+            return unless params.key?(:delivery)
+
+            params.require(:delivery).permit(:contact_id, :inbox_id, :content, template_params: {}).to_h
           end
 
           def audit_event!(event_type, description)
@@ -293,23 +358,15 @@ module Api
           end
 
           def commercial_approval_required?
-            general_discount_percent > 10 || @proposal.proposal_items.any? do |item|
-              threshold = item.product&.discount_approval_percent.to_f
-              threshold.positive? && item_discount_percent(item) > threshold
-            end
+            JrcCrm::ProposalApprovalRequirements.new(@proposal).commercial?
           end
 
           def financial_approval_required?
-            return false if @proposal.subtotal_cents.to_i.zero?
-
-            total_discount_percent = (@proposal.total_discount_cents.to_f / @proposal.subtotal_cents.to_i) * 100
-            total_discount_percent > 10
+            JrcCrm::ProposalApprovalRequirements.new(@proposal).financial?
           end
 
           def technical_approval_required?
-            @proposal.proposal_items.any? do |item|
-              item.product&.requires_contract? || item.product&.technical_requirements.present?
-            end
+            JrcCrm::ProposalApprovalRequirements.new(@proposal).technical?
           end
 
           def general_discount_percent
@@ -334,6 +391,7 @@ module Api
               @proposal.update!(approval_status: 'rejected')
             elsif statuses.all? { |status| %w[approved not_required].include?(status) }
               @proposal.update!(approval_status: 'approved', status: 'draft')
+              audit_event!('approved', 'Aprovada internamente — pronta para envio')
             else
               @proposal.update!(approval_status: 'pending', status: 'pending_approval')
             end
@@ -342,6 +400,7 @@ module Api
           def validate_proposal_owner!(owner_id)
             user = crm_scope.users.find_by(id: owner_id)
             raise Pundit::NotAuthorizedError unless user
+            raise Pundit::NotAuthorizedError unless crm_admin? || user.id == @proposal.owner_id
           end
 
           def normalize_payment_attributes!(attributes)

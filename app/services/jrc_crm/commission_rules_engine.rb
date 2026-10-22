@@ -1,86 +1,87 @@
+require 'bigdecimal'
+
 module JrcCrm
+  # Pure calculation, shared by simulation and persisted commission synchronization.
+  # No Rails dependency is required to test the monetary decisions.
   class CommissionRulesEngine
     def initialize(rules:, sale:, attainment_percent: nil, share_percent: 100)
-      @rules = (rules || {}).with_indifferent_access
-      @sale = (sale || {}).with_indifferent_access
-      @attainment_percent = attainment_percent.to_d if attainment_percent.present?
-      @share_percent = share_percent.to_d
+      @rules = CommercialFinancials.symbolize(rules || {})
+      @sale = CommercialFinancials.symbolize(sale || {})
+      @attainment_percent = decimal(attainment_percent) unless blank?(attainment_percent)
+      @share_percent = decimal(share_percent)
+      raise ArgumentError, 'Participacao deve estar entre 0 e 100.' unless @share_percent.between?(0, 100)
     end
 
     def call
       base = commission_base
       rate, tier = selected_rate(base)
-      gross = (base * rate / 100).round
-      shared = (gross * @share_percent / 100).round
-      bonus = bonus_cents(base, shared)
+      gross = (base * rate / 100).round(0, BigDecimal::ROUND_HALF_UP).to_i
+      shared = (gross * @share_percent / 100).round(0, BigDecimal::ROUND_HALF_UP).to_i
+      bonus = bonus_cents(shared)
       total = shared + bonus
-      {
-        base_cents: base,
-        rate_percent: rate.to_f,
-        share_percent: @share_percent.to_f,
-        tier_basis: tier_basis,
-        selected_tier: tier,
-        attainment_percent: @attainment_percent&.to_f,
-        gross_commission_cents: gross,
-        bonus_cents: bonus,
-        commission_cents: total,
-        calculation: calculation_memory(base, rate, tier, bonus, total)
-      }
+      memory = { base_kind: base_kind, base_cents: base, tier_basis: tier_basis,
+                 selected_tier: tier, rate_percent: rate.to_f, share_percent: @share_percent.to_f,
+                 attainment_percent: @attainment_percent&.to_f, bonus_cents: bonus, commission_cents: total }
+      memory.merge(gross_commission_cents: gross, calculation: memory.dup)
     end
 
     private
 
+    def blank?(value)
+      value.nil? || (value.respond_to?(:empty?) && value.empty?) || (value.is_a?(String) && value.strip.empty?)
+    end
+
+    def decimal(value)
+      result = BigDecimal(blank?(value) ? '0' : value.to_s)
+      raise ArgumentError, 'Valor de comissao invalido.' unless result.finite? && result >= 0
+      result
+    end
+
+    def base_kind
+      blank?(@rules[:base]) ? 'total_cents' : @rules[:base].to_s
+    end
+
     def commission_base
-      key = @rules[:base].presence || 'total_cents'
-      case key
-      when 'monthly_cents' then @sale[:monthly_cents].to_i
-      when 'received_cents' then @sale[:received_cents].to_i
-      when 'margin_cents' then @sale[:margin_cents].to_i
-      else @sale[:total_cents].to_i
+      if base_kind == 'margin_cents'
+        margin = CommissionProtection.margin(@sale)
+        raise ArgumentError, 'Margem indisponivel: nao utilizar o total do pedido.' if margin.nil?
+        return [margin, 0].max
       end
+      key = %w[monthly_cents received_cents].include?(base_kind) ? base_kind.to_sym : :total_cents
+      decimal(@sale[key]).round(0, BigDecimal::ROUND_HALF_UP).to_i
     end
 
     def tier_basis
-      @rules[:tier_basis].presence || 'sales_value'
+      blank?(@rules[:tier_basis]) ? 'sales_value' : @rules[:tier_basis].to_s
     end
 
     def selected_rate(base)
-      value = tier_basis == 'goal_attainment' ? @attainment_percent.to_d : base.to_d
-      tiers = Array(@rules[:tiers]).map { |row| row.with_indifferent_access }
-      tier = tiers.sort_by { |row| minimum_for(row) }.reverse.find do |row|
-        min = minimum_for(row)
-        max = maximum_for(row)
-        value >= min && (max.nil? || value <= max)
+      value = tier_basis == 'goal_attainment' ? (@attainment_percent || BigDecimal('0')) : base
+      tier = Array(@rules[:tiers]).sort_by { |row| minimum_for(row) }.reverse.find do |row|
+        maximum = maximum_for(row)
+        value >= minimum_for(row) && (maximum.nil? || value <= maximum)
       end
-      [(tier&.dig(:rate_percent) || @rules[:rate_percent] || 0).to_d, tier&.to_h]
+      [decimal(tier&.dig(:rate_percent) || @rules[:rate_percent] || 0), tier]
     end
 
     def minimum_for(row)
-      tier_basis == 'goal_attainment' ? (row[:min_percent] || 0).to_d : (row[:min_cents] || 0).to_d
+      decimal(row[tier_basis == 'goal_attainment' ? :min_percent : :min_cents])
     end
 
     def maximum_for(row)
-      value = tier_basis == 'goal_attainment' ? row[:max_percent] : row[:max_cents]
-      value.present? ? value.to_d : nil
+      value = row[tier_basis == 'goal_attainment' ? :max_percent : :max_cents]
+      blank?(value) ? nil : decimal(value)
     end
 
-    def bonus_cents(base, shared)
-      bonuses = Array(@rules[:bonuses]).map { |row| row.with_indifferent_access }
-      bonuses.sum do |bonus|
-        threshold = (bonus[:attainment_percent] || 0).to_d
-        next 0 unless @attainment_percent.present? && @attainment_percent >= threshold
-        if bonus[:amount_cents].present?
-          bonus[:amount_cents].to_i
+    def bonus_cents(shared)
+      Array(@rules[:bonuses]).sum do |bonus|
+        next 0 unless @attainment_percent && @attainment_percent >= decimal(bonus[:attainment_percent])
+        if blank?(bonus[:amount_cents])
+          (shared * decimal(bonus[:percent]) / 100).round(0, BigDecimal::ROUND_HALF_UP).to_i
         else
-          (shared * (bonus[:percent] || 0).to_d / 100).round
+          decimal(bonus[:amount_cents]).round(0, BigDecimal::ROUND_HALF_UP).to_i
         end
       end
-    end
-
-    def calculation_memory(base, rate, tier, bonus, total)
-      { base_kind: @rules[:base].presence || 'total_cents', base_cents: base, tier_basis: tier_basis,
-        selected_tier: tier, rate_percent: rate.to_f, share_percent: @share_percent.to_f,
-        attainment_percent: @attainment_percent&.to_f, bonus_cents: bonus, commission_cents: total }
     end
   end
 end

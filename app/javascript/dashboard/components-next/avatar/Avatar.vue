@@ -6,7 +6,6 @@ import { removeEmoji } from 'shared/helpers/emoji';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import ChannelIcon from 'dashboard/components-next/icon/ChannelIcon.vue';
 import wootConstants from 'dashboard/constants/globals';
-import { getAvailabilityStatus } from 'dashboard/helper/availabilityStatus';
 
 const props = defineProps({
   src: {
@@ -76,15 +75,12 @@ const AVATAR_COLORS = {
   default: { bg: '#E8E8E8', text: '#60646C' },
 };
 
-const statusClass = computed(() => {
-  if (
-    !props.status ||
-    (props.hideOfflineStatus && props.status === 'offline')
-  ) {
-    return null;
-  }
-  return getAvailabilityStatus(props.status).color;
-});
+const STATUS_CLASSES = computed(() => ({
+  online: 'bg-n-teal-10',
+  busy: 'bg-n-amber-10',
+  ...(props.hideOfflineStatus ? {} : { offline: 'bg-n-slate-10' }),
+}));
+
 const showDefaultAvatar = computed(() => !props.src && !props.name);
 
 const initials = computed(() => {
@@ -207,13 +203,13 @@ watch(
     <!-- Status Badge -->
     <slot name="badge" :size="size">
       <div
-        v-if="status && statusClass"
+        v-if="status && STATUS_CLASSES[status]"
         class="absolute z-20 border rounded-full border-n-slate-3"
         :style="badgeStyles"
-        :class="statusClass"
+        :class="STATUS_CLASSES[status]"
       />
       <div
-        v-if="inbox && !(status && statusClass)"
+        v-if="inbox && !(status && STATUS_CLASSES[status])"
         :style="badgeStyles"
         class="absolute z-20 flex items-center justify-center rounded-full bg-n-solid-1 border border-transparent flex-shrink-0"
       >

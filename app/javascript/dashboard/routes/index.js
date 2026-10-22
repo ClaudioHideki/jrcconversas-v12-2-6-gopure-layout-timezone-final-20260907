@@ -145,7 +145,7 @@ export const initalizeRouter = () => {
       if (crmAccess !== true) return next(crmAccess);
     }
 
-    await validateAuthenticateRoutePermission(to, next, store);
+    return validateAuthenticateRoutePermission(to, next, store);
   });
 };
 

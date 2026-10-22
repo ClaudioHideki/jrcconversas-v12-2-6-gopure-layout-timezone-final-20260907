@@ -280,3 +280,45 @@
   display_name: JRC Campanhas
   enabled: false
   column: feature_flags_ext_1
+- name: jrc_service_desk
+  display_name: JRC Service Desk
+  enabled: false
+  column: feature_flags_ext_1
+- name: jrc_flows
+  display_name: JRC Flows
+  enabled: false
+  column: feature_flags_ext_1
+- name: jrc_broker
+  display_name: JRC Broker
+  enabled: false
+  column: feature_flags_ext_1
+
+- name: jrc_projects
+  display_name: JRC Projetos
+  enabled: false
+  column: feature_flags_ext_1
+
+- name: jrc_customer_master
+  display_name: JRC Cadastro Mestre
+  enabled: false
+  column: feature_flags_ext_1
+
+- name: jrc_relationship
+  display_name: Relacionamento / Customer Success
+  enabled: false
+  column: feature_flags_ext_1
+
+- name: jrc_approvals
+  display_name: Configurable Approval Core
+  enabled: false
+  column: feature_flags_ext_1
+
+- name: jrc_operator
+  display_name: JRC Operadora Integrations
+  enabled: false
+  column: feature_flags_ext_1
+
+- name: jrc_contact_center
+  display_name: JRC Contact Center
+  enabled: false
+  column: feature_flags_ext_1

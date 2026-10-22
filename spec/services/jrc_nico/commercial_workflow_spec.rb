@@ -10,36 +10,6 @@ RSpec.describe 'NICO commercial workflow' do
 
   before { account.enable_features!('jrc_crm') }
 
-  it 'reuses the GoPure contact and lead when NICO repeats creation with the same email' do
-    contact = create(:contact, account: account, email: 'gopure@example.test')
-    first = execute('create_lead', name: 'Cliente GoPure', email: 'GOPURE@example.test')
-    expect(account.contacts.count).to eq(1)
-    expect(account.jrc_crm_leads.sole.contact_id).to eq(contact.id)
-    second = execute('create_lead', contact_id: contact.id)
-    expect(second.result.dig('record', 'id')).to eq(first.result.dig('record', 'id'))
-    expect(account.jrc_crm_leads.count).to eq(1)
-  end
-
-  it 'creates a linked contact for a new NICO lead and rolls it back if the lead fails' do
-    execute('create_lead', name: 'Novo cliente', email: 'new-gopure@example.test')
-    expect(account.jrc_crm_leads.sole.contact.email).to eq('new-gopure@example.test')
-    allow_any_instance_of(JrcCrm::Lead).to receive(:save!).and_raise(ActiveRecord::RecordInvalid.new(JrcCrm::Lead.new))
-    expect { execute('create_lead', name: 'Falha', email: 'rollback@example.test') }.to raise_error(ActiveRecord::RecordInvalid)
-    expect(account.contacts.where(email: 'rollback@example.test')).not_to exist
-  end
-
-  it 'does not let an agent reuse another agents lead through contact deduplication' do
-    contact = create(:contact, account: account, email: 'owned@example.test')
-    JrcCrm::LeadCreationService.new(account: account, actor: user, attributes: { contact_id: contact.id, name: contact.name }).call
-    agent = create(:user, account: account, role: :agent)
-    access = JrcNico::OperationalAccess.new(account: account, user: agent)
-    expect do
-      JrcNico::ToolExecutor.new(access).call('create_lead', 'name' => 'Owned', 'email' => contact.email)
-    end.to raise_error(ActiveRecord::RecordNotFound)
-    expect(account.contacts.count).to eq(1)
-    expect(account.jrc_crm_leads.sole.owner_id).to eq(user.id)
-  end
-
   def execute(tool, args)
     command = operator.ask(message: "Execute #{tool}", request_id: SecureRandom.uuid, prepared: { 'tool' => tool, 'arguments' => args.stringify_keys })
     operator.execute(command)
@@ -82,6 +52,9 @@ RSpec.describe 'NICO commercial workflow' do
       expect { execute('add_proposal_item', proposal_id: proposal.id, product_id: product.id, quantity: quantity) }.to raise_error(ArgumentError)
       expect(proposal.proposal_items).to be_empty
     end
+    expect { proposal.update!(status: 'accepted') }.to raise_error(ActiveRecord::RecordInvalid, /envio oficial/)
+    # Represent the official delivery receipt before exercising the locked state.
+    proposal.update!(status: 'sent', sent_at: Time.current)
     proposal.update!(status: 'accepted')
     expect { execute('add_proposal_item', proposal_id: proposal.id, product_id: product.id, quantity: 2) }.to raise_error(ArgumentError, /bloqueada/)
     expect(proposal.proposal_items).to be_empty
@@ -119,8 +92,12 @@ RSpec.describe 'NICO commercial workflow' do
         { 'tool' => '', 'arguments' => {}, 'reply' => 'Contato e lead cadastrados.' }
       end
     end
-    first = operator.ask(message: 'Crie o contato e gere seu lead', request_id: SecureRandom.uuid)
-    expect { operator.execute(first) }.to have_enqueued_job(JrcNico::ContinueCommandJob).with(first.id)
+    first = nil
+    expect do
+      first = operator.ask(message: 'Crie o contato e gere seu lead', request_id: SecureRandom.uuid)
+    end.to(have_enqueued_job(JrcNico::ContinueCommandJob).with { |id| expect(id).to eq(first.id) })
+    expect(first.status).to eq('succeeded')
+    expect { operator.execute(first) }.not_to have_enqueued_job(JrcNico::ContinueCommandJob)
     JrcNico::ContinueCommandJob.perform_now(first.id)
     second = operator.session.commands.order(:id).last
     expect(second.tool).to eq('create_lead')

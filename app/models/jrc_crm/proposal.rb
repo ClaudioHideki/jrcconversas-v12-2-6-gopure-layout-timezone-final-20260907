@@ -91,18 +91,26 @@ require 'securerandom'
 
 module JrcCrm
   class Proposal < ApplicationRecord
+    include JrcCrm::CorporateUnitBinding
     self.table_name = 'jrc_crm_proposals'
     attr_accessor :raw_public_token
 
     STATUS_VALUES = %w[draft pending_approval sent viewed accepted rejected canceled].freeze
     APPROVAL_VALUES = %w[not_required pending approved rejected].freeze
 
+    def relationship_origin
+      events.where(event_type: %w[created duplicated]).order(:id).pick(:metadata)&.dig('relationship_origin') || {}
+    end
+
     belongs_to :account
-    belongs_to :deal, class_name: 'JrcCrm::Deal'
+    belongs_to :deal, class_name: 'JrcCrm::Deal', optional: true
+    belongs_to :company, class_name: 'JrcCustomers::Company', optional: true
+    belongs_to :contact, optional: true
+    belongs_to :business_unit, class_name: 'JrcCrm::BusinessUnit', optional: true
     belongs_to :owner, class_name: 'User'
-    has_many :items, class_name: 'JrcCrm::ProposalItem', foreign_key: :proposal_id, dependent: :destroy
-    has_many :events, class_name: 'JrcCrm::ProposalEvent', foreign_key: :proposal_id, dependent: :destroy
-    has_many :proposal_items, class_name: 'JrcCrm::ProposalItem', foreign_key: :proposal_id, dependent: :destroy
+    has_many :items, class_name: 'JrcCrm::ProposalItem', dependent: :destroy
+    has_many :events, class_name: 'JrcCrm::ProposalEvent', dependent: :destroy
+    has_many :proposal_items, class_name: 'JrcCrm::ProposalItem', dependent: :destroy
     has_many :sales_orders, class_name: 'JrcCrm::SalesOrder', dependent: :restrict_with_error
 
     validates :title, presence: true
@@ -126,27 +134,29 @@ module JrcCrm
     enum status: STATUS_VALUES.index_with(&:itself)
 
     validate :owner_belongs_to_account
+    validate :customer_identity_is_consistent
     validate :payment_terms_are_consistent
+    validate :customer_transition_is_valid
 
     before_validation :generate_secure_public_token, on: :create
     before_validation :assign_proposal_number, on: :create
 
-    scope :active, -> { where.not(status: ['canceled', 'rejected']) }
+    scope :active, -> { where.not(status: %w[canceled rejected]) }
     scope :not_expired, -> { where('public_token_expires_at IS NULL OR public_token_expires_at > ?', Time.current) }
     scope :not_revoked, -> { where(public_token_revoked_at: nil) }
 
-    def self.find_by_raw_token(raw_token)
+    def self.find_by_raw_token(raw_token, allow_unavailable: false)
       return nil if raw_token.blank?
 
       digest = Digest::SHA256.hexdigest(raw_token.to_s)
       proposal = find_by(public_token_digest: digest)
-      return proposal if proposal&.token_valid?
+      return proposal if proposal && (allow_unavailable || proposal.token_valid?)
 
       payload = token_verifier.verify(raw_token.to_s, purpose: 'jrc-crm-public-proposal')
       return nil unless payload.is_a?(Hash)
 
       proposal = find_by(id: payload['proposal_id'], account_id: payload['account_id'])
-      proposal&.token_valid? ? proposal : nil
+      proposal && (allow_unavailable || proposal.token_valid?) ? proposal : nil
     rescue ActiveSupport::MessageVerifier::InvalidSignature
       nil
     end
@@ -172,7 +182,21 @@ module JrcCrm
     end
 
     def customer_response_allowed?
-      sent? || viewed?
+      public_availability[:available] && (sent? || viewed?)
+    end
+
+    def public_availability
+      JrcCrm::ProposalPublicState.call(self)
+    end
+
+    def record_expiration!
+      with_lock do
+        return unless public_availability[:state] == 'expired'
+        return if events.where(event_type: 'expired').exists?
+
+        events.create!(account_id: account_id, event_type: 'expired', description: 'Prazo de validade da proposta expirado',
+                       metadata: { origin: 'public_link', channel: 'web', expired_at: public_token_expires_at || valid_until })
+      end
     end
 
     def revoke!(reason = nil)
@@ -187,8 +211,7 @@ module JrcCrm
     def public_token
       raw_public_token.presence || self.class.token_verifier.generate(
         { 'proposal_id' => id, 'account_id' => account_id },
-        purpose: 'jrc-crm-public-proposal',
-        expires_at: public_token_expires_at || 30.days.from_now
+        purpose: 'jrc-crm-public-proposal'
       )
     end
 
@@ -197,11 +220,15 @@ module JrcCrm
     end
 
     def customer_contact
-      deal.contact || deal.contacts.first
+      contact || deal&.contact || deal&.contacts&.first
     end
 
     def linked_conversation
-      deal.conversations.order(updated_at: :desc).first
+      deal&.conversations&.order(updated_at: :desc)&.first || customer_contact&.conversations&.order(updated_at: :desc)&.first
+    end
+
+    def customer_company
+      company || deal&.company || customer_contact&.company
     end
 
     def item_discount_cents
@@ -225,51 +252,63 @@ module JrcCrm
       proposal_items.to_a.sum(&:initial_total_cents)
     end
 
-    def recalculate_totals!
-      proposal_items.reset
-      items = proposal_items.to_a
-
-      if items.empty?
-        initial_total = implementation_cents.to_i + monthly_cents.to_i
-        update_columns(
-          subtotal_cents: initial_total,
-          total_cents: [initial_total - effective_general_discount_cents, 0].max,
-          updated_at: Time.current
-        )
-        return
+    # Same engine and initial-period semantics used by SalesOrder.
+    def financial_items
+      records = proposal_items.to_a
+      if records.any?
+        return records.map do |item|
+          { product_id: item.product_id, name: item.name_snapshot, quantity: item.quantity,
+            unit_cents: item.unit_price_cents, discount_cents: item.discount_cents,
+            snapshot: JrcCrm::CommercialProductSnapshot.from_item(item) }
+        end
       end
 
-      gross_initial = items.sum(&:gross_initial_total_cents)
-      setup_total = items.sum { |item| item.setup_fee_cents.to_i }
-      recurring_monthly_total = items.sum { |item| item.recurring_total_cents.to_i }
-      net_initial_total = items.sum { |item| item.initial_total_cents.to_i }
+      rows = [{ name: 'Valor inicial', quantity: 1, unit_cents: implementation_cents.to_i,
+                snapshot: { billing_model: 'one_time' } }]
+      if has_monthly_fee? && monthly_cents.to_i.positive?
+        rows << { name: 'Primeiro periodo de recorrencia', quantity: 1, unit_cents: monthly_cents.to_i,
+                  snapshot: { billing_model: 'monthly' } }
+      end
+      rows
+    end
 
-      update_columns(
-        subtotal_cents: gross_initial,
-        implementation_cents: setup_total,
-        monthly_cents: recurring_monthly_total,
-        total_cents: [net_initial_total - effective_general_discount_cents, 0].max,
+    def financial_summary
+      published_anchor = if persisted?
+                           events.where(event_type: 'sent').order(:id).pluck(:metadata).filter_map do |metadata|
+                             metadata.to_h['financial_anchor_on']
+                           end.first
+                         end
+      anchor = published_anchor.present? ? Date.iso8601(published_anchor) : (sent_at || accepted_at || created_at || Time.current).to_date
+      due_date = anchor + first_billing_days.to_i
+      CommercialFinancials.new(
+        attributes: attributes.merge('first_due_date' => due_date.iso8601),
+        items: financial_items
+      ).call
+    end
+
+    def recalculate_totals!
+      proposal_items.reset
+      result = financial_summary
+      columns = {
+        subtotal_cents: result[:subtotal_cents], total_cents: result[:total_cents],
+        monthly_cents: result[:monthly_cents], shipping_cents: result[:shipping_cents],
+        down_payment_cents: result[:down_payment_cents], installments_count: result[:installments_count],
         updated_at: Time.current
-      )
+      }
+      columns[:implementation_cents] = proposal_items.to_a.sum { |item| item.setup_fee_cents.to_i } if proposal_items.any?
+      update_columns(columns)
     end
 
     def contract_total_cents
-      total_cents.to_i + (shipping_mode == 'separate' ? shipping_cents.to_i : 0)
+      financial_summary[:total_cents]
     end
 
     def payable_base_cents
-      base = total_cents.to_i
-      base += shipping_cents.to_i if shipping_mode == 'separate' && shipping_in_installments?
-      base
+      financial_summary[:payable_base_cents]
     end
 
     def installment_plan_cents
-      count = [installments_count.to_i, 1].max
-      return [] if payment_condition == 'cash'
-
-      balance = [payable_base_cents - (payment_condition == 'down_payment_installments' ? down_payment_cents.to_i : 0), 0].max
-      quotient, remainder = balance.divmod(count)
-      Array.new(count) { |index| quotient + (index < remainder ? 1 : 0) }
+      financial_summary[:installment_plan_cents]
     end
 
     def reset_approvals!
@@ -283,15 +322,19 @@ module JrcCrm
       )
     end
 
-    def record_customer_view!
-      now = Time.current
-      update_columns(
-        viewed_at: viewed_at || now,
-        last_viewed_at: now,
-        viewed_count: viewed_count.to_i + 1,
-        status: sent? ? 'viewed' : status,
-        updated_at: now
-      )
+    def record_customer_view!(origin: 'public_link', channel: 'web')
+      with_lock do
+        return false unless customer_response_allowed?
+
+        now = Time.current
+        count = viewed_count.to_i + 1
+        update!(viewed_at: viewed_at || now, last_viewed_at: now,
+                viewed_count: count, status: sent? ? 'viewed' : status)
+        events.create!(account_id: account_id, event_type: 'viewed',
+                       description: count == 1 ? 'Proposta visualizada pelo cliente' : 'Proposta visualizada novamente pelo cliente',
+                       metadata: { view_number: count, repeated: count > 1, origin: origin, channel: channel })
+      end
+      true
     end
 
     def accept_by_customer!(name:, document:, remote_ip:, user_agent:)
@@ -313,20 +356,37 @@ module JrcCrm
 
     private
 
+    def customer_transition_is_valid
+      return unless will_save_change_to_status?
+      protected_transition = %w[viewed accepted rejected].include?(status)
+      valid = JrcCrm::ProposalPublicState.transition_allowed?(from: status_in_database, to: status, sent_at: sent_at)
+      return if valid && (!protected_transition || public_availability[:available])
+
+      errors.add(:status, 'exige envio oficial antes de visualização, aceite ou recusa')
+    end
+
+    def customer_identity_is_consistent
+      errors.add(:base, 'Selecione um negócio ou um cliente do Cadastro Mestre') unless deal || company || contact
+      [deal, company, contact, business_unit].compact.each do |record|
+        errors.add(:base, 'Referência de outra account não permitida') unless record.account_id == account_id
+      end
+      errors.add(:contact, 'deve pertencer à empresa selecionada') if company && contact && company_id != contact.company_id
+      return unless deal
+
+      errors.add(:company, 'deve corresponder ao negócio') if company_id.present? && deal.company_id != company_id
+      return unless contact_id.present? && deal.contact_id != contact_id && !deal.deal_contacts.exists?(contact_id: contact_id)
+
+      errors.add(:contact, 'deve corresponder ao negócio')
+    end
+
     def owner_belongs_to_account
       errors.add(:owner, 'must belong to account') if owner && !account.users.exists?(owner.id)
     end
 
     def payment_terms_are_consistent
-      return if payment_condition.blank?
-
-      if payment_condition == 'cash'
-        errors.add(:installments_count, 'must be 1 for cash payment') if installments_count.to_i != 1
-      elsif payment_condition == 'installments'
-        errors.add(:down_payment_cents, 'must be zero when there is no down payment') if down_payment_cents.to_i.positive?
-      elsif down_payment_cents.to_i > payable_base_cents
-        errors.add(:down_payment_cents, 'cannot exceed the payable amount')
-      end
+      financial_summary
+    rescue CommercialFinancials::InvalidTerms => e
+      errors.add(:base, e.message)
     end
 
     def assign_proposal_number

@@ -12,6 +12,7 @@ import wootConstants from 'dashboard/constants/globals';
 const props = defineProps({
   conversationList: { type: Array, default: () => [] },
   isLoading: { type: Boolean, default: false },
+  hasError: { type: Boolean, default: false },
   showEndOfListMessage: { type: Boolean, default: false },
   label: { type: String, default: '' },
   teamId: { type: [String, Number], default: 0 },
@@ -60,7 +61,7 @@ defineExpose({ conversationListRef });
 <template>
   <div
     ref="conversationListRef"
-    class="flex-1 min-h-0 overflow-y-auto conversations-list bg-n-solid-1 py-2"
+    class="flex-1 min-h-0 overflow-y-auto overscroll-contain conversations-list bg-n-surface-1 py-2 [scrollbar-gutter:stable]"
     :class="{ '!overflow-hidden': isContextMenuOpen }"
   >
     <Virtualizer
@@ -86,7 +87,7 @@ defineExpose({ conversationListRef });
       {{ $t('CHAT_LIST.EOF') }}
     </p>
     <IntersectionObserver
-      v-else
+      v-else-if="!hasError"
       :options="intersectionObserverOptions"
       @observed="loadMoreConversations"
     />

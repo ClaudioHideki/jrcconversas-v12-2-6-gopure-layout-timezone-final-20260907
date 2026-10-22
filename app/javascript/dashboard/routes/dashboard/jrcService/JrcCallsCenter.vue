@@ -35,7 +35,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <main class="jrc-visible-scrollbar h-full overflow-y-auto bg-gradient-to-br from-teal-50/60 via-n-surface-1 to-blue-50/70 p-4 sm:p-6">
+  <main class="h-full overflow-auto bg-gradient-to-br from-teal-50/60 via-n-surface-1 to-blue-50/70 p-4 sm:p-6">
     <div class="mx-auto flex max-w-[1400px] flex-col gap-5">
       <header class="rounded-3xl border border-teal-200 bg-white p-6 shadow-sm dark:bg-n-solid-2">
         <div class="flex flex-wrap items-start justify-between gap-4">

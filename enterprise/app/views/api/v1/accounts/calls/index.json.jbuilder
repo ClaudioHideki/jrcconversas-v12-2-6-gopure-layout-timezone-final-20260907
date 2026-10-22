@@ -2,7 +2,6 @@ json.meta do
   json.count @calls_count
   json.current_page @calls.current_page
   json.total_pages @calls.total_pages
-  json.summary @calls_summary
 end
 
 json.payload do
