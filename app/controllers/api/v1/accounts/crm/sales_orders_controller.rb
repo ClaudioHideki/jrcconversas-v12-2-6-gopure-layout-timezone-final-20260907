@@ -85,14 +85,21 @@ module Api::V1::Accounts::Crm
         current = @order.financial_summary
         snapshot = (@order.snapshot || {}).deep_merge((attrs.delete('snapshot') || {}).to_h)
         submitted = params[:sales_order].key?(:items) ? submitted_items : @order.order_items.order(:id).map(&:attributes)
-        proposed = JrcCrm::OrderFinancials.new(attributes: @order.attributes.merge(attrs).merge('snapshot' => snapshot), items: submitted).call
+        legacy_operational_update = JrcCrm::LegacyOrderTerms.applicable?(@order) &&
+          !params[:sales_order].key?(:items) && !params[:sales_order].key?(:snapshot) &&
+          (attrs.keys & JrcCrm::OrderFinancials::STORED_FIELDS.map(&:to_s)).empty?
+        proposed = if legacy_operational_update
+                     current
+                   else
+                     JrcCrm::OrderFinancials.new(attributes: @order.attributes.merge(attrs).merge('snapshot' => snapshot), items: submitted).call
+                   end
         if @order.commercial_terms_locked? && !JrcCrm::OrderFinancials.same_terms?(current, proposed)
           @order.errors.add(:base, 'Condicoes aceitas/contratadas sao imutaveis. Utilize nova proposta ou ajuste contratual explicito.')
           raise ActiveRecord::RecordInvalid, @order
         end
         @order.assign_attributes(attrs.except(*JrcCrm::OrderFinancials::STORED_FIELDS.map(&:to_s)))
-        @order.assign_attributes(JrcCrm::OrderFinancials.attributes_for(proposed))
-        @order.snapshot = JrcCrm::OrderFinancials.snapshot_for(proposed, snapshot)
+        @order.assign_attributes(JrcCrm::OrderFinancials.attributes_for(proposed)) unless legacy_operational_update
+        @order.snapshot = legacy_operational_update ? snapshot : JrcCrm::OrderFinancials.snapshot_for(proposed, snapshot)
         @order.save!
         if params[:sales_order].key?(:items)
           @order.order_items.destroy_all

@@ -258,6 +258,25 @@ RSpec.describe 'Commercial orders, contacts and isolation', type: :request do
     expect(JrcCrm::SalesOrder.find(order['id']).order_items.count).to eq(1)
   end
 
+  it 'keeps legacy financial amounts and schedules when changing only an operational note' do
+    legacy = account.jrc_crm_sales_orders.create!(owner: admin, contact: contact, source_type: 'manual', status: 'approved',
+      products_cents: 100_000, total_cents: 100_000, monthly_cents: 78_000,
+      snapshot: { 'financial_version' => 2, 'generate_contract' => false,
+        'installments' => [{ 'number' => 1, 'date' => '2026-11-01', 'value' => 100_000 }] })
+    legacy.order_items.create!(name: 'Ramal legado', quantity: 20, unit_cents: 3900,
+      one_time_cents: 100_000, recurring_cents: 78_000,
+      snapshot: { 'billing_model' => 'monthly', 'setup_fee_cents' => 5000 })
+    original = legacy.financial_summary.deep_dup
+
+    patch "#{base}/crm/sales_orders/#{legacy.id}", headers: headers, as: :json,
+      params: { sales_order: { notes: 'Atualização operacional sem alteração comercial' } }
+
+    expect(response).to have_http_status(:ok), response.body
+    expect(legacy.reload.notes).to eq('Atualização operacional sem alteração comercial')
+    expect(legacy.financial_summary).to eq(original)
+    expect(legacy.snapshot).not_to have_key('financials')
+  end
+
   it 'rejects fractional reorder positions and collisions with untouched stages without changing data' do
     pipeline = create(:jrc_crm_pipeline, account: account)
     stages = [1, 2, 3].map { |position| create(:jrc_crm_stage, account: account, pipeline: pipeline, position: position) }
