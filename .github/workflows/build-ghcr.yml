@@ -89,6 +89,7 @@ jobs:
           spec/requests/api/v1/accounts/crm
           spec/models/jrc_crm spec/services/jrc_crm spec/policies/jrc_crm
           spec/models/jrc_customers spec/services/jrc_customers
+          spec/controllers/api/v1/accounts/customers/master_api_spec.rb
           spec/requests/api/v1/accounts/customer_relationships_spec.rb
           spec/requests/api/v1/accounts/jrc_operations
           spec/services/jrc_projects spec/services/jrc_operations
@@ -103,6 +104,13 @@ jobs:
         run: node --experimental-vm-modules --test tests/router/crm-routing.test.cjs
       - name: Testar interfaces CRM e NICO
         run: pnpm exec vitest run --config vitest.commercial.config.ts
+      - name: Testar criação oficial e Cadastro Mestre
+        run: >-
+          pnpm exec vitest run
+          app/javascript/dashboard/routes/dashboard/crm/helpers/spec
+          app/javascript/dashboard/routes/dashboard/crm/views/leads/spec
+          app/javascript/dashboard/routes/dashboard/jrcCustomers
+          --maxWorkers=1 --minWorkers=1
       - name: Testar selecao Evolution e confirmacao de testes
         run: pnpm exec vitest run --config vitest.campaigns.config.ts
       - name: Testar interfaces e projeções de Projetos
