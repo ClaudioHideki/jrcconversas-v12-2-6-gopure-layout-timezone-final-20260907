@@ -23,7 +23,7 @@ env:
 jobs:
   validate:
     name: Validar GoPure e NICO
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     env:
@@ -129,7 +129,7 @@ jobs:
     needs: validate
     if: inputs.publish
     name: Publicar ${{ matrix.component }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: pgvector/pgvector:pg16
