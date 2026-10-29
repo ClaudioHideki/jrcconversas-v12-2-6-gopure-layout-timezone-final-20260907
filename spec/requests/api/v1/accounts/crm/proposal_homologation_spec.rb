@@ -235,6 +235,46 @@ RSpec.describe 'CRM proposal homologation regressions', type: :request do
     expect(proposal.events.pluck(:event_type)).to eq(['created'])
   end
 
+  it 'accepts the HTML form and records signer evidence without duplicating orders on replay' do
+    deliver_proposal
+    post "#{html_url}/accept", params: signer, headers: { 'HTTP_USER_AGENT' => 'Synthetic WhatsApp browser' }
+    expect(response).to have_http_status(:redirect)
+    expect(proposal.reload).to have_attributes(status: 'accepted', accepted_by_name: signer[:accepted_by_name],
+                                              accepted_by_document: signer[:accepted_by_document],
+                                              accepted_user_agent: 'Synthetic WhatsApp browser')
+    expect(proposal.accepted_from_ip).to be_present
+    expect(proposal.accepted_at).to be_present
+    expect(proposal.sales_orders.count).to eq(1)
+    follow_redirect!
+    expect(response.body).to include('Proposta aceita', signer[:accepted_by_name])
+    expect(response.body).not_to include('id="accepted_by_name"')
+    post "#{html_url}/accept", params: signer
+    expect(proposal.sales_orders.count).to eq(1)
+    expect(proposal.events.where(event_type: 'accepted').count).to eq(1)
+  end
+
+  it 'keeps the entered name and accessible fields when the HTML signer document is missing' do
+    deliver_proposal
+    post "#{html_url}/accept", params: { accepted_by_name: signer[:accepted_by_name] }
+    expect(response).to have_http_status(:unprocessable_entity)
+    expect(response.body).to include('value="Thiago Ribeiro"', 'for="accepted_by_name"', 'for="accepted_by_document"',
+                                     'Aceitar proposta', 'public_proposal')
+    expect(proposal.reload.status).to eq('sent')
+    expect(proposal.events.where(event_type: 'accepted').count).to eq(0)
+    expect(proposal.sales_orders.count).to eq(0)
+  end
+
+  it 'keeps HTML PDF links and the optional rejection flow usable' do
+    deliver_proposal
+    get html_url
+    expect(response.body).to include("#{html_url}/pdf", 'download=1', '<details', 'Solicitar alteração ou recusar')
+    post "#{html_url}/reject", params: { reason: 'Ajustar o prazo de implantação' }
+    expect(response).to have_http_status(:redirect)
+    expect(proposal.reload.status).to eq('rejected')
+    expect(proposal.events.find_by!(event_type: 'rejected').description).to include('Ajustar o prazo de implantação')
+    expect(proposal.sales_orders.count).to eq(0)
+  end
+
   it 'accepts a valid officially sent public proposal once and preserves conversion on replay' do
     deliver_proposal
     get public_url, as: :json
