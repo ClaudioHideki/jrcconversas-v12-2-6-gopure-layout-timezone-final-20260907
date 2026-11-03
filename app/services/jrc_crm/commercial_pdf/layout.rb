@@ -14,7 +14,7 @@ module JrcCrm
       BORDER = [0.84, 0.88, 0.92].freeze
       WHITE = [1, 1, 1].freeze
 
-      def initialize(title:, number:, logo:, brand_name: 'JRC Conversas', primary_color: @primary_color)
+      def initialize(title:, number:, logo:, brand_name: 'JRC Conversas', primary_color: BLUE)
         @title, @number, @logo = title, number.to_s, logo
         @brand_name, @primary_color = brand_name, primary_color
         @document = Document.new(logo: logo)
