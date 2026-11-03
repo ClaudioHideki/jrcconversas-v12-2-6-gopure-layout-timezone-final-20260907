@@ -446,7 +446,8 @@ RSpec.describe 'Contacts API', type: :request do
         expect(response).to have_http_status(:success)
         response_body = response.parsed_body
         expect(response_body['meta']['has_more']).to be(true)
-        expect(response_body['meta']['count']).to eq(15)
+        expect(response_body['meta']['count']).to eq(16)
+        expect(response_body['meta']['current_page']).to eq(1)
         expect(response_body['payload'].length).to eq(15)
       end
 
@@ -462,7 +463,8 @@ RSpec.describe 'Contacts API', type: :request do
         expect(response).to have_http_status(:success)
         response_body = response.parsed_body
         expect(response_body['meta']['has_more']).to be(false)
-        expect(response_body['meta']['count']).to eq(1)
+        expect(response_body['meta']['count']).to eq(16)
+        expect(response_body['meta']['current_page']).to eq(2)
         expect(response_body['payload'].length).to eq(1)
       end
     end
