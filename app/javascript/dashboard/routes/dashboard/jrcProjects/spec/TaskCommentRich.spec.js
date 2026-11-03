@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { ref } from 'vue';
+import { createI18n } from 'vue-i18n';
 import Rich from '../components/TaskCommentRich.vue';
 import { commentDraft, commentDraftKey } from '../commentDrafts';
 import { request } from '../../jrcOperations/api';
@@ -53,7 +54,10 @@ const render = async props => {
   wrapper = mount(Rich, {
     attachTo: document.body,
     props: { scope, ...props },
-    global: { stubs: { teleport: true } },
+    global: {
+      plugins: [createI18n({ legacy: false, locale: 'pt_BR' })],
+      stubs: { teleport: true },
+    },
   });
   await flushPromises();
   return wrapper;

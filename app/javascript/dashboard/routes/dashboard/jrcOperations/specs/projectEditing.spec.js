@@ -1,4 +1,5 @@
 import { ref } from 'vue';
+import 'fake-indexeddb/auto';
 import { mount, flushPromises } from '@vue/test-utils';
 import { createI18n } from 'vue-i18n';
 import DeleteProjectButton from '../../jrcProjects/components/DeleteProjectButton.vue';
