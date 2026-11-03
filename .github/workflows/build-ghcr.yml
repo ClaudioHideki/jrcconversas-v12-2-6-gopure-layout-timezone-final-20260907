@@ -62,7 +62,20 @@ jobs:
           test "$IMAGE_TAG" = "$EXPECTED_TAG" || { echo 'Use somente a tag HML derivada deste SHA.'; exit 1; }
           [[ "$IMAGE_TAG" != 'gopure-campanhas-evolution-20261020-r5' ]] || { echo 'A tag r5 pertence à versão anterior.'; exit 1; }
       - name: Instalar bibliotecas do sistema
-        run: sudo apt-get update -qq && sudo apt-get install -y libvips-dev imagemagick
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          for source in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources /etc/apt/apt-mirrors*.txt; do
+            if [ -f "$source" ]; then
+              sudo sed -i -E \
+                -e 's|https?://azure[.]archive[.]ubuntu[.]com/ubuntu/?|https://archive.ubuntu.com/ubuntu/|g' \
+                -e 's#http://(archive|security)[.]ubuntu[.]com/ubuntu/?#https://\1.ubuntu.com/ubuntu/#g' \
+                "$source"
+            fi
+          done
+          apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+          sudo apt-get "${apt_options[@]}" -o APT::Update::Error-Mode=any update
+          sudo apt-get "${apt_options[@]}" install -y --no-install-recommends libpq-dev libvips-dev imagemagick
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4.4'
