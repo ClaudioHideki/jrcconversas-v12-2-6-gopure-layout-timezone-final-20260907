@@ -44,6 +44,7 @@ it.each([
       url.includes('companyId') ? { companyId: '15' } : { tab: 'documents' }
     );
     expect(store.dispatch).toHaveBeenCalledWith('accounts/get', {
+      accountId: 1,
       silent: true,
     });
   }

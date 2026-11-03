@@ -68,7 +68,10 @@ async function setup() {
   async function load(filename, tabScript = false) {
     if (modules.has(filename)) return modules.get(filename);
     let source = fs.readFileSync(filename, 'utf8');
-    if (tabScript) source = parse(source).descriptor.scriptSetup.content + '\nexport { tabs, tab, goTab };';
+    if (tabScript) source = parse(source).descriptor.scriptSetup.content +
+      (filename.endsWith('BackofficeLayout.vue')
+        ? '\nexport { primary, navigationGroups, section };'
+        : '\nexport { tabs, tab, goTab };');
     const module = new vm.SourceTextModule(source, {
       context, identifier: filename,
       importModuleDynamically: async specifier => {
@@ -145,7 +148,7 @@ async function setup() {
     failHttp() { rejectHttp = true; },
     accounts: accountModule,
     async view(folder, filename, section) {
-      activeRoute = vue.reactive({ params: { accountId: '1', section } });
+      activeRoute = vue.reactive({ params: { accountId: '1', section }, query: {}, fullPath: '/app/accounts/1/backoffice/' + (section || '') });
       const module = await load(path.join(crm, 'views', folder, filename), true);
       await module.evaluate();
       return { ...module.namespace, route: activeRoute };
@@ -165,12 +168,32 @@ const backoffice = ['overview', 'mine', 'requests', 'process', 'docs', 'contract
 const paths = [...primary, 'commissions', ...commissions.map(section => 'commissions/' + section),
   'backoffice', ...backoffice.map(section => 'backoffice/' + section)];
 
+test('standalone Backoffice routes preserve account feature and user access checks', async () => {
+  const app = await setup();
+  const account = app.store.getters.getCurrentUser.accounts[0];
+  const url = '/app/accounts/1/backoffice/requests/42';
+  await app.router.push(url);
+  assert.equal(app.router.currentRoute.value.name, 'crm_backoffice_request');
+  account.role = 'agent';
+  account.permissions = ['agent'];
+  await app.router.push('/app/accounts/1/backoffice/new');
+  assert.equal(app.router.currentRoute.value.path, '/app/accounts/1/dashboard');
+  account.permissions = ['agent', 'jrc_crm'];
+  app.features.set(1, false);
+  await app.router.push(url);
+  assert.equal(app.router.currentRoute.value.path, '/app/accounts/1/dashboard');
+  app.features.set(1, true);
+  await app.router.push(url);
+  assert.equal(app.router.currentRoute.value.name, 'crm_backoffice_request');
+});
+
 for (const route of paths) {
   test('direct entry and fresh router: /crm/' + route, async () => {
     const app = await setup();
     const url = '/app/accounts/1/crm/' + route;
     await app.router.push(url);
-    assert.equal(app.router.currentRoute.value.path, url);
+    assert.equal(app.router.currentRoute.value.path,
+      route.startsWith('backoffice') ? url.replace('/crm/backoffice', '/backoffice') : url);
     assert.ok(app.router.currentRoute.value.name.startsWith('crm_'));
     assert.equal(app.requests.at(-1), '/api/v1/accounts/1');
   });
@@ -178,7 +201,6 @@ for (const route of paths) {
 
 for (const [folder, file, sections] of [
   ['commissions', 'CommissionsView.vue', commissions],
-  ['backoffice', 'BackofficeView.vue', backoffice],
 ]) {
   test(folder + ': actual tab handlers and watchers preserve section', async () => {
     const app = await setup();
@@ -200,6 +222,27 @@ for (const [folder, file, sections] of [
     scope.stop();
   });
 }
+
+test('Backoffice module navigation uses standalone routes and preserves every section', async () => {
+  const app = await setup();
+  const scope = vue.effectScope();
+  const view = await scope.run(() => app.view('backoffice', 'BackofficeLayout.vue', 'docs'));
+  const entries = [...view.primary.value, ...view.navigationGroups.value.flatMap(group => group.entries)];
+  assert.deepEqual(entries.map(entry => entry.key).sort(), [...backoffice].sort());
+  assert.equal(view.section.value, 'docs');
+  await app.router.push('/app/accounts/1/backoffice');
+  for (const entry of entries) {
+    await app.router.push(entry.to);
+    assert.equal(app.router.currentRoute.value.path, '/app/accounts/1/backoffice/' + entry.key);
+    view.route.params.section = entry.key;
+    assert.equal(view.section.value, entry.key);
+  }
+  view.route.params.section = 'queues';
+  assert.equal(view.section.value, 'requests');
+  view.route.params.section = undefined;
+  assert.equal(view.section.value, 'overview');
+  scope.stop();
+});
 
 test('agent with CRM permission allowed; without it denied', async () => {
   const app = await setup();

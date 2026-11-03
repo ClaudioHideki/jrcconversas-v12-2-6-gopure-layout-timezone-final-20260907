@@ -1,5 +1,6 @@
 import { frontendURL } from 'dashboard/helper/URLHelper';
 import { FEATURE_FLAGS } from 'dashboard/featureFlags';
+import { ensureCrmEnabled } from './access';
 
 const CrmLayout = () => import('./CrmLayout.vue');
 const CrmDashboardView = () => import('./views/dashboard/CrmDashboardView.vue');
