@@ -1730,7 +1730,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_02_202000) do
     t.datetime "approved_at"
     t.datetime "approval_expires_at"
     t.bigint "approved_by_id"
-    t.string "delivery_channel", default: "whatsapp", null: false
     t.index ["account_id", "delivery_channel"], name: "index_jrc_campaigns_on_account_id_and_delivery_channel"
     t.index ["account_id", "scheduled_at"], name: "index_jrc_campaigns_on_account_id_and_scheduled_at"
     t.index ["account_id", "status"], name: "index_jrc_campaigns_on_account_id_and_status"
