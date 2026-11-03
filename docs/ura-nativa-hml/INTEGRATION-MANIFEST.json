@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-03",
+  "targetRepository": "ClaudioHideki/jrcconversas-v12-2-6-gopure-layout-timezone-final-20260907",
+  "targetBase": "216aa1e0a66372a20a68c0d092f0dadfb0541620",
+  "labSource": "a30fb50e6e53f1bc9eebe66ce50d13e46820b1c8",
+  "comparisonBase": "abc1f7c57f55a7d9871101cd5b70c8b93becc7ca",
+  "brokerSource": "13e8525a0103a00cada4864acba46a654cf9471b",
+  "nativeEditorManifestSha256": "b3409296ec4e3b6a07edbfb92365cc8d9807a4a993648978fc0a6b3c85e62dff",
+  "nativeEditorOutputs": [
+    {
+      "path": "THIRD_PARTY_NOTICES.txt",
+      "bytes": 8663,
+      "sha256": "15250d75013475d5cca3359dc027f4c069197725fff8f3c35ab9fad3fe2bf49d"
+    },
+    {
+      "path": "editor.css",
+      "bytes": 29555,
+      "sha256": "71fa57194fdee277348c5a6b7abaf2024fb2a072a8083e2a5cc80f3e94ad85f6"
+    },
+    {
+      "path": "editor.js",
+      "bytes": 959464,
+      "sha256": "7ef4cf5ab033887de7176bfe1d16f3310ad0e83b014c87d04f4ea1bb074a8f0f"
+    },
+    {
+      "path": "editor.js.LEGAL.txt",
+      "bytes": 1863,
+      "sha256": "a4bb6bdca26057d85644e8b9a27f8d3526f0cb6b9b45b02808eaf4d4184b5b5b"
+    }
+  ],
+  "migrationsAdded": 26,
+  "productionChanged": false,
+  "whatsappRealValidated": false,
+  "clientParityValidated": false
+}

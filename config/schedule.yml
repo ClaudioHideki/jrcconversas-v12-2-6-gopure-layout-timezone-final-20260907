@@ -1,4 +1,9 @@
 # https://github.com/ondrejbartas/sidekiq-cron
+jrc_broker_inbox_sync_job:
+  cron: '* * * * *'
+  class: 'JrcBroker::InboxSyncSchedulerJob'
+  queue: scheduled_jobs
+
 nico_queue_recovery_job:
   cron: '* * * * *'
   class: 'JrcNico::RecoveryJob'
@@ -138,4 +143,15 @@ pabx_cdr_sync_job:
 jrc_flow_native_installation_renew_job:
   cron: '* * * * *'
   class: 'JrcFlows::NativeInstallationRenewJob'
+  queue: scheduled_jobs
+
+jrc_broker_webhook_recovery_job:
+  cron: '* * * * *'
+  class: 'JrcBroker::WebhookRecoveryJob'
+  queue: scheduled_jobs
+
+# No arbitrary storage paths: only uncommitted, server-owned migration reservations.
+jrc_migration_media_recovery_job:
+  cron: '*/5 * * * *'
+  class: 'JrcMigrations::MediaRecoveryJob'
   queue: scheduled_jobs

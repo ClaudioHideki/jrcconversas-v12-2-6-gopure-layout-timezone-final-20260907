@@ -86,8 +86,10 @@ RUN if [ "$RAILS_ENV" = "production" ]; then \
   && rm -rf spec node_modules tmp/cache; \
   fi
 
-# Generate .git_sha from Git when available, or identify ZIP-based local builds.
-RUN (git rev-parse HEAD 2>/dev/null || echo local-development) > /app/.git_sha
+# Identify the exact committed source even when .git is excluded from the context.
+ARG GIT_SHA
+RUN printf '%s' "$GIT_SHA" | grep -Eq '^[0-9a-f]{40}$' \
+  && printf '%s\n' "$GIT_SHA" > /app/.git_sha
 
 # Remove unnecessary files
 RUN rm -rf /gems/ruby/3.4.0/cache/*.gem \
@@ -126,6 +128,10 @@ RUN apk update && apk add --no-cache \
   tzdata \
   postgresql-client \
   imagemagick \
+  poppler-utils \
+  tesseract-ocr \
+  tesseract-ocr-data-por \
+  tesseract-ocr-data-eng \
   git \
   vips \
   && gem install bundler -v "$BUNDLER_VERSION"

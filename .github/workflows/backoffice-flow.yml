@@ -1,0 +1,269 @@
+name: Backoffice - fluxo comercial e isolamento
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/crm-backoffice-servicedesk-visual-20261101
+      - codex/release-integrada-specs-20261102
+      - codex/lab2-integral-20261102
+  pull_request:
+    paths:
+      - 'app/controllers/api/v1/accounts/crm/**'
+      - 'app/services/jrc_crm/**'
+      - 'app/models/jrc_crm/**'
+      - 'app/models/jrc_backoffice/**'
+      - 'app/services/jrc_backoffice/**'
+      - 'app/jobs/jrc_backoffice/**'
+      - 'db/migrate/*backoffice*'
+      - 'script/*backoffice_candidate*'
+      - 'script/validate_backoffice_rspec_coverage.rb'
+      - 'docker/Dockerfile'
+      - 'app/services/jrc_operations/**'
+      - 'test/integration/backoffice*'
+      - '.github/workflows/backoffice-flow.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backoffice-flow-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  commercial-flow:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: disposable-test-only
+          POSTGRES_DB: backoffice_test
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7.4.0-alpine@sha256:c35af3bbcef51a62c8bae5a9a563c6f1b60d7ebaea4cb5a3ccbcc157580ae098
+        ports: ['6379:6379']
+    env:
+      RAILS_ENV: test
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_USERNAME: postgres
+      POSTGRES_PASSWORD: disposable-test-only
+      POSTGRES_DATABASE: backoffice_test
+      REDIS_URL: redis://127.0.0.1:6379/15
+      SECRET_KEY_BASE: isolated-backoffice-ci-not-a-production-secret
+      BUNDLE_FROZEN: 'true'
+      LOG_LEVEL: error
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Dependencias nativas
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq-dev libvips-dev imagemagick poppler-utils tesseract-ocr tesseract-ocr-por tesseract-ocr-eng redis-server
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4.4'
+          bundler: 2.5.16
+          bundler-cache: true
+      - name: Preparar banco descartavel
+        run: |
+          bundle exec rails db:schema:load
+          bundle exec rails runner script/prepare_lab2_candidate_database.rb
+      - name: Dependencias OCR e upgrade das duas migrations com dados legados
+        run: bundle exec rails runner script/validate_backoffice_candidate.rb
+      - name: Redis de concorrencia nativa
+        run: redis-server --bind 127.0.0.1 --port 6380 --daemonize yes --save '' --appendonly no
+      - name: Acesso, filtros, paginacao e SLA
+        run: bundle exec rails runner test/integration/backoffice_workspace_test.rb
+      - name: Pedido ate conclusao do Backoffice
+        run: bundle exec rails runner test/integration/backoffice_commercial_flow_test.rb
+      - name: Regressao de comissoes
+        run: bundle exec ruby test/jrc_consolidation/commission_domain_test.rb
+      - name: Coletar plano completo dos exemplos nativos sem executar testes
+        run: |
+          bundle exec rspec spec/services/jrc_crm spec/requests/api/v1/accounts/crm \
+            spec/services/jrc_approvals spec/requests/api/v1/accounts/jrc_approvals \
+            spec/models/jrc_service_desk spec/policies/jrc_service_desk spec/services/jrc_service_desk \
+            spec/requests/api/v1/accounts/jrc_service_desk --dry-run --seed 20261101 --order defined \
+            --format json --out /tmp/backoffice-candidate-plan-rspec.json
+      - name: Regressao principal CRM, Central, Service Desk e permissoes
+        run: |
+          bundle exec rspec spec/services/jrc_crm spec/requests/api/v1/accounts/crm \
+            spec/services/jrc_approvals spec/requests/api/v1/accounts/jrc_approvals \
+            spec/models/jrc_service_desk spec/policies/jrc_service_desk spec/services/jrc_service_desk \
+            spec/requests/api/v1/accounts/jrc_service_desk --tag '~sd_concurrency' --seed 20261101 --order defined \
+            --format progress --format json --out /tmp/backoffice-candidate-core-rspec.json
+      - name: Banco exclusivo para testes que confirmam dados em conexoes independentes
+        env:
+          POSTGRES_DATABASE: jrc_sd_bc_portal_concurrency_20261025_test
+        run: |
+          bundle exec rails db:create db:schema:load
+          bundle exec rails runner script/prepare_lab2_candidate_database.rb
+      - name: Regressao de concorrencia nativa do Service Desk
+        env:
+          POSTGRES_DATABASE: jrc_sd_bc_portal_concurrency_20261025_test
+          JRC_SD_CONCURRENCY: '1'
+          JRC_SD_INTEGRATED_CONCURRENCY: '1'
+        run: |
+          bundle exec rspec spec/services/jrc_crm spec/requests/api/v1/accounts/crm \
+            spec/services/jrc_approvals spec/requests/api/v1/accounts/jrc_approvals \
+            spec/models/jrc_service_desk spec/policies/jrc_service_desk spec/services/jrc_service_desk \
+            spec/requests/api/v1/accounts/jrc_service_desk --tag sd_concurrency --seed 20261101 --order defined \
+            --format progress --format json --out /tmp/backoffice-candidate-concurrency-rspec.json
+      - name: Exigir execucao de todo o plano, sem exemplos omitidos ou pendentes
+        run: |
+          bundle exec ruby script/validate_backoffice_rspec_coverage.rb \
+            /tmp/backoffice-candidate-plan-rspec.json /tmp/backoffice-candidate-core-rspec.json \
+            /tmp/backoffice-candidate-concurrency-rspec.json
+      - name: Regressao de Projetos, operacoes, NICO e contatos
+        run: |
+          bundle exec rspec spec/services/jrc_projects spec/services/jrc_operations \
+            spec/requests/api/v1/accounts/jrc_operations/project*_spec.rb \
+            spec/services/jrc_nico/runtime_client_spec.rb spec/services/jrc_nico/run_capacity_spec.rb \
+            spec/services/jrc_nico/helpdesk/policies_spec.rb \
+            spec/controllers/api/v1/accounts/contacts_controller_spec.rb \
+            --seed 20261101 --format progress --format json --out /tmp/backoffice-candidate-integrations-rspec.json
+          ruby -rjson -e 'abort "Pending examples are not an approved gate" unless JSON.parse(File.read(ARGV.fetch(0))).fetch("summary").fetch("pending_count").zero?' /tmp/backoffice-candidate-integrations-rspec.json
+      - name: Guardar resultados sem alterar os gates
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backoffice-candidate-native-results
+          path: /tmp/backoffice-candidate-*-rspec.json
+          if-no-files-found: ignore
+      - name: Confirmar fontes preservadas
+        run: git diff --exit-code
+
+  broker-and-import-integration:
+    name: Broker, distribuicao, Flow e reconciliacao
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: disposable-test-only
+          POSTGRES_DB: jrc_durable_review_test
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7.4.0-alpine@sha256:c35af3bbcef51a62c8bae5a9a563c6f1b60d7ebaea4cb5a3ccbcc157580ae098
+        ports: ['6379:6379']
+    env:
+      RAILS_ENV: test
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_USERNAME: postgres
+      POSTGRES_PASSWORD: disposable-test-only
+      POSTGRES_DATABASE: jrc_durable_review_test
+      REDIS_URL: redis://127.0.0.1:6379/15
+      FLOW_TEST_REDIS_URL: redis://127.0.0.1:6379/14
+      SECRET_KEY_BASE: isolated-broker-ci-not-a-production-secret
+      BUNDLE_FROZEN: 'true'
+      JRC_SD_CONCURRENCY: '1'
+      DB_POOL_SIZE: '10'
+      LOG_LEVEL: error
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Dependencias nativas
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq-dev libvips-dev
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4.4'
+          bundler: 2.5.16
+          bundler-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: pnpm e lockfile imutavel
+        run: corepack enable && pnpm install --frozen-lockfile
+      - name: Contratos dos gates e migrations da release
+        run: node --test script/lab2_release_gates.test.mjs script/validate_migration_timestamps.test.mjs
+      - name: Preparar banco descartavel sem fontes externas
+        run: |
+          bundle exec rails db:schema:load
+          bundle exec rails runner script/prepare_lab2_candidate_database.rb
+      - name: Regressao de contratos e integridade
+        run: |
+          bundle exec rspec spec/services/jrc_broker spec/requests/api/v1/accounts/jrc_broker*_spec.rb \
+            spec/models/jrc_broker_webhook_obligation_spec.rb spec/jobs/jrc_broker_webhook_job_spec.rb \
+            spec/models/jrc_human_assignment_policy_event_spec.rb \
+            spec/models/jrc_broker_connection_event_spec.rb spec/requests/jrc_connection_history_spec.rb \
+            spec/services/jrc_campaigns/broker*_spec.rb spec/lib/webhooks/trigger_spec.rb \
+            spec/services/jrc_human_assignment spec/requests/jrc_human_assignment_spec.rb \
+            spec/requests/jrc_connection_distribution_spec.rb \
+            spec/services/data_imports spec/requests/api/v1/accounts/data_import*_spec.rb \
+            spec/services/jrc_migrations spec/requests/jrc_migration*_spec.rb \
+            spec/services/jrc_nico/migration*_spec.rb spec/requests/jrc_nico_migration_browser_boundary_spec.rb \
+            spec/services/jrc_nico/native_browser_command_concurrency_spec.rb spec/requests/jrc_nico_native*concurrency_spec.rb \
+            spec/services/jrc_flows spec/services/jrc_flow_effects spec/requests/jrc_flow*_spec.rb \
+            --format progress --format json --out /tmp/broker-candidate-rspec.json
+          ruby -rjson -e 'abort "Pending examples are not an approved gate" unless JSON.parse(File.read(ARGV.fetch(0))).fetch("summary").fetch("pending_count").zero?' /tmp/broker-candidate-rspec.json
+      - name: Importador com S3 MinIO fisico isolado
+        env:
+          JRC_IMPORT_MINIO_ENDPOINT: http://127.0.0.1:19000
+        run: |
+          set -euo pipefail
+          fixture=$(mktemp -d "$RUNNER_TEMP/lab2-import-minio.XXXXXX")
+          curl --fail --location --proto '=https' --tlsv1.2 --connect-timeout 10 --max-time 120 --retry 2 \
+            'https://github.com/minio/minio/releases/download/RELEASE.2025-09-07T16-13-09Z/minio.linux-amd64.RELEASE.2025-09-07T16-13-09Z' \
+            --output "$fixture/minio"
+          printf '%s  %s\n' 7c5bd8512c6e966455b1d198209358b2d191c77a83ab377c4073281065fb855f "$fixture/minio" | sha256sum --check
+          chmod 700 "$fixture/minio"
+          "$fixture/minio" --version | grep -F 'RELEASE.2025-09-07T16-13-09Z'
+          MINIO_ROOT_USER=disposable-import MINIO_ROOT_PASSWORD=disposable-import-only MINIO_BROWSER=off \
+            "$fixture/minio" server --address 127.0.0.1:19000 --console-address 127.0.0.1:0 "$fixture/data" \
+            > /tmp/broker-import-minio.log 2>&1 &
+          fixture_pid=$!
+          trap 'kill -TERM "$fixture_pid" 2>/dev/null || true; wait "$fixture_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..60}; do
+            if curl --fail --silent "$JRC_IMPORT_MINIO_ENDPOINT/minio/health/cluster"; then break; fi
+            sleep 1
+          done
+          curl --fail --silent "$JRC_IMPORT_MINIO_ENDPOINT/minio/health/cluster"
+          bundle exec rspec spec/homologation/import_minio_check.rb \
+            --format progress --format json --out /tmp/broker-import-minio-rspec.json
+      - name: Regressao frontend e editor compartilhado
+        run: |
+          pnpm exec vitest run app/javascript/dashboard/components-next/jrc-broker \
+            app/javascript/dashboard/routes/dashboard/jrcBroker \
+            app/javascript/dashboard/routes/dashboard/jrcFlows \
+            app/javascript/dashboard/routes/dashboard/settings/data \
+            app/javascript/dashboard/components-next/jrcCopilot/specs/nicoModuleActions.spec.js \
+            app/javascript/dashboard/components-next/jrcCopilot/specs/nicoNativeCommand.spec.js \
+            --maxWorkers=2 --no-file-parallelism
+      - name: Sidekiq real e perda de ACK apos recibo persistido
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle exec rails runner spec/homologation/broker_sidekiq_control.rb seed
+          set +e
+          LAB_KILL_AFTER_RECEIPT=1 bundle exec ruby spec/homologation/broker_sidekiq_worker.rb > /tmp/broker-first-worker.log 2>&1
+          result=$?
+          set -e
+          test "$result" = 137
+          bundle exec rails runner spec/homologation/broker_sidekiq_control.rb recover
+          LAB_KILL_AFTER_RECEIPT=0 bundle exec ruby spec/homologation/broker_sidekiq_worker.rb > /tmp/broker-second-worker.log 2>&1 &
+          worker_pid=$!
+          trap 'kill -TERM "$worker_pid" 2>/dev/null || true; wait "$worker_pid" 2>/dev/null || true' EXIT
+          bundle exec rails runner spec/homologation/broker_sidekiq_control.rb verify
+      - name: Guardar evidencias sinteticas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: broker-import-candidate-results
+          path: |
+            /tmp/broker-candidate-rspec.json
+            /tmp/broker-import-minio-rspec.json
+            /tmp/broker-import-minio.log
+            /tmp/broker-first-worker.log
+            /tmp/broker-second-worker.log
+          if-no-files-found: ignore
+      - name: Confirmar fontes preservadas
+        run: git diff --exit-code

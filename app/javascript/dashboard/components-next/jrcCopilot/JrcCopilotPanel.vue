@@ -8,6 +8,7 @@ import {
   watch,
 } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { surveyModelEditorOpen } from 'dashboard/routes/dashboard/serviceDesk/surveys/presentation';
 import { useI18n } from 'vue-i18n';
 import { useWindowSize } from '@vueuse/core';
 import { useMapGetter } from 'dashboard/composables/store';
@@ -453,17 +454,17 @@ const browserAction = async command => {
     const { data } = await api.command(account, command.id, 'claim');
     claimed = true;
     if (current !== version) throw new Error(label('ACCOUNT_CHANGED'));
-    detail =
-      data.result.browser_action === 'module_action'
-        ? await runNicoModuleAction(account, data.result, { whatsapp })
-        : await runNicoBrowserAction(data.result, {
-            sip,
-            openVideo: () =>
-              openVideoConferencePopup({
-                getSetting: async () =>
-                  (await videoSettings.getFreshMine()).data,
-              }),
-          });
+    detail = ['module_action', 'module_action_fenced'].includes(
+      data.result.browser_action
+    )
+      ? await runNicoModuleAction(account, data.result, { whatsapp })
+      : await runNicoBrowserAction(data.result, {
+          sip,
+          openVideo: () =>
+            openVideoConferencePopup({
+              getSetting: async () => (await videoSettings.getFreshMine()).data,
+            }),
+        });
     status = 'succeeded';
   } catch (e) {
     detail = e.message || label('ACTION_ERROR');
@@ -608,6 +609,7 @@ onBeforeUnmount(() => {
 
 <template>
   <JrcCopilotQuickPanel
+    v-show="!surveyModelEditorOpen"
     v-if="!embedded && mode === 'quick'"
     v-model="input"
     :voice="voice"
@@ -634,6 +636,7 @@ onBeforeUnmount(() => {
     @options="openOptions"
   />
   <aside
+    v-show="!surveyModelEditorOpen"
     v-if="fullVisible"
     :id="embedded ? undefined : 'nico-operator-panel'"
     ref="panelRoot"

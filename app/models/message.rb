@@ -138,6 +138,8 @@ class Message < ApplicationRecord
   has_one :csat_survey_response, dependent: :destroy_async
   has_many :notifications, as: :primary_actor, dependent: :destroy_async
 
+  after_create :capture_broker_webhook_obligation
+  after_create_commit :enqueue_broker_webhook_obligation
   after_create_commit :execute_after_create_commit_callbacks
 
   after_update_commit :dispatch_update_event
@@ -333,9 +335,22 @@ class Message < ApplicationRecord
     mark_pending_conversation_as_open_for_human_response
     set_conversation_activity
     dispatch_create_events
+    AutoAssignment::IncomingMessageRequest.new(message: self).perform
     send_reply
     execute_message_template_hooks
     update_contact_activity
+  end
+
+  def capture_broker_webhook_obligation
+    JrcBrokerWebhookObligation.capture!(self)
+  end
+
+  def enqueue_broker_webhook_obligation
+    id = JrcBrokerWebhookObligation.find_by(message_id: self.id)&.id
+    JrcBroker::WebhookObligationJob.perform_later(id) if id
+  rescue StandardError
+    # The PostgreSQL obligation survives a Redis/enqueue outage; scheduled recovery retries it.
+    Rails.logger.warn('[JrcBroker] WEBHOOK_OBLIGATION_ENQUEUE_UNAVAILABLE')
   end
 
   def update_contact_activity

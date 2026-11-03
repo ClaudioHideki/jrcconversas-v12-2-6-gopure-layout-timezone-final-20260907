@@ -26,6 +26,7 @@ export const buildSidebarSections = ({
     'JRC Flows',
     'Companies',
     'CRM',
+    'Backoffice',
     'Sales',
     'JRC Campaigns',
     'Reports',
@@ -87,7 +88,7 @@ export const buildSidebarSections = ({
       {
         name: 'crm',
         label: t('JRC_CONTACT_CENTER.VISUAL.CRM'),
-        items: take(['CRM', 'Relationship']),
+        items: take(['CRM', 'Backoffice', 'Relationship']),
       },
       {
         name: 'operations',
@@ -132,6 +133,7 @@ export const buildSidebarSections = ({
         'Contacts',
         'JRC Service Desk',
         'CRM',
+        'Backoffice',
         'Sales',
         'JRC Campaigns',
         'Reports',

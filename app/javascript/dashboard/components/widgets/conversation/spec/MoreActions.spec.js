@@ -16,10 +16,17 @@ vi.mock('../../../buttons/ResolveAction.vue', () => ({
 
 const Button = { props: ['label'], template: '<button>{{ label }}</button>' };
 const Menu = {
-  props: ['menuItems'],
+  props: ['menuItems', 'menuSections'],
   emits: ['action'],
+  computed: {
+    items() {
+      return this.menuSections
+        ? this.menuSections.flatMap(section => section.items)
+        : this.menuItems;
+    },
+  },
   template:
-    '<div data-test-menu><button v-for="item in menuItems" :key="item.value" @click="$emit(\'action\', item)">{{ item.label }}</button></div>',
+    '<div data-test-menu><button v-for="item in items" :key="item.value" :disabled="item.disabled" @click="$emit(\'action\', item)">{{ item.label }}</button></div>',
 };
 
 let wrapper;
@@ -35,11 +42,14 @@ beforeEach(() => {
       removeEventListener: vi.fn(),
     }))
   );
-  assign = vi.fn();
+  assign = vi.fn().mockResolvedValue({ id: 650 });
   store = createStore({
-    state: { chat: { id: 650, inbox_id: 4, status: 'open' } },
+    state: { chat: { id: 650, account_id: 1, inbox_id: 4, status: 'open' } },
     getters: {
       getSelectedChat: state => state.chat,
+      getCurrentAccountId: () => 1,
+      getCurrentUserID: () => 5,
+      'teams/getTeams': () => [],
       'inboxAssignableAgents/getAssignableAgents': () => () => [
         { id: 9, name: 'Agente de teste' },
       ],
@@ -47,6 +57,7 @@ beforeEach(() => {
     },
     actions: {
       'inboxAssignableAgents/fetch': vi.fn(),
+      'teams/get': vi.fn().mockResolvedValue([]),
       assignAgent: assign,
       muteConversation: vi.fn(),
     },
@@ -81,18 +92,20 @@ afterEach(() => {
 
 it('opens assignment outside the clipped header and dispatches the selected agent', async () => {
   await wrapper
-    .findAll('button')
-    .find(b => b.text() === 'Atribuir')
+    .find('[data-testid="conversation-assign-trigger"]')
     .trigger('click');
   await flushPromises();
   const menu = document.querySelector('[data-test-menu]');
   expect(menu).not.toBeNull();
   expect(host.contains(menu)).toBe(false);
-  menu.querySelector('button').click();
+  [...menu.querySelectorAll('button')]
+    .find(button => button.textContent === 'Agente de teste')
+    .click();
   await flushPromises();
   expect(assign).toHaveBeenCalledWith(expect.anything(), {
     conversationId: 650,
     agentId: 9,
+    assigneeType: 'User',
   });
   expect(document.querySelector('[data-test-menu]')).toBeNull();
 });

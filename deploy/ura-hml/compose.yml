@@ -1,0 +1,71 @@
+name: jrc-ura-hml
+
+x-app: &app
+  image: ${JRC_CONVERSAS_IMAGE:?Use a imagem HML publicada com @sha256}
+  env_file: .env
+  environment:
+    RAILS_ENV: production
+    NODE_ENV: production
+    POSTGRES_HOST: postgres
+    POSTGRES_DATABASE: jrc_ura_hml
+    POSTGRES_USERNAME: jrc_ura_hml
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina senha exclusiva HML}
+    REDIS_URL: redis://redis:6379/0
+    ACTIVE_STORAGE_SERVICE: local
+    RAILS_LOG_TO_STDOUT: 'true'
+  volumes:
+    - storage:/app/storage
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a
+    environment:
+      POSTGRES_DB: jrc_ura_hml
+      POSTGRES_USER: jrc_ura_hml
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina senha exclusiva HML}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U jrc_ura_hml -d jrc_ura_hml']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4.0-alpine@sha256:c35af3bbcef51a62c8bae5a9a563c6f1b60d7ebaea4cb5a3ccbcc157580ae098
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    <<: *app
+    command: ['bundle', 'exec', 'rails', 'db:chatwoot_prepare']
+    profiles: ['maintenance']
+
+  rails:
+    <<: *app
+    command: ['bundle', 'exec', 'rails', 'server', '-b', '0.0.0.0', '-p', '3000']
+    ports: ['127.0.0.1:${HML_HTTP_PORT:-3301}:3000']
+    restart: unless-stopped
+
+  sidekiq:
+    <<: *app
+    command: ['bundle', 'exec', 'sidekiq', '-C', 'config/sidekiq.yml']
+    restart: unless-stopped
+
+volumes:
+  postgres:
+  redis:
+  storage:

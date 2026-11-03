@@ -14,6 +14,8 @@ Rails.application.routes.draw do
     omniauth_callbacks: 'devise_overrides/omniauth_callbacks'
   }, via: [:get, :post]
 
+  draw :jrc_requester_portal
+
   post 'resend_confirmation', to: 'auth/resend_confirmations#create'
 
   ## renders the frontend paths only if its not an api only server
@@ -81,6 +83,8 @@ Rails.application.routes.draw do
           post ':id/channels/:target_id/action-resources', action: :editor, defaults: { editor_operation: 'save_action_resource' }
           get ':id/channels/:target_id/media', action: :editor, defaults: { editor_operation: 'media_catalog' }
           post ':id/channels/:target_id/media/:resource_id/revoke', action: :editor, defaults: { editor_operation: 'revoke_media' }
+          get ':id/executions', action: :editor, defaults: { editor_operation: 'executions' }
+          get ':id/executions/:target_id', action: :editor, defaults: { editor_operation: 'execution' }
           get ':id', action: :editor, defaults: { editor_operation: 'get' }
           put ':id', action: :editor, defaults: { editor_operation: 'save' }
           get ':id/scope', action: :editor, defaults: { editor_operation: 'scope' }
@@ -110,12 +114,23 @@ Rails.application.routes.draw do
           # JRC Service Desk CP4: all endpoints inherit the native Account authentication.
           namespace :jrc_service_desk do
             get 'knowledge', to: 'knowledge#index'
+            # Incidents/problems: contextual workspace over the existing native records.
+            get 'case_workspaces', to: 'case_workspaces#index'
+            post 'case_workspaces', to: 'case_workspaces#create'
+            get 'case_workspaces/:case_id', to: 'case_workspaces#show'
+            post 'case_workspaces/:case_id/commands', to: 'case_workspaces#command'
+            get 'case_workspaces/:case_id/related', to: 'case_workspaces#related'
+            get 'case_workspaces/:case_id/resources', to: 'case_workspaces#resources'
+            get 'case_workspaces/:case_id/resource_options', to: 'case_workspaces#resource_options'
+            get 'case_workspaces/:case_id/entries', to: 'case_workspaces#entries'
+            get 'case_workspaces/:case_id/entries/:entry_id/attachments/:attachment_id', to: 'case_workspaces#attachment'
             get 'board', to: 'cockpit#board'
             patch 'incidents/:incident_id', to: 'cockpit#update_incident'
             get 'reports', to: 'dashboard#report'
             # CP6-D01: structural authority is separate from ticket access.
             get 'structure/context', to: 'structure#context'
             get 'structure/members', to: 'structure#members'
+            get 'structure/assignees', to: 'structure#assignees'
             %w[operator_companies units unit_memberships].each do |structural_resource|
               scope "structure/#{structural_resource}", defaults: { resource: structural_resource } do
                 get '/', to: 'structure#index'
@@ -134,6 +149,26 @@ Rails.application.routes.draw do
               get '/:id', to: 'configuration#show'
               patch '/:id', to: 'configuration#update'
             end
+            get 'automation_drafts', to: 'automation_drafts#show'
+            resources :automation_publications, only: [:index, :show, :create] do
+              post :preview, on: :collection
+              get :options, on: :collection
+            end
+            put 'automation_drafts', to: 'automation_drafts#update'
+            get 'queue_policy_versions', to: 'automation_drafts#queue_versions'
+            get 'automation_insights/ola', to: 'automation_insights#ola'
+            get 'automation_insights/clock_alerts', to: 'automation_insights#clock_alerts'
+            post 'automation_insights/clock_alerts/retry', to: 'automation_insights#retry_clock_alert'
+            get 'automation_insights/notifications', to: 'automation_insights#notifications'
+            post 'closure_revisions/enqueue', to: 'closure_revisions#enqueue'
+            post 'closure_revisions/resume_async', to: 'closure_revisions#resume_async'
+            get 'closure_revisions/versions', to: 'closure_revisions#versions'
+            post 'closure_revisions/proposal', to: 'closure_revisions#proposal'
+            get 'closure_revisions', to: 'closure_revisions#index'
+            post 'closure_revisions/preview', to: 'closure_revisions#preview'
+            post 'closure_revisions', to: 'closure_revisions#create'
+            get 'closure_revisions/result', to: 'closure_revisions#result'
+            post 'closure_revisions/resume', to: 'closure_revisions#resume'
             resources :lifecycle_policies, only: [:index, :show, :create]
             resources :service_definitions, only: [:index, :show, :create]
             get 'ui_context', to: 'ui_context#show'
@@ -164,6 +199,10 @@ Rails.application.routes.draw do
             post 'tickets/:id/interactions', to: 'cockpit#add_interaction'
             post 'tickets/:id/tasks', to: 'cockpit#create_task'
             patch 'tickets/:id/tasks/:record_id', to: 'cockpit#update_task'
+            delete 'tickets/:id/tasks/:record_id', to: 'cockpit#destroy_task'
+            patch 'tickets/:id/notes/:record_id', to: 'tickets#update_note'
+            delete 'tickets/:id/notes/:record_id', to: 'tickets#destroy_note'
+            delete 'tickets/:id/notes/:record_id/attachments/:attachment_id', to: 'tickets#destroy_attachment'
             post 'tickets/:id/approvals', to: 'cockpit#request_approval'
             post 'tickets/:id/approvals/:record_id/decision', to: 'cockpit#decide_approval'
             post 'tickets/:id/approvals/:record_id/escalate', to: 'cockpit#escalate_approval'
@@ -173,6 +212,7 @@ Rails.application.routes.draw do
             patch 'resources/:resource_id', to: 'resources#update'
             delete 'resources/:resource_id', to: 'resources#destroy'
             post 'resources/:resource_id/tickets', to: 'resources#link_tickets'
+            delete 'resources/:resource_id/tickets/:ticket_id', to: 'resources#unlink_ticket'
             get 'tickets/:id/notes/:record_id/attachments/:attachment_id', to: 'cockpit#attachment'
             post 'claim_next', to: 'cockpit#claim_next'
             post 'incidents', to: 'cockpit#create_incident'
@@ -180,11 +220,14 @@ Rails.application.routes.draw do
             post 'notification_policies', to: 'cockpit#publish_notification_policy'
             get 'notification_policies', to: 'communication#notification_policies'
             get 'catalogue_form', to: 'catalogue_forms#show'
+            resources :requester_people, only: [:index, :show, :create] do
+              patch :link, on: :member
+            end
             %w[queues priorities categories ticket_types statuses units operator_companies assignees requesters teams
                contracts].each do |resource|
               get resource, to: 'lookups#index', defaults: { resource: resource }
             end
-            resources :tickets, only: [:index, :show, :create, :update] do
+            resources :tickets, only: [:index, :show, :create, :update, :destroy] do
               member do
                 get 'lifecycle', to: 'lifecycle#show'
                 post 'lifecycle', to: 'lifecycle#create'
@@ -321,6 +364,11 @@ Rails.application.routes.draw do
             get 'inboxes/:inbox_id/pair-operations/:operation_id', action: :pair_operation
             post 'inboxes/:inbox_id/disconnect', action: :disconnect
             post 'inboxes/:inbox_id/confirm_identity', action: :confirm_identity
+            get 'inboxes/:inbox_id/distribution', action: :connection_distribution
+            put 'inboxes/:inbox_id/distribution', action: :update_connection_distribution
+            get 'inboxes/:inbox_id/distribution-history', action: :connection_distribution_history
+            get 'inboxes/:inbox_id/history', action: :connection_history
+            patch 'inboxes/:inbox_id/configuration', action: :update_connection_configuration
             get 'inboxes/:inbox_id/grants', action: :grants
             put 'inboxes/:inbox_id/grants', action: :update_grants
             put 'inboxes/:inbox_id/agents', action: :assign_agents
@@ -392,6 +440,7 @@ Rails.application.routes.draw do
             end
             resources :contacts, only: [:index, :show, :create, :update] do
               member do
+                get :overview
                 get :duplicates
                 get :timeline
                 post :merge
@@ -535,6 +584,17 @@ Rails.application.routes.draw do
             end
           end
           namespace :relationship do
+            resources :survey_models, only: [:index, :show, :create, :update] do
+              collection { get :options }
+              member do
+                post :validate
+                post :publish
+                post :duplicate
+                post :deactivate
+                post :dispatch, action: :evaluate_dispatch
+                get :history
+              end
+            end
             get :metadata, to: 'dashboard#metadata'
             get :dashboard, to: 'dashboard#show'
             get :drilldown, to: 'dashboard#drilldown'
@@ -696,6 +756,11 @@ Rails.application.routes.draw do
             end
             resources :backoffice_requests, only: [:index, :show, :create, :update] do
               get :summary, on: :collection
+              get :workspace, on: :collection
+              get 'document_versions', to: 'backoffice_documents#index'
+              post 'document_versions', to: 'backoffice_documents#create'
+              get 'document_versions/:version_id', to: 'backoffice_documents#download'
+              post 'document_versions/:version_id/decision', to: 'backoffice_documents#decide'
               member do
                 post :decide_order
                 post :advance
@@ -796,6 +861,18 @@ Rails.application.routes.draw do
             get :usage, to: 'usage#index'
           end
 
+          resources :jrc_migration_batches, only: [:index, :show, :create] do
+            member do
+              post :preview
+              post :execute
+              get :reconciliation
+              post :accept
+              get :errors
+              get :events
+              post 'items/:item_id/scan', action: :scan
+              post 'items/:item_id/recover_media', action: :recover_media
+            end
+          end
           resources :data_imports, only: [:index, :show, :create] do
             collection do
               post :validate_source
@@ -806,6 +883,7 @@ Rails.application.routes.draw do
               post :abandon
               get :error_logs
               get :skip_logs
+              get :reconciliation
             end
           end
           resources :csat_survey_responses, only: [:index] do
@@ -911,6 +989,7 @@ Rails.application.routes.draw do
 
           resources :inboxes, only: [] do
             resource :assignment_policy, only: [:show, :create, :destroy], module: :inboxes
+            resource :assignment_diagnostics, only: [:show], module: :inboxes
           end
 
           namespace :twitter do
@@ -1055,6 +1134,7 @@ Rails.application.routes.draw do
         resource :config, only: [:create]
         resources :campaigns, only: [:index]
         resources :events, only: [:create]
+        get 'messages/:message_id/attachments/:attachment_id', to: 'messages#attachment'
         resources :messages, only: [:index, :create, :update]
         resources :conversations, only: [:index, :create] do
           collection do
@@ -1316,6 +1396,7 @@ Rails.application.routes.draw do
 
           resources :inboxes, only: [:index, :show, :create, :update, :destroy] do
             get :assignable_agents, on: :member
+            resource :assignment_diagnostics, only: [:show], module: :inboxes
             get :campaigns, on: :member
             get :agent_bot, on: :member
             post :set_agent_bot, on: :member
