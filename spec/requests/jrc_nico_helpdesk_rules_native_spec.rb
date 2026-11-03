@@ -343,6 +343,10 @@ RSpec.describe 'NICO HelpDesk R01-R16 native approval chains', type: :request do
   context 'with R15 using the shared native SurveyEngine' do
     let(:selected_rule) { 'R15' }
 
+    # Native closure now evaluates surveys through its real queued job.
+    # Execute that boundary before reading the durable decision; delivery stays queued.
+    around { |example| perform_enqueued_jobs(only: JrcRelationship::SurveyClosureJob) { example.run } }
+
     def verify_shared_survey_readback(decision)
       get "/api/v1/accounts/#{sd_account.id}/relationship/survey_decisions",
           params: { source_type: ticket.class.name, source_id: ticket.id }, headers: headers
