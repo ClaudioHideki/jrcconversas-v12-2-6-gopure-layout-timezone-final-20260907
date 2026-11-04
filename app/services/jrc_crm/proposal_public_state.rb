@@ -4,17 +4,19 @@ class JrcCrm::ProposalPublicState
     'pending_approval' => 'Esta proposta ainda não foi enviada ao cliente.',
     'approved' => 'Aprovada internamente — aguardando envio ao cliente.',
     'expired' => 'Esta proposta expirou. Solicite uma nova versão ao responsável.',
-    'canceled' => 'Esta proposta está indisponível.'
+    'canceled' => 'Esta proposta está indisponível.',
+    'superseded' => 'Esta versão foi substituída. Solicite a proposta atualizada ao responsável.'
   }.freeze
 
-  def self.call(proposal, now: Time.current)
+  def self.call(proposal, now: Time.current, superseded: false)
     state = proposal.status
     state = 'approved' if state == 'draft' && proposal.approval_status == 'approved'
     expired = (proposal.public_token_expires_at && proposal.public_token_expires_at <= now) ||
       (proposal.valid_until && proposal.valid_until < now.to_date)
     state = 'expired' if expired
     state = 'canceled' if proposal.public_token_revoked_at || proposal.status == 'canceled'
-    available = !expired && state != 'canceled' && proposal.sent_at && %w[sent viewed accepted rejected].include?(state)
+    state = 'superseded' if superseded
+    available = !expired && !superseded && state != 'canceled' && proposal.sent_at && %w[sent viewed accepted rejected].include?(state)
     { state: state, available: !!available, message: MESSAGES[state] || (!available && MESSAGES['draft']) }
   end
 

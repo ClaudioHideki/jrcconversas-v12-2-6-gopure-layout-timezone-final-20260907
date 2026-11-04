@@ -17,6 +17,7 @@ import CrmValueDisplay from '../../components/shared/CrmValueDisplay.vue';
 import CrmPageHeader from '../../components/shared/CrmPageHeader.vue';
 import CrmStatCard from '../../components/shared/CrmStatCard.vue';
 import ProposalRecipientDelivery from './ProposalRecipientDelivery.vue';
+import ProposalVersionActions from './ProposalVersionActions.vue';
 import CommercialGratuityFields from './CommercialGratuityFields.vue';
 import { formatCrmDate } from '../../utils/dateTime';
 
@@ -51,6 +52,20 @@ const showForm = ref(false);
 const saving = ref(false);
 const selectedProposal = ref(null);
 const loadingDetails = ref(false);
+const isHistorical = computed(() =>
+  Boolean(
+    selectedProposal.value?.historical ??
+      ['expired', 'accepted', 'rejected', 'canceled', 'superseded'].includes(
+        selectedProposal.value?.public_availability?.state ||
+          selectedProposal.value?.status
+      )
+  )
+);
+const showResend = ref(false);
+const historicalUrl = ref('');
+const showHistory = ref(false);
+const historyVersions = ref([]);
+const historyLoading = ref(false);
 const itemSaving = ref(false);
 const sendingChannel = ref('');
 const actionWorking = ref('');
@@ -147,6 +162,7 @@ const withoutMonthlyFee = computed({
     proposalForm.has_monthly_fee = !value;
   },
 });
+const moneyInput = cents => (Number(cents || 0) / 100).toFixed(2);
 const installmentPreview = computed(() => {
   const values = selectedProposal.value?.installment_plan_cents || [];
   if (!values.length) return '';
@@ -222,7 +238,7 @@ const proposalProgress = computed(() => {
 
 const refresh = () => store.dispatch('jrcCrm/proposals/fetchProposals');
 const centsFromInput = value => Math.round(Number(value || 0) * 100);
-const moneyInput = cents => (Number(cents || 0) / 100).toFixed(2);
+
 const billingLabel = value =>
   ({
     one_time: 'Cobrança única',
@@ -237,36 +253,6 @@ const loadProducts = async () => {
   if (products.value.length) return;
   const { data } = await productsAPI.list({ active: true });
   products.value = data;
-};
-
-const openForm = async () => {
-  if (selectedProposal.value) closeProposal();
-  try {
-    const { data } = await dealsAPI.list({ status: 'open' });
-    const contactId = route.query.contactId;
-    deals.value =
-      typeof contactId === 'string' && /^\d+$/.test(contactId)
-        ? data.filter(
-            deal =>
-              String(deal.contact_id) === contactId ||
-              deal.contacts?.some(contact => String(contact.id) === contactId)
-          )
-        : data;
-    const restored = creationDraft.open();
-    if (!restored)
-      dealId.value = deals.value.length === 1 ? deals.value[0].id : '';
-    else useAlert(t('CRM.CREATION.RECOVERED'));
-    if (proposalsAPI.creationOptions) {
-      const options = await proposalsAPI.creationOptions();
-      operatingUnits.value = options.data.business_units || [];
-      if (!businessUnitId.value && operatingUnits.value.length === 1)
-        businessUnitId.value = operatingUnits.value[0].id;
-    }
-    await loadProducts();
-    showForm.value = true;
-  } catch {
-    useAlert('Não foi possível carregar os negócios.');
-  }
 };
 
 const hydrateProposalForm = data => {
@@ -327,6 +313,9 @@ const detailDraft = useFormDraft(
   }
 );
 const openProposal = async proposal => {
+  showResend.value = false;
+  historicalUrl.value = '';
+  showHistory.value = false;
   detailDraft.flush();
   detailActive.value = false;
   detailDraftId.value = proposal.id;
@@ -359,6 +348,38 @@ const closeProposal = () => {
   itemForm.product_id = '';
   itemForm.quantity = 1;
   itemForm.unit_price = '';
+};
+
+const openForm = async () => {
+  if (selectedProposal.value) closeProposal();
+  try {
+    const { data } = await dealsAPI.list({ status: 'open' });
+    const queriedContactId = route.query.contactId;
+    deals.value =
+      typeof queriedContactId === 'string' && /^\d+$/.test(queriedContactId)
+        ? data.filter(
+            deal =>
+              String(deal.contact_id) === queriedContactId ||
+              deal.contacts?.some(
+                contact => String(contact.id) === queriedContactId
+              )
+          )
+        : data;
+    const restored = creationDraft.open();
+    if (!restored)
+      dealId.value = deals.value.length === 1 ? deals.value[0].id : '';
+    else useAlert(t('CRM.CREATION.RECOVERED'));
+    if (proposalsAPI.creationOptions) {
+      const options = await proposalsAPI.creationOptions();
+      operatingUnits.value = options.data.business_units || [];
+      if (!businessUnitId.value && operatingUnits.value.length === 1)
+        businessUnitId.value = operatingUnits.value[0].id;
+    }
+    await loadProducts();
+    showForm.value = true;
+  } catch {
+    useAlert('Não foi possível carregar os negócios.');
+  }
 };
 
 const createProposal = async () => {
@@ -690,6 +711,14 @@ const copyPublicLink = async () => {
 };
 
 const duplicateProposal = async () => {
+  if (
+    hasUnsavedChanges.value ||
+    hasPendingItem.value ||
+    itemUpdateFailed.value
+  ) {
+    useAlert(t('CRM.PROPOSAL_PDF.UNSAVED'));
+    return;
+  }
   if (!selectedProposal.value || actionWorking.value) return;
   actionWorking.value = 'duplicate';
   try {
@@ -704,6 +733,67 @@ const duplicateProposal = async () => {
     );
   } finally {
     actionWorking.value = '';
+  }
+};
+
+const prepareResend = async () => {
+  if (!selectedProposal.value || actionWorking.value) return;
+  if (!isHistorical.value) {
+    historicalUrl.value = publicProposalUrl(selectedProposal.value);
+    showResend.value = true;
+    return;
+  }
+  actionWorking.value = 'prepare_historical';
+  try {
+    const id = selectedProposal.value.id;
+    const { data } = await proposalsAPI.prepareHistorical(id);
+    if (selectedProposal.value?.id !== id) return;
+    historicalUrl.value = data.public_url;
+    showResend.value = true;
+  } catch (e) {
+    useAlert(e.response?.data?.errors?.join(', ') || t('CRM.VERSIONS.ERROR'));
+  } finally {
+    actionWorking.value = '';
+  }
+};
+const resendHistorical = async channel => {
+  if (!selectedProposal.value || !historicalUrl.value || sendingChannel.value)
+    return;
+  sendingChannel.value = channel;
+  try {
+    if (!isHistorical.value && !(await persistCommercialData(false))) return;
+    const { data } = await proposalsAPI.sendProposal(
+      selectedProposal.value.id,
+      channel,
+      isHistorical.value
+        ? { historical: true, historical_url: historicalUrl.value }
+        : {}
+    );
+    await applyProposalResponse(data.proposal, false);
+    useAlert(
+      isHistorical.value
+        ? t('CRM.VERSIONS.RESENT')
+        : t('CRM.VERSIONS.RESENT_CURRENT')
+    );
+  } catch (e) {
+    useAlert(e.response?.data?.errors?.join(', ') || t('CRM.VERSIONS.ERROR'));
+  } finally {
+    sendingChannel.value = '';
+  }
+};
+const openVersionHistory = async () => {
+  const id = selectedProposal.value?.id;
+  if (!id || historyLoading.value) return;
+  historyLoading.value = true;
+  showHistory.value = true;
+  historyVersions.value = [];
+  try {
+    const { data } = await proposalsAPI.versionHistory(id);
+    if (selectedProposal.value?.id === id) historyVersions.value = data;
+  } catch (e) {
+    useAlert(e.response?.data?.errors?.join(', ') || t('CRM.VERSIONS.ERROR'));
+  } finally {
+    historyLoading.value = false;
   }
 };
 
@@ -829,7 +919,8 @@ onMounted(async () => {
 
 <template>
   <div
-    class="relative flex h-full flex-col gap-5 overflow-auto bg-n-surface-1 p-4 sm:p-6"
+    class="relative flex h-full min-w-0 flex-col gap-5 bg-n-surface-1 p-4 sm:p-6"
+    :class="selectedProposal ? 'overflow-hidden' : 'overflow-auto'"
   >
     <CrmPageHeader
       eyebrow="Documentos comerciais"
@@ -1258,19 +1349,82 @@ onMounted(async () => {
     >
       <aside class="flex h-full w-full flex-col overflow-hidden bg-n-surface-1">
         <div
-          class="shrink-0 border-b border-n-weak bg-gradient-to-r from-n-blue-2 via-n-solid-2 to-n-iris-2 px-5 py-4"
+          class="max-h-[80vh] shrink-0 overflow-y-auto border-b border-n-weak bg-gradient-to-r from-n-blue-2 via-n-solid-2 to-n-iris-2 px-5 py-4"
         >
+          <p
+            class="text-xs font-semibold uppercase tracking-[0.16em] text-n-brand"
+          >
+            {{ selectedProposal.proposal_number || 'Proposta comercial' }} ·
+            versão {{ selectedProposal.version_number || 1 }}
+          </p>
+          <h3 class="mt-1 text-2xl font-bold text-n-slate-12">
+            {{ selectedProposal.title }}
+          </h3>
+          <ProposalVersionActions
+            :historical="isHistorical"
+            :actions="selectedProposal.version_actions"
+            :busy="
+              Boolean(actionWorking) ||
+              Boolean(sendingChannel) ||
+              saving ||
+              itemSaving ||
+              loadingDetails
+            "
+            @revise="duplicateProposal"
+            @resend="prepareResend"
+            @history="openVersionHistory"
+          />
+          <section
+            v-if="showResend && historicalUrl"
+            class="my-3 rounded-xl border border-n-blue-6 bg-n-blue-2 p-4"
+          >
+            <p class="mb-3 text-sm text-n-slate-12">
+              {{
+                isHistorical
+                  ? t('CRM.VERSIONS.READ_ONLY')
+                  : t('CRM.VERSIONS.CURRENT')
+              }}
+            </p>
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                class="min-h-11 rounded-lg bg-n-brand px-4 py-2 font-semibold text-white disabled:opacity-50"
+                :disabled="Boolean(sendingChannel)"
+                @click="resendHistorical('whatsapp')"
+              >
+                {{ t('CRM.VERSIONS.WHATSAPP') }}
+              </button>
+              <button
+                type="button"
+                class="min-h-11 rounded-lg border border-n-brand bg-n-solid-2 px-4 py-2 font-semibold text-n-blue-11 disabled:opacity-50"
+                :disabled="Boolean(sendingChannel)"
+                @click="resendHistorical('email')"
+              >
+                {{ t('CRM.VERSIONS.EMAIL') }}
+              </button>
+              <ProposalRecipientDelivery
+                :key="'historical:' + selectedProposal.id"
+                :proposal-id="selectedProposal.id"
+                :public-url="historicalUrl"
+                :historical="isHistorical"
+                :disabled="Boolean(sendingChannel) || Boolean(actionWorking)"
+                @submitted="recipientDeliverySubmitted"
+              />
+              <a
+                :href="historicalUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="px-3 py-2 text-sm font-semibold text-n-blue-11 underline"
+                >{{
+                  isHistorical
+                    ? t('CRM.VERSIONS.DOCUMENT')
+                    : t('CRM.VERSIONS.DOCUMENT_CURRENT')
+                }}</a
+              >
+            </div>
+          </section>
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p
-                class="text-xs font-semibold uppercase tracking-[0.16em] text-n-brand"
-              >
-                {{ selectedProposal.proposal_number || 'Proposta comercial' }} ·
-                versão {{ selectedProposal.version_number || 1 }}
-              </p>
-              <h3 class="mt-1 text-2xl font-bold text-n-slate-12">
-                {{ selectedProposal.title }}
-              </h3>
               <ApprovalGateBadge
                 resource-key="crm.proposal_send"
                 :resource-id="selectedProposal.id"
@@ -1291,6 +1445,7 @@ onMounted(async () => {
             </div>
             <div class="flex flex-wrap justify-end gap-2">
               <button
+                v-if="!isHistorical"
                 type="button"
                 class="rounded-xl border border-n-weak bg-n-solid-2 px-3 py-2 text-sm font-semibold shadow-sm"
                 @click="previewProposal"
@@ -1311,6 +1466,7 @@ onMounted(async () => {
                 }}
               </button>
               <button
+                v-if="!isHistorical"
                 type="button"
                 class="rounded-xl bg-n-teal-9 px-3 py-2 text-sm font-semibold text-white shadow-sm"
                 @click="copyPublicLink"
@@ -1330,14 +1486,7 @@ onMounted(async () => {
                 <i class="i-lucide-shield-check mr-1" /> Solicitar aprovação
               </button>
               <button
-                type="button"
-                class="rounded-xl border border-n-weak bg-n-solid-2 px-3 py-2 text-sm font-semibold shadow-sm disabled:opacity-50"
-                :disabled="Boolean(actionWorking)"
-                @click="duplicateProposal"
-              >
-                <i class="i-lucide-copy-plus mr-1" /> Duplicar
-              </button>
-              <button
+                v-if="!isHistorical"
                 type="button"
                 class="rounded-xl bg-[#16a765] px-3 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-50"
                 :disabled="
@@ -1355,6 +1504,7 @@ onMounted(async () => {
                 }}
               </button>
               <ProposalRecipientDelivery
+                v-if="!isHistorical"
                 :key="`${route.params.accountId}:${store.getters.getCurrentUserID}:${selectedProposal.id}`"
                 :proposal-id="selectedProposal.id"
                 :public-url="publicProposalUrl(selectedProposal)"
@@ -1374,6 +1524,7 @@ onMounted(async () => {
                 @submitted="recipientDeliverySubmitted"
               />
               <button
+                v-if="!isHistorical"
                 type="button"
                 class="rounded-xl bg-n-brand px-3 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-50"
                 :disabled="
@@ -1453,7 +1604,7 @@ onMounted(async () => {
         </div>
         <div
           v-else
-          class="grid min-h-0 flex-1 gap-5 overflow-auto p-5 xl:grid-cols-[minmax(0,1fr)_340px]"
+          class="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-auto p-5 xl:grid-cols-[minmax(0,1fr)_340px]"
         >
           <div
             class="grid gap-3 rounded-2xl border border-n-weak bg-n-solid-2 p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4 xl:col-span-2 xl:grid-cols-7"
@@ -1544,9 +1695,8 @@ onMounted(async () => {
               v-if="selectedProposal.locked"
               class="mb-4 rounded-xl border border-n-amber-6 bg-n-amber-2 p-3 text-sm font-medium text-n-amber-11"
             >
-              <i class="i-lucide-lock-keyhole mr-1" /> Esta proposta foi aceita
-              e está bloqueada. Use “Duplicar” para criar uma nova versão
-              editável.
+              <i class="i-lucide-lock-keyhole mr-1" />
+              {{ t('CRM.VERSIONS.LOCKED') }}
             </div>
 
             <fieldset
@@ -2313,6 +2463,104 @@ onMounted(async () => {
         </div>
       </aside>
     </div>
+  </div>
+
+  <div
+    v-if="showHistory"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3"
+    @click.self="showHistory = false"
+  >
+    <section
+      role="dialog"
+      aria-modal="true"
+      :aria-label="t('CRM.VERSIONS.HISTORY')"
+      class="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-n-weak bg-n-solid-2 text-n-slate-12 shadow-xl"
+      @keydown.esc="showHistory = false"
+    >
+      <header
+        class="flex items-center justify-between border-b border-n-weak p-4"
+      >
+        <h2 class="font-semibold">{{ t('CRM.VERSIONS.HISTORY') }}</h2>
+        <button
+          type="button"
+          autofocus
+          class="min-h-11 rounded-lg px-3 font-semibold"
+          @click="showHistory = false"
+        >
+          {{ t('CRM.VERSIONS.CLOSE') }}
+        </button>
+      </header>
+      <div class="overflow-auto p-4">
+        <p v-if="historyLoading" role="status">
+          {{ t('CRM.VERSIONS.LOADING') }}
+        </p>
+        <article
+          v-for="version in historyVersions"
+          :key="version.id"
+          class="mb-4 rounded-xl border border-n-weak p-4"
+        >
+          <h3 class="font-semibold">
+            {{ version.proposal_number }} · {{ t('CRM.VERSIONS.VERSION') }}
+            {{ version.version_number }}
+          </h3>
+          <p class="text-sm">
+            {{ version.status_display }}
+            <span
+              v-if="
+                version.public_state_display &&
+                version.public_state_display !== version.status_display
+              "
+            >
+              · {{ version.public_state_display }}</span
+            >
+            · {{ version.created_at_display }} ·
+            {{ version.owner?.name }}
+          </p>
+          <p class="text-sm">
+            {{ t('CRM.VERSIONS.VALID_UNTIL') }}:
+            {{ version.valid_until_display || '—' }} ·
+            {{ t('CRM.VERSIONS.TOTAL') }}:
+            <CrmValueDisplay :cents="version.total_cents" />
+          </p>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="min-h-11 rounded-lg bg-n-brand px-3 py-2 font-semibold text-white"
+              @click="openProposal(version)"
+            >
+              {{ t('CRM.VERSIONS.OPEN') }}</button
+            ><button
+              type="button"
+              class="min-h-11 rounded-lg border border-n-weak px-3 py-2 font-semibold"
+              :disabled="pdfLoading || version.document_available === false"
+              @click="downloadPdf(version)"
+            >
+              {{ t('CRM.PROPOSAL_PDF.DOWNLOAD') }}
+            </button>
+            <span
+              v-if="version.document_available === false"
+              class="text-sm text-n-amber-11"
+              >{{ t('CRM.VERSIONS.MISSING_DOCUMENT') }}</span
+            >
+          </div>
+          <details class="mt-3">
+            <summary class="cursor-pointer text-sm font-semibold">
+              {{ t('CRM.VERSIONS.AUDIT') }}
+            </summary>
+            <ol class="mt-2 space-y-2">
+              <li
+                v-for="event in version.events"
+                :key="event.id"
+                class="text-sm"
+              >
+                <time>{{ formatCrmDate(event.created_at) }}</time> ·
+                {{ event.user?.name || '—' }} · {{ event.description }}
+              </li>
+            </ol>
+          </details>
+        </article>
+      </div>
+    </section>
   </div>
   <ContactCreateModal
     v-if="showForm && showContactForm"

@@ -48,7 +48,8 @@ module Api
           def lock_proposal_items
             @proposal.with_lock do
               if @proposal.locked_for_editing?
-                render json: { errors: ['A proposta aceita esta bloqueada. Crie uma nova versao.'] }, status: :unprocessable_entity
+                render json: { errors: ['Esta versão está bloqueada para preservar o histórico. Use Editar e criar nova versão.'] },
+                       status: :unprocessable_entity
               else
                 yield
               end
@@ -62,7 +63,7 @@ module Api
           def ensure_unlocked_proposal!
             return unless @proposal.locked_for_editing?
 
-            render json: { errors: ['A proposta aceita está bloqueada para edição. Duplique-a para criar uma nova versão.'] },
+            render json: { errors: ['Esta versão está bloqueada para preservar o histórico. Use Editar e criar nova versão.'] },
                    status: :unprocessable_entity
           end
 

@@ -1,5 +1,29 @@
 {
   "CRM": {
+    "VERSIONS": {
+      "DOCUMENT_CURRENT": "Visualizar proposta",
+      "LOCKED": "Esta versão está bloqueada para preservar o histórico. Use Editar e criar nova versão.",
+      "MISSING_DOCUMENT": "PDF original indisponível. O histórico foi preservado; crie uma nova versão para continuar.",
+      "RESENT_CURRENT": "Proposta registrada para reenvio. Confira a entrega no histórico da conversa.",
+      "CURRENT": "Reenvie a proposta vigente pelo canal escolhido. As validações e aprovações comerciais permanecem obrigatórias.",
+      "EDIT": "Editar e criar nova versão",
+      "RESEND": "Reenviar proposta",
+      "HISTORY": "Histórico de versões",
+      "WARNING": "Esta proposta não está mais vigente. Reenvie o documento apenas para consulta ou crie uma nova versão para negociar e obter um aceite válido.",
+      "READ_ONLY": "O reenvio preserva o PDF e os valores originais. O novo link de consulta dura 7 dias e não permite aceite nem reativa a proposta.",
+      "WHATSAPP": "Reenviar por WhatsApp",
+      "EMAIL": "Reenviar por e-mail",
+      "DOCUMENT": "Consultar documento histórico",
+      "RESENT": "Documento histórico registrado para reenvio. Confira a entrega no histórico da conversa.",
+      "ERROR": "Não foi possível concluir a ação. Verifique os dados e as permissões.",
+      "CLOSE": "Fechar",
+      "LOADING": "Carregando histórico…",
+      "VERSION": "versão",
+      "VALID_UNTIL": "Validade",
+      "TOTAL": "Total",
+      "OPEN": "Consultar versão",
+      "AUDIT": "Alterações e envios"
+    },
     "NAVIGATION": {
       "LABEL": "CRM modules",
       "PREVIOUS": "Previous CRM tabs",

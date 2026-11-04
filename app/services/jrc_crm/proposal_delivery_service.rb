@@ -5,12 +5,14 @@ module JrcCrm
   class ProposalDeliveryService
     CHANNELS = %w[auto whatsapp email].freeze
 
-    def initialize(proposal:, actor:, channel: 'auto', base_url: nil, idempotency_key: nil)
+    def initialize(proposal:, actor:, channel: 'auto', base_url: nil, idempotency_key: nil, historical: false, historical_url: nil)
       @proposal = proposal
       @actor = actor
       @channel = channel.to_s.presence || 'auto'
       @base_url = base_url.to_s.sub(%r{/$}, '')
       @idempotency_key = idempotency_key
+      @historical = historical
+      @historical_url = historical_url
     end
 
     def call(delivery: nil)
@@ -23,7 +25,11 @@ module JrcCrm
 
     def deliver_under_lock
       raise ArgumentError, 'Canal de envio inválido' unless CHANNELS.include?(@channel)
-      raise ArgumentError, 'Proposta expirada ou encerrada; crie uma nova versão.' if %w[expired canceled accepted rejected].include?(@proposal.public_availability[:state])
+      if @proposal.historical? && !@historical
+        raise ArgumentError, 'Proposta sem vigência. Escolha Reenviar proposta (somente consulta) ou Editar e criar nova versão.'
+      end
+      raise ArgumentError, 'A proposta está vigente. Utilize o envio normal.' if @historical && !@proposal.historical?
+
       approvals = [@proposal.approval_status, @proposal.commercial_approval_status,
                    @proposal.financial_approval_status, @proposal.technical_approval_status]
       raise ArgumentError, 'Conclua as aprovações internas antes do envio.' unless approvals.all? { |state| %w[approved not_required].include?(state) }
@@ -43,11 +49,12 @@ module JrcCrm
       if gate[:mode] == 'enforcement' && @idempotency_key.blank?
         raise JrcApprovals::Error, 'IDEMPOTENCY_KEY_REQUIRED'
       end
+
       if @idempotency_key
         JrcApprovals::Ledger.key!(@idempotency_key)
         document = @proposal.attributes.except('updated_at', 'lock_version', 'status', 'sent_at',
-          'last_sent_channel', 'last_sent_message_id', 'last_sent_conversation_id', 'viewed_at', 'last_viewed_at', 'viewed_count')
-          .transform_values do |value|
+                                               'last_sent_channel', 'last_sent_message_id', 'last_sent_conversation_id', 'viewed_at', 'last_viewed_at', 'viewed_count')
+                            .transform_values do |value|
             case value
             when Time, ActiveSupport::TimeWithZone then value.getutc.iso8601(6)
             when DateTime then value.new_offset(0).iso8601(6)
@@ -58,8 +65,9 @@ module JrcCrm
                            'document' => document,
                            'channel' => @channel, 'actor_id' => @actor&.id, 'base_url' => @base_url }
         digest_payload['delivery'] = @delivery if @delivery
+        digest_payload['historical'] = true if @historical
         @delivery_digest = JrcApprovals::Ledger.digest(digest_payload.as_json)
-        previous = @proposal.events.where(event_type: 'sent').where("metadata ->> 'delivery_key' = ?", @idempotency_key).first
+        previous = @proposal.events.where(event_type: %w[sent historical_resent]).where("metadata ->> 'delivery_key' = ?", @idempotency_key).first
         if previous
           raise JrcApprovals::Error, 'IDEMPOTENCY_CONTENT_CONFLICT' unless previous.metadata['delivery_digest'] == @delivery_digest
 
@@ -67,7 +75,7 @@ module JrcCrm
           raise Pundit::NotAuthorizedError if @target && !@target.authorized_conversation?(conversation)
 
           return { proposal: @proposal.reload, message: conversation.messages.find(previous.metadata.fetch('message_id')),
-                   conversation: conversation }
+                   conversation: conversation, channel: channel_key(conversation) }
         end
       end
 
@@ -79,24 +87,31 @@ module JrcCrm
       # Preserve the schedule actually printed, even after subsequent resends.
       # Use existing event metadata rather than a parallel proposal table.
       anchor_on = Date.iso8601(@proposal.financial_summary[:first_due_date]) - @proposal.first_billing_days.to_i
-      pdf_bytes = JrcCrm::ProposalPdfService.new(@proposal).call
+      pdf_bytes = if @historical
+                    JrcCrm::ProposalDocumentArchive.new(@proposal, actor: @actor).capture!.download
+                  else
+                    JrcCrm::ProposalPdfService.new(@proposal).call
+                  end
       message = build_message(conversation, pdf_bytes)
 
       status = @proposal.status.in?(%w[accepted rejected canceled]) ? @proposal.status : 'sent'
-      @proposal.update!(
-        status: status,
-        sent_at: Time.current,
-        last_sent_channel: channel_key(conversation),
-        last_sent_message_id: message.id,
-        last_sent_conversation_id: conversation.id
-      )
-      @proposal.events.create!(
+      unless @historical
+        @proposal.update!(
+          status: status,
+          sent_at: Time.current,
+          last_sent_channel: channel_key(conversation),
+          last_sent_message_id: message.id,
+          last_sent_conversation_id: conversation.id
+        )
+      end
+      sent_event = @proposal.events.create!(
         account_id: @proposal.account_id,
-        event_type: 'sent',
+        event_type: @historical ? 'historical_resent' : 'sent',
         user_id: @actor&.id,
-        description: "Proposta enviada por #{channel_label(conversation)} na conversa ##{conversation.display_id}",
+        description: "#{@historical ? 'Documento histórico reenviado, sem vigência e sem aceite' : 'Proposta enviada'} por #{channel_label(conversation)} na conversa ##{conversation.display_id}",
         metadata: {
           financial_anchor_on: anchor_on.iso8601,
+          historical: @historical,
           channel: channel_key(conversation),
           conversation_id: conversation.id,
           message_id: message.id,
@@ -106,8 +121,9 @@ module JrcCrm
           delivery_key: @idempotency_key, delivery_digest: @delivery_digest
         }
       )
+      sent_event.document.attach(message.attachments.first.file.blob)
 
-      { proposal: @proposal.reload, message: message, conversation: conversation }
+      { proposal: @proposal.reload, message: message, conversation: conversation, channel: channel_key(conversation) }
     end
 
     def resolve_conversation
@@ -149,7 +165,7 @@ module JrcCrm
       )
 
       params = {
-        content: @target ? @target.content : message_text,
+        content: outgoing_text,
         message_type: 'outgoing',
         attachments: [blob.signed_id],
         content_attributes: {
@@ -180,7 +196,21 @@ module JrcCrm
     end
 
     def public_url
+      if @historical
+        return @resolved_historical_url ||= if @historical_url.present?
+                                              JrcCrm::HistoricalProposalLink.validate_url!(@historical_url, proposal: @proposal, base_url: @base_url)
+                                            else
+                                              JrcCrm::HistoricalProposalLink.url(@proposal, base_url: @base_url)
+                                            end
+      end
       "#{@base_url}/jrc/propostas/#{@proposal.account_id}/#{CGI.escape(@proposal.public_token)}"
+    end
+
+    def outgoing_text
+      text = @target ? @target.content : message_text
+      return text unless @historical
+
+      "DOCUMENTO HISTÓRICO — SEM VIGÊNCIA. Apenas para consulta; não permite aceite.\n\n#{text}"
     end
 
     def pdf_filename

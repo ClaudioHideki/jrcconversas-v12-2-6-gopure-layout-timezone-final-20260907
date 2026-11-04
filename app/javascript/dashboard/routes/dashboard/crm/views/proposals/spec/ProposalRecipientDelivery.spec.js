@@ -127,6 +127,24 @@ it('submits the selected person and inbox through the proposal endpoint, without
   );
 });
 
+it('keeps historical delivery explicitly read-only when choosing another WhatsApp recipient', async () => {
+  const historicalUrl =
+    'https://jrc.example/jrc/propostas-historicas/7/synthetic-read-only';
+  mountDelivery({ historical: true, publicUrl: historicalUrl });
+  await submit({ ...payload, message: { content: historicalUrl } });
+  expect(proposalsAPI.sendToRecipient).toHaveBeenCalledWith(
+    31,
+    expect.objectContaining({
+      contact_id: 12,
+      inbox_id: 18,
+      content: historicalUrl,
+    }),
+    expect.any(String),
+    { historical: true, historical_url: historicalUrl }
+  );
+  expect(store.dispatch).not.toHaveBeenCalled();
+});
+
 it('keeps the retry key after an error and changes it only for a different delivery intent', async () => {
   mountDelivery();
   proposalsAPI.sendToRecipient.mockRejectedValue({

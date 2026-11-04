@@ -104,6 +104,12 @@ jobs:
         run: node --experimental-vm-modules --test tests/router/crm-routing.test.cjs
       - name: Testar interfaces CRM e NICO
         run: pnpm exec vitest run --config vitest.commercial.config.ts
+      - name: Testar versões, reenvio e ações de propostas
+        run: >-
+          pnpm exec vitest run
+          app/javascript/dashboard/routes/dashboard/crm/views/proposals/spec
+          app/javascript/dashboard/api/crm/spec/proposals.spec.js
+          --maxWorkers=1 --minWorkers=1
       - name: Testar criação oficial e Cadastro Mestre
         run: >-
           pnpm exec vitest run

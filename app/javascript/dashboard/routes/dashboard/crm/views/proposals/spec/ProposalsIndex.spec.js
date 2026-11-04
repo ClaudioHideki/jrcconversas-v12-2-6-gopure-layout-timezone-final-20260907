@@ -16,6 +16,10 @@ vi.mock('dashboard/api/crm', () => ({
     createItem: vi.fn(),
     updateItem: vi.fn(),
     convertToOrder: vi.fn(),
+    duplicate: vi.fn(),
+    versionHistory: vi.fn(),
+    prepareHistorical: vi.fn(),
+    sendProposal: vi.fn(),
   },
   dealsAPI: { list: vi.fn() },
   productsAPI: { list: vi.fn() },
@@ -39,6 +43,7 @@ const mountPage = async (query = { proposalId: '1' }) => {
   wrapper = shallowMount(ProposalsIndex, {
     global: {
       plugins: [store],
+      stubs: { ProposalVersionActions: false },
     },
   });
   await flushPromises();
@@ -71,6 +76,102 @@ beforeEach(() => {
     .spyOn(HTMLAnchorElement.prototype, 'click')
     .mockImplementation(() => {});
   vi.spyOn(window, 'open').mockImplementation(() => {});
+});
+
+it('creates an editable version from the prominent action without saving over its source', async () => {
+  const next = { ...proposal, id: 2, version_number: 4, title: 'Nova versão' };
+  proposalsAPI.duplicate.mockResolvedValue({ data: next });
+  proposalsAPI.show.mockImplementation(id =>
+    Promise.resolve({ data: id === 2 ? next : proposal })
+  );
+  await mountPage();
+  await wrapper.get('[data-version-action="revise"]').trigger('click');
+  await flushPromises();
+  expect(proposalsAPI.duplicate).toHaveBeenCalledWith(1);
+  expect(proposalsAPI.update).not.toHaveBeenCalled();
+  expect(wrapper.text()).toContain('Nova versão');
+});
+
+it('prepares a read-only document and resends an expired proposal without updating its commercial fields', async () => {
+  proposal.historical = true;
+  proposal.locked = true;
+  const link = 'https://example.test/jrc/propostas-historicas/1/synthetic';
+  proposalsAPI.prepareHistorical.mockResolvedValue({
+    data: { public_url: link },
+  });
+  proposalsAPI.sendProposal.mockResolvedValue({ data: { proposal } });
+  await mountPage();
+  expect(wrapper.get('[role="status"]').text()).toContain(
+    messages.CRM.VERSIONS.WARNING
+  );
+  await wrapper.get('[data-version-action="resend"]').trigger('click');
+  await flushPromises();
+  const button = wrapper
+    .findAll('button')
+    .find(item => item.text() === messages.CRM.VERSIONS.WHATSAPP);
+  await button.trigger('click');
+  await flushPromises();
+  expect(proposalsAPI.sendProposal).toHaveBeenCalledWith(1, 'whatsapp', {
+    historical: true,
+    historical_url: link,
+  });
+  expect(proposalsAPI.update).not.toHaveBeenCalled();
+});
+
+it('loads the authorized version history, its actor and the authenticated original PDF', async () => {
+  proposalsAPI.versionHistory.mockResolvedValue({
+    data: [
+      {
+        ...proposal,
+        proposal_number: 'PROP-ORIGINAL',
+        owner: { name: 'Responsável fixture' },
+        events: [
+          {
+            id: 4,
+            description: 'Envio original',
+            user: { name: 'Responsável fixture' },
+          },
+        ],
+      },
+    ],
+  });
+  await mountPage();
+  await wrapper.get('[data-version-action="history"]').trigger('click');
+  await flushPromises();
+  const dialog = wrapper.get('[role="dialog"]');
+  expect(dialog.text()).toContain('PROP-ORIGINAL');
+  expect(dialog.text()).toContain('Responsável fixture');
+  await dialog
+    .findAll('button')
+    .find(item => item.text() === messages.CRM.PROPOSAL_PDF.DOWNLOAD)
+    .trigger('click');
+  await flushPromises();
+  expect(proposalsAPI.pdf).toHaveBeenCalledWith(1);
+});
+
+it('obeys the action permissions supplied by the server', async () => {
+  proposal.version_actions = { revise: false, resend: false, history: true };
+  await mountPage();
+  expect(wrapper.find('[data-version-action="revise"]').exists()).toBe(false);
+  expect(wrapper.find('[data-version-action="resend"]').exists()).toBe(false);
+  expect(wrapper.find('[data-version-action="history"]').exists()).toBe(true);
+});
+
+it('keeps a current proposal on the existing send and approval flow', async () => {
+  proposal.public_url = 'https://example.test/jrc/propostas/1/current';
+  proposalsAPI.update.mockResolvedValue({ data: proposal });
+  proposalsAPI.sendProposal.mockResolvedValue({ data: { proposal } });
+  await mountPage();
+  await wrapper.get('[data-version-action="resend"]').trigger('click');
+  await flushPromises();
+  expect(proposalsAPI.prepareHistorical).not.toHaveBeenCalled();
+  await wrapper
+    .findAll('button')
+    .find(item => item.text() === messages.CRM.VERSIONS.EMAIL)
+    .trigger('click');
+  await flushPromises();
+  expect(proposalsAPI.update).toHaveBeenCalledWith(1, expect.any(Object));
+  expect(proposalsAPI.sendProposal).toHaveBeenCalledWith(1, 'email', {});
 });
 afterEach(() => {
   wrapper?.unmount();
@@ -248,12 +349,22 @@ it('requires adding or clearing a draft product before downloading', async () =>
 });
 
 it('converts an accepted proposal using the server endpoint and opens the order', async () => {
-  proposal.status = 'accepted'; proposal.locked = true;
-  proposalsAPI.convertToOrder.mockResolvedValue({ data: { id: 9, order_number: 'PED-JRC' } });
+  proposal.status = 'accepted';
+  proposal.locked = true;
+  proposalsAPI.convertToOrder.mockResolvedValue({
+    data: { id: 9, order_number: 'PED-JRC' },
+  });
   await mountPage();
-  await wrapper.findAll('button').find(button => button.text().includes('Converter em pedido')).trigger('click');
+  await wrapper
+    .findAll('button')
+    .find(button => button.text().includes('Converter em pedido'))
+    .trigger('click');
   await flushPromises();
   expect(proposalsAPI.convertToOrder).toHaveBeenCalledWith(1);
-  expect(useRouter().push).toHaveBeenCalledWith({ name: 'crm_orders', params: { accountId: '1' }, query: { orderId: 9 } });
+  expect(useRouter().push).toHaveBeenCalledWith({
+    name: 'crm_orders',
+    params: { accountId: '1' },
+    query: { orderId: 9 },
+  });
   expect(proposalsAPI.update).not.toHaveBeenCalled();
 });

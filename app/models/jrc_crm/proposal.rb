@@ -178,7 +178,23 @@ module JrcCrm
     end
 
     def locked_for_editing?
-      locked_at.present? || accepted?
+      locked_at.present? || accepted? || rejected? || canceled? || superseded? ||
+        (public_availability[:state] == 'expired' && !editable_revision_draft?)
+    end
+
+    def superseded?
+      return events.any? { |event| event.event_type == 'version_created' } if events.loaded?
+
+      events.exists?(event_type: 'version_created')
+    end
+
+    def editable_revision_draft?
+      draft? && sent_at.nil? && public_token_expires_at.present? && public_token_expires_at > Time.current &&
+        events.exists?(event_type: 'duplicated')
+    end
+
+    def historical?
+      %w[expired canceled accepted rejected superseded].include?(public_availability[:state])
     end
 
     def customer_response_allowed?
@@ -186,7 +202,7 @@ module JrcCrm
     end
 
     def public_availability
-      JrcCrm::ProposalPublicState.call(self)
+      JrcCrm::ProposalPublicState.call(self, superseded: superseded?)
     end
 
     def record_expiration!

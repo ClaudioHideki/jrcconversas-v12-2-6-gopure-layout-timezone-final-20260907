@@ -15,6 +15,7 @@ const props = defineProps({
   proposalId: { type: Number, required: true },
   publicUrl: { type: String, required: true },
   disabled: { type: Boolean, default: false },
+  historical: { type: Boolean, default: false },
 });
 const emit = defineEmits(['submitted']);
 const { t } = useI18n();
@@ -75,7 +76,10 @@ const submitDelivery = async ({ payload }) => {
     const { data } = await proposalsAPI.sendToRecipient(
       proposalId,
       delivery,
-      attempt.key
+      attempt.key,
+      ...(props.historical
+        ? [{ historical: true, historical_url: props.publicUrl }]
+        : [])
     );
     if (startedFor !== identity()) return false;
     attempt = null;

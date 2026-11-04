@@ -30,10 +30,14 @@ module JrcCrm
     belongs_to :account
     belongs_to :proposal, class_name: 'JrcCrm::Proposal'
     belongs_to :user, optional: true
+    has_one_attached :document
     
     validates :event_type, :description, presence: true
     
-    VALID_TYPES = %w[created updated approval_requested approval_updated approved sent viewed accepted rejected expired canceled revoked duplicated item_added item_removed pdf_generated].freeze
+    VALID_TYPES = %w[
+      created updated approval_requested approval_updated approved sent viewed accepted rejected expired canceled revoked duplicated
+      item_added item_removed pdf_generated document_archived document_unavailable historical_resent version_created
+    ].freeze
     validates :event_type, inclusion: { in: VALID_TYPES }
     before_validation do
       self.metadata = (metadata || {}).reverse_merge('origin' => user_id ? 'crm' : 'public_link', 'channel' => 'web')

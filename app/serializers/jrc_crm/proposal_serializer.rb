@@ -46,7 +46,10 @@ module JrcCrm
                           STATUS_LABELS.fetch(@proposal.status, @proposal.status)
                         end,
         public_availability: @proposal.public_availability,
+        public_state_display: { 'expired' => 'Expirada', 'superseded' => 'Versão anterior', 'canceled' => 'Cancelada',
+                                'accepted' => 'Aceita', 'rejected' => 'Recusada' }[@proposal.public_availability[:state]],
         locked: @proposal.locked_for_editing?,
+        historical: @proposal.historical?,
         locked_at: @proposal.locked_at,
         solution_description: @proposal.solution_description,
         subtotal_cents: @proposal.subtotal_cents,

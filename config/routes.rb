@@ -655,6 +655,8 @@ Rails.application.routes.draw do
               member do
                 get :pdf
                 post :send_proposal
+                get :version_history
+                post :prepare_historical
                 post :duplicate
                 post :request_approval
                 post :approve
@@ -1429,6 +1431,8 @@ Rails.application.routes.draw do
   get '/jrc/relacionamento/pesquisas/:token', to: 'relationship_surveys#show'
   post '/jrc/relacionamento/pesquisas/:token', to: 'relationship_surveys#update'
   get '/jrc/propostas/:account_id/:token', to: 'jrc_crm/public_proposals#show', as: :jrc_crm_public_proposal
+  get '/jrc/propostas-historicas/:account_id/:token', to: 'jrc_crm/historical_proposals#show', as: :jrc_crm_historical_proposal
+  get '/jrc/propostas-historicas/:account_id/:token/pdf', to: 'jrc_crm/historical_proposals#pdf', as: :jrc_crm_historical_proposal_pdf
   get '/jrc/propostas/:account_id/:token/pdf', to: 'jrc_crm/public_proposals#pdf', as: :jrc_crm_public_proposal_pdf
   post '/jrc/propostas/:account_id/:token/accept', to: 'jrc_crm/public_proposals#accept', as: :jrc_crm_public_proposal_accept
   post '/jrc/propostas/:account_id/:token/reject', to: 'jrc_crm/public_proposals#reject', as: :jrc_crm_public_proposal_reject

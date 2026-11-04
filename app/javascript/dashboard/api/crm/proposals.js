@@ -5,14 +5,22 @@ const proposalsAPI = new ApiClient('crm/proposals', { accountScoped: true });
 proposalsAPI.list = params => axios.get(proposalsAPI.url, { params });
 proposalsAPI.creationOptions = () =>
   axios.get(proposalsAPI.url + '/creation_options');
-proposalsAPI.sendProposal = (id, channel = 'auto') =>
-  axios.post(`${proposalsAPI.url}/${id}/send_proposal`, { channel });
-proposalsAPI.sendToRecipient = (id, delivery, idempotencyKey) =>
+proposalsAPI.sendProposal = (id, channel = 'auto', options = {}) =>
+  axios.post(`${proposalsAPI.url}/${id}/send_proposal`, {
+    channel,
+    ...options,
+  });
+proposalsAPI.sendToRecipient = (id, delivery, idempotencyKey, options = {}) =>
   axios.post(`${proposalsAPI.url}/${id}/send_proposal`, {
     channel: 'whatsapp',
     delivery,
     idempotency_key: idempotencyKey,
+    ...options,
   });
+proposalsAPI.versionHistory = id =>
+  axios.get(`${proposalsAPI.url}/${id}/version_history`);
+proposalsAPI.prepareHistorical = id =>
+  axios.post(`${proposalsAPI.url}/${id}/prepare_historical`);
 proposalsAPI.pdf = id =>
   axios.get(`${proposalsAPI.url}/${id}/pdf`, { responseType: 'blob' });
 proposalsAPI.pdfUrl = (id, download = false) =>

@@ -6,11 +6,11 @@ module Api
           include JrcCrm::CorporateProposalParameters
           before_action :set_proposal, only: [
             :show, :update, :destroy, :send_proposal, :pdf, :accept, :reject,
-            :cancel, :duplicate, :request_approval, :approve, :convert_to_order
+            :cancel, :duplicate, :version_history, :prepare_historical, :request_approval, :approve, :convert_to_order
           ]
           before_action :ensure_unlocked_proposal!, only: [:update, :destroy, :request_approval, :approve, :accept, :reject, :cancel]
 
-          around_action :lock_proposal_mutation, only: %i[update destroy request_approval approve accept reject cancel send_proposal duplicate]
+          around_action :lock_proposal_mutation, only: %i[update destroy request_approval approve accept reject cancel send_proposal]
 
           def index
             proposals = visible_to_current_user(crm_scope.jrc_crm_proposals)
@@ -73,69 +73,35 @@ module Api
             snapshot = @proposal.attributes.except('public_token_digest', 'accepted_from_ip', 'accepted_user_agent')
             @proposal.destroy!
             JrcCrm::AuditEvent.create!(account: crm_scope, actor_type: 'User', actor_id: Current.user.id,
-              event_type: 'proposal_deleted', resource_type: 'JrcCrm::Proposal', resource_id: @proposal.id,
-              from_value: snapshot, to_value: {}, metadata: { proposal_number: @proposal.proposal_number })
+                                       event_type: 'proposal_deleted', resource_type: 'JrcCrm::Proposal', resource_id: @proposal.id,
+                                       from_value: snapshot, to_value: {}, metadata: { proposal_number: @proposal.proposal_number })
             head :no_content
           rescue ActiveRecord::RecordNotDestroyed, ActiveRecord::InvalidForeignKey
             render json: { errors: ['A proposta possui vínculos que impedem a exclusão.'], code: 'PROPOSAL_HAS_DEPENDENCIES' }, status: :conflict
           end
 
           def duplicate
-            duplicate = nil
-            ActiveRecord::Base.transaction do
-              duplicate = @proposal.dup
-              duplicate.assign_attributes(
-                proposal_number: nil,
-                version_number: @proposal.version_number.to_i + 1,
-                owner_id: Current.user.id,
-                status: 'draft',
-                approval_status: 'not_required',
-                commercial_approval_status: 'not_required',
-                financial_approval_status: 'not_required',
-                technical_approval_status: 'not_required',
-                public_token_digest: nil,
-                public_token_expires_at: nil,
-                public_token_revoked_at: nil,
-                sent_at: nil,
-                viewed_at: nil,
-                last_viewed_at: nil,
-                viewed_count: 0,
-                accepted_at: nil,
-                rejected_at: nil,
-                canceled_at: nil,
-                accepted_by_name: nil,
-                accepted_by_document: nil,
-                accepted_from_ip: nil,
-                accepted_user_agent: nil,
-                locked_at: nil,
-                last_sent_channel: nil,
-                last_sent_message_id: nil,
-                last_sent_conversation_id: nil,
-                title: "#{@proposal.title} - Versão #{@proposal.version_number.to_i + 1}"
-              )
-              duplicate.down_payment_cents = 0 # Items are copied before restoring the accepted entry.
-              duplicate.save!
+            authorize @proposal, :create?, policy_class: JrcCrm::ProposalPolicy
+            revised = JrcCrm::ProposalRevisionService.new(proposal: @proposal, actor: Current.user).call
+            render json: serialize(revised), status: :created
+          rescue ActiveRecord::RecordInvalid, ArgumentError => e
+            render json: { errors: [e.message] }, status: :unprocessable_entity
+          end
 
-              @proposal.proposal_items.find_each do |item|
-                attributes = item.attributes.except('id', 'proposal_id', 'created_at', 'updated_at')
-                duplicate.proposal_items.create!(attributes)
-              end
-              duplicate.update!(down_payment_cents: @proposal.down_payment_cents)
-              duplicate.recalculate_totals!
+          def version_history
+            version_ids = JrcCrm::ProposalVersionHistory.new(@proposal).ids
+            proposals = visible_to_current_user(crm_scope.jrc_crm_proposals)
+                        .where(id: version_ids).order(:version_number, :id)
+            render json: proposals.map { |proposal| serialize_version(proposal) }
+          end
 
-              duplicate.events.create!(
-                account_id: crm_scope.id,
-                event_type: 'duplicated',
-                user_id: Current.user.id,
-                metadata: { relationship_origin: @proposal.relationship_origin, source_proposal_id: @proposal.id },
-                description: "Nova versão criada a partir da proposta #{@proposal.proposal_number}"
-              )
-            end
+          def prepare_historical
+            authorize @proposal, :send_proposal?, policy_class: JrcCrm::ProposalPolicy
+            raise ArgumentError, 'A proposta está vigente. Utilize o envio normal.' unless @proposal.historical?
 
-            render json: serialize(duplicate.reload), status: :created
-          rescue JrcApprovals::Error => e
-            render json: { error: e.code, code: e.code }, status: :conflict
-          rescue StandardError => e
+            JrcCrm::ProposalDocumentArchive.new(@proposal, actor: Current.user).capture!
+            render json: { public_url: JrcCrm::HistoricalProposalLink.url(@proposal, base_url: request.base_url) }
+          rescue ArgumentError => e
             render json: { errors: [e.message] }, status: :unprocessable_entity
           end
 
@@ -178,17 +144,25 @@ module Api
           end
 
           def pdf
-            pdf_data = JrcCrm::ProposalPdfService.new(@proposal).call
+            pdf_data = if @proposal.historical?
+                         JrcCrm::ProposalDocumentArchive.new(@proposal, actor: Current.user).capture!.download
+                       else
+                         JrcCrm::ProposalPdfService.new(@proposal).call
+                       end
             audit_event!('pdf_generated', 'PDF da proposta gerado no CRM')
             send_data pdf_data,
                       filename: "#{@proposal.proposal_number.parameterize}-#{@proposal.title.parameterize.presence || @proposal.id}.pdf",
                       type: 'application/pdf',
                       disposition: ActiveModel::Type::Boolean.new.cast(params[:download]) ? 'attachment' : 'inline'
+          rescue ArgumentError => e
+            render json: { errors: [e.message] }, status: :unprocessable_entity
           end
 
           def send_proposal
-            if @proposal.accepted? || @proposal.rejected? || @proposal.canceled?
-              render json: { errors: ['Esta proposta já está encerrada. Duplique-a para criar uma nova versão.'] },
+            historical = ActiveModel::Type::Boolean.new.cast(params[:historical])
+            authorize @proposal, :send_proposal?, policy_class: JrcCrm::ProposalPolicy
+            if !historical && @proposal.historical?
+              render json: { errors: ['Proposta sem vigência. Escolha Reenviar proposta (somente consulta) ou Editar e criar nova versão.'] },
                      status: :unprocessable_entity
               return
             end
@@ -199,7 +173,7 @@ module Api
               return
             end
 
-            @proposal.recalculate_totals!
+            @proposal.recalculate_totals! unless historical
             if @proposal.approval_status == 'pending'
               render json: { errors: ['A proposta ainda possui aprovações pendentes.'] }, status: :unprocessable_entity
               return
@@ -219,7 +193,9 @@ module Api
               actor: Current.user,
               channel: params[:channel].presence || 'auto',
               base_url: request.base_url,
-              idempotency_key: params[:idempotency_key]
+              idempotency_key: params[:idempotency_key],
+              historical: historical,
+              historical_url: params[:historical_url]
             ).call(delivery: recipient_delivery_params)
 
             render json: {
@@ -230,7 +206,7 @@ module Api
                 conversation_display_id: result[:conversation].display_id,
                 inbox_id: result[:conversation].inbox_id,
                 message_id: result[:message].id,
-                channel: result[:proposal].last_sent_channel
+                channel: result.fetch(:channel)
               }
             }
           rescue Pundit::NotAuthorizedError
@@ -313,8 +289,9 @@ module Api
 
           def lock_proposal_mutation
             @proposal.with_lock do
-              if !%w[duplicate send_proposal].include?(action_name) && @proposal.locked_for_editing?
-                render json: { errors: ['A proposta aceita esta bloqueada. Crie uma nova versao.'] }, status: :unprocessable_entity
+              if action_name != 'send_proposal' && @proposal.locked_for_editing?
+                render json: { errors: ['Esta versão está bloqueada para preservar o histórico. Use Editar e criar nova versão.'] },
+                       status: :unprocessable_entity
               else
                 yield
               end
@@ -330,12 +307,24 @@ module Api
           def ensure_unlocked_proposal!
             return unless @proposal.locked_for_editing?
 
-            render json: { errors: ['A proposta aceita está bloqueada. Duplique-a para criar uma nova versão.'] },
+            render json: { errors: ['Esta versão está bloqueada para preservar o histórico. Use Editar e criar nova versão.'] },
                    status: :unprocessable_entity
           end
 
           def serialize(proposal)
-            JrcCrm::ProposalSerializer.new(proposal, base_url: request.base_url).as_json
+            policy = JrcCrm::ProposalPolicy.new({ account: crm_scope, user: Current.user, account_user: Current.account_user }, proposal)
+            JrcCrm::ProposalSerializer.new(proposal, base_url: request.base_url).as_json.merge(
+              version_actions: { revise: policy.show? && policy.create?, resend: policy.send_proposal?, history: policy.show? }
+            )
+          end
+
+          def serialize_version(proposal)
+            events = proposal.events.includes(:user).order(:id).map do |event|
+              { id: event.id, type: event.event_type, description: event.description, created_at: event.created_at,
+                user: event.user && { id: event.user.id, name: event.user.name } }
+            end
+            document_available = proposal.sent_at.nil? || JrcCrm::ProposalDocumentArchive.new(proposal).blob.present?
+            serialize(proposal).merge(document_available: document_available, events: events)
           end
 
           def recipient_delivery_params
