@@ -2709,6 +2709,7 @@ watch(
                     >{{ $t('JRC_CAMPAIGNS.WIZARD.MEDIA_URL')
                     }}<input
                       v-model="activeMessage.media_url"
+                        @input="activeMessage.media_asset_id = null"
                       class="mt-1.5 w-full rounded-xl border border-n-weak bg-n-background px-3 py-2.5 text-sm" /></label
                   ><label class="block text-xs font-medium text-n-slate-10"
                     >{{ $t('JRC_CAMPAIGNS.WIZARD.BODY')

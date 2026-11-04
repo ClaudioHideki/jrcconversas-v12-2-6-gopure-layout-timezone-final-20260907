@@ -1,4 +1,5 @@
 require 'rails_helper'
+require 'vips'
 
 RSpec.describe 'Evolution campaign integration', type: :request do
   let(:account) { create(:account) }
@@ -411,12 +412,84 @@ RSpec.describe 'Evolution campaign integration', type: :request do
     expect(response).to have_http_status(:forbidden)
   end
 
+  context 'with an uploaded campaign image' do
+    let(:image_bytes) { Vips::Image.black(2, 2).pngsave_buffer }
+    let(:asset) do
+      account.jrc_campaign_media_assets.create!(kind: 'image', created_by: admin,
+                                                file: { io: StringIO.new(image_bytes), filename: 'convite.png', content_type: 'image/png' })
+    end
+    let(:image_step) do
+      { kind: 'image', body: 'Convite com legenda', media_asset_id: asset.id, media_url: 'https://expired.example.test/image', file_name: 'convite.png' }
+    end
+    let(:media_send_url) { 'https://evolution.example.test/message/sendMedia/demo' }
+
+    before do
+      stub_request(:post, media_send_url).to_return(
+        status: 201, headers: { 'Content-Type' => 'application/json' },
+        body: { key: { id: 'qa-image-id', fromMe: true, remoteJid: '5511999999000@s.whatsapp.net' }, status: 'PENDING' }.to_json
+      )
+    end
+
+    it 'sends imported bytes and caption without fetching the temporary URL, preserving idempotency' do
+      first = JrcCampaigns::TestMessageService.new(**test_options.merge(step: image_step)).perform
+      second = JrcCampaigns::TestMessageService.new(**test_options.merge(step: image_step)).perform
+      expect(first[:status]).to eq('sent')
+      expect(second[:test_delivery_id]).to eq(first[:test_delivery_id])
+      expect(a_request(:get, image_step[:media_url])).not_to have_been_made
+      expect(a_request(:post, media_send_url).with do |request|
+        payload = JSON.parse(request.body)
+        bytes = Base64.strict_decode64(payload.fetch('media'))
+        payload.values_at('number', 'mediatype', 'caption', 'fileName', 'mimetype') ==
+          ['5511999999000', 'image', 'Convite com legenda', 'image.jpg', 'image/jpeg'] &&
+          bytes.start_with?("\xFF\xD8".b) && Vips::Image.new_from_buffer(bytes, '').width == 2
+      end).to have_been_made.once
+      message = Message.find(JrcCampaigns::TestDelivery.find(first[:test_delivery_id]).metadata.fetch('message_id'))
+      expect(message.attachments.sole.file.blob_id).to eq(asset.file.blob_id)
+      expect(message.content).to eq('Convite com legenda')
+    end
+
+    it 'sends and records an approved image campaign through the selected inbox' do
+      campaign.steps.create!(**image_step, position: 0)
+      campaign.request_review!
+      campaign.approve!(admin, campaign.review_digest)
+      campaign.update!(status: 'running')
+      2.times { JrcCampaigns::DispatchStepService.new(recipient: recipient, step: campaign.steps.sole).perform }
+      delivery = recipient.deliveries.sole
+      expect(delivery).to have_attributes(status: 'sent', inbox_id: inbox.id)
+      expect(a_request(:post, media_send_url)).to have_been_made.once
+      expect(Message.find(delivery.metadata.fetch('message_id')).attachments.sole.file.blob_id).to eq(asset.file.blob_id)
+    end
+
+    it 'recovers the local image record without resending the provider operation' do
+      allow(JrcCampaigns::EvolutionMessageRecorder).to receive(:call).and_raise(ActiveRecord::RecordInvalid)
+      result = JrcCampaigns::TestMessageService.new(**test_options.merge(step: image_step)).perform
+      expect(result[:status]).to eq('sent')
+      allow(JrcCampaigns::EvolutionMessageRecorder).to receive(:call).and_call_original
+      stub_request(:post, 'https://evolution.example.test/chat/findMessages/demo').to_return(
+        headers: { 'Content-Type' => 'application/json' }, body: { messages: { records: [] } }.to_json
+      )
+      JrcCampaigns::EvolutionStatusJob.new.perform('test', result[:test_delivery_id])
+      message = Message.find(JrcCampaigns::TestDelivery.find(result[:test_delivery_id]).metadata.fetch('message_id'))
+      expect(message.attachments.sole.file.blob_id).to eq(asset.file.blob_id)
+      expect(a_request(:post, media_send_url)).to have_been_made.once
+    end
+
+    it 'rejects an uploaded asset from another account before the provider send' do
+      foreign_asset = create(:account).jrc_campaign_media_assets.create!(kind: 'image',
+                                                                        file: { io: StringIO.new(image_bytes), filename: 'private.png', content_type: 'image/png' })
+      result = JrcCampaigns::TestMessageService.new(**test_options.merge(step: image_step.merge(media_asset_id: foreign_asset.id))).perform
+      expect(result[:status]).to eq('failed')
+      expect(a_request(:post, media_send_url)).not_to have_been_made
+    end
+  end
+
   %w[image document video audio].each do |kind|
     it "uses the existing instance for #{kind} without a second webhook send" do
       endpoint = kind == 'audio' ? 'sendWhatsAppAudio' : 'sendMedia'
+      media_bytes = kind == 'image' ? Vips::Image.black(2, 2).pngsave_buffer : 'isolated-media-fixture'
       allow(Resolv).to receive(:getaddresses).with('media.example.test').and_return(['93.184.216.34'])
       stub_request(:get, 'https://media.example.test/file').to_return(
-        headers: { 'Content-Type' => kind == 'document' ? 'application/pdf' : "#{kind}/test" }, body: 'isolated-media-fixture'
+        headers: { 'Content-Type' => kind == 'document' ? 'application/pdf' : "#{kind}/test" }, body: media_bytes
       )
       stub_request(:post, "https://evolution.example.test/message/#{endpoint}/demo").to_return(
         status: 201, headers: { 'Content-Type' => 'application/json' },
@@ -427,7 +500,12 @@ RSpec.describe 'Evolution campaign integration', type: :request do
       expect(result[:delivery_confirmed]).to be(false)
       expect(a_request(:post, "https://evolution.example.test/message/#{endpoint}/demo").with do |request|
         payload = JSON.parse(request.body)
-        encoded = payload[kind == 'audio' ? 'audio' : 'media'] == Base64.strict_encode64('isolated-media-fixture')
+        encoded = if kind == 'image'
+                    payload['mimetype'] == 'image/jpeg' && payload['fileName'] == 'image.jpg' &&
+                      Base64.strict_decode64(payload['media']).start_with?("\xFF\xD8".b)
+                  else
+                    payload[kind == 'audio' ? 'audio' : 'media'] == Base64.strict_encode64(media_bytes)
+                  end
         encoded && (kind == 'audio' || (payload['fileName'].present? && payload['mimetype'].present?))
       end).to have_been_made.once
       expect(Message.find(JrcCampaigns::TestDelivery.find(result[:test_delivery_id]).metadata['message_id']).attachments.count).to eq(1)

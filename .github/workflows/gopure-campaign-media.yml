@@ -1,0 +1,127 @@
+name: GoPure - Campanhas texto e imagem
+
+on:
+  push:
+    branches: [codex/gopure-campanhas-texto-imagem-20261104]
+    paths:
+      - app/**
+      - spec/**
+      - .github/workflows/gopure-campaign-media.yml
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publicar candidata depois dos testes
+        type: boolean
+        default: false
+      image_tag:
+        description: Tag imutavel da candidata GoPure
+        type: string
+        default: gopure-campanhas-texto-imagem-20261104-r1
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gopure-campaign-media-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    env:
+      RAILS_ENV: test
+      NODE_ENV: test
+      NICO_MODE: fixture
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_USERNAME: postgres
+      POSTGRES_PASSWORD: campaign-ci-only
+      POSTGRES_DATABASE: gopure_campaign_test
+      REDIS_URL: redis://127.0.0.1:6379/12
+      SECRET_KEY_BASE: isolated-campaign-test-key-not-for-production
+      FRONTEND_URL: https://gopure-campaign.example.test
+      DISABLE_BOOTSNAP: '1'
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: campaign-ci-only
+          POSTGRES_DB: gopure_campaign_test
+        ports: ['5432:5432']
+        options: --health-cmd="pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7.4.0-alpine
+        ports: ['6379:6379']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencias de imagem
+        run: sudo apt-get update -qq && sudo apt-get install -y libvips-dev imagemagick
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.13.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Banco exclusivo de testes
+        run: bundle exec rails db:schema:load
+      - name: Campanhas - backend, permissoes e integracoes simuladas
+        run: bundle exec ruby scripts/nico-specs.rb spec/services/jrc_campaigns spec/requests/api/v1/accounts/jrc_campaigns
+      - name: Campanhas - frontend
+        run: pnpm exec vitest run app/javascript/dashboard/routes/dashboard/jrcCampaigns/specs --config vitest.campaigns.config.ts --maxWorkers=1 --minWorkers=1
+
+  image:
+    needs: validate
+    if: inputs.publish || github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: qa-only
+          POSTGRES_DB: gopure_image_smoke
+        ports: ['5432:5432']
+        options: --health-cmd="pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+    env:
+      IMAGE: ghcr.io/claudiohideki/jrcconversas-v12-2-6-gopure-layout-timezone-final-20260907:${{ inputs.image_tag || format('gopure-campanhas-texto-imagem-20261104-r{0}', github.run_number) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar tag candidata exclusiva
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag || format('gopure-campanhas-texto-imagem-20261104-r{0}', github.run_number) }}
+        run: '[[ "$IMAGE_TAG" =~ ^gopure-campanhas-texto-imagem-[0-9]{8}-r[0-9]+$ ]]'
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: ${{ env.IMAGE }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          build-args: NODE_OPTIONS=--max-old-space-size=6144 --openssl-legacy-provider
+          cache-from: type=gha,scope=gopure-app
+          cache-to: type=gha,scope=gopure-app,mode=max
+      - name: Smoke Rails e Sidekiq - sem destinos reais
+        run: bash scripts/qa/campaigns/image_smoke.sh "$IMAGE"
+      - name: Publicar imagem testada
+        run: |
+          docker push "$IMAGE"
+          docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$IMAGE" >> "$GITHUB_STEP_SUMMARY"
