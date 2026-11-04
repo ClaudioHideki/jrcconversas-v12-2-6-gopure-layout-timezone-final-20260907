@@ -24,6 +24,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
+docker run --rm "$image" bundle exec ruby -rvips -e 'jpeg = Vips::Image.black(2, 2).jpegsave_buffer; abort "JPEG codec unavailable" unless jpeg.start_with?("\xFF\xD8".b); puts "Production JPEG codec ready"'
+
 docker run --rm "${runtime[@]}" "$image" bundle exec rails db:migrate
 docker run -d --name gopure-evolution-rails-smoke "${runtime[@]}" "$image" bundle exec rails server -b 127.0.0.1 -p 3010
 docker run -d --name gopure-evolution-sidekiq-smoke "${runtime[@]}" "$image" bundle exec sidekiq -r ./config/environment.rb -C config/sidekiq.yml

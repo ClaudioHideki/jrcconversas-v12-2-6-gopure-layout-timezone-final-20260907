@@ -75,6 +75,8 @@ class JrcCampaigns::TestMessageService
 
   def send_evolution(connector)
     rendered_step = %w[kind body media_url file_name].index_with { |key| renderer.render(effective_value(key)) }
+    # Preserve the digest of legacy text/URL requests; add the asset only when supplied.
+    rendered_step['media_asset_id'] = effective_value('media_asset_id') if effective_value('media_asset_id').present?
     JrcCampaigns::EvolutionTestService.new(
       connector: connector, user: user, phone_number: phone_number, step: rendered_step,
       idempotency_key: @idempotency_key, operator_confirmed: @operator_confirmed

@@ -65,6 +65,8 @@ jobs:
           node-version: 24.13.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Contrato binario JPEG e legenda - sem rede
+        run: bundle exec ruby scripts/qa/campaigns/evolution_media_test.rb
       - name: Banco exclusivo de testes
         run: bundle exec rails db:schema:load
       - name: Campanhas - backend, permissoes e integracoes simuladas
