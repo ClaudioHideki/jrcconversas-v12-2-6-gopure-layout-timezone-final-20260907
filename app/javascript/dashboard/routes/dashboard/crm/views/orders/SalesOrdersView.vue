@@ -1595,7 +1595,7 @@ watch(
                 v-for="status in (selected.allowed_statuses || []).filter(
                   status =>
                     selected.commercial_flow !== 'simple' ||
-                    status === 'canceled'
+                    ['pending', 'canceled'].includes(status)
                 )"
                 :key="status"
                 class="rounded-lg border px-3 py-2"

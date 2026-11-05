@@ -131,3 +131,18 @@ it('preserves the operational workflow for a standard account', async () => {
     'Ativo indica aprovação comercial.'
   );
 });
+
+it('preserves submitting a GoPure draft for approval without exposing operational completion actions', async () => {
+  await openPage('administrator', {
+    ...pending,
+    status: 'draft',
+    commercial_status: 'draft',
+    allowed_statuses: ['pending', 'canceled'],
+    approval: { can_approve: false },
+  });
+  expect(sidebarApproval()).toBeUndefined();
+  const actions = wrapper.findAll('aside button').map(button => button.text());
+  expect(actions).toContain('Pendente');
+  expect(actions).toContain('Cancelar pedido');
+  expect(actions).not.toContain('Em implantação');
+});
