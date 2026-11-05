@@ -209,6 +209,8 @@ export default {
             pipeline_id: pipelineId || undefined,
             owner_id: filters.owner_id || undefined,
             search: filters.search,
+            start_date: filters.start_date || undefined,
+            end_date: filters.end_date || undefined,
           }),
         ]);
         if (request !== state.kanbanRequest) return;

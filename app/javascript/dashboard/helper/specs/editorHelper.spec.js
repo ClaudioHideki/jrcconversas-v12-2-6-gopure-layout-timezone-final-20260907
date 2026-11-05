@@ -525,6 +525,14 @@ describe('collapseSelection', () => {
 });
 
 describe('insertAtCursor', () => {
+  it('inserts an emoji into the draft without losing the text before or after the cursor', () => {
+    const view = new EditorView(document.body, {
+      state: createEditorState('Olá cliente'),
+    });
+    insertAtCursor(view, schema.text('😊'), 5);
+    expect(view.state.doc.textContent).toBe('Olá 😊cliente');
+    view.destroy();
+  });
   it('should return undefined if editorView is not provided', () => {
     const result = insertAtCursor(undefined, schema.text('Hello'), 0);
     expect(result).toBeUndefined();

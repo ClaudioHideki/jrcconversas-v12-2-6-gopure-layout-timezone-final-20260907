@@ -96,6 +96,10 @@ jobs:
           spec/requests/api/v1/accounts/contacts_pagination_spec.rb
           spec/controllers/api_controller_spec.rb
           spec/controllers/super_admin/accounts_controller_spec.rb
+          spec/controllers/api/v1/accounts/conversations/direct_uploads_controller_spec.rb
+          spec/services/whatsapp/send_on_whatsapp_service_spec.rb
+          spec/services/whatsapp/providers/whatsapp_cloud_service_spec.rb
+          spec/services/whatsapp/providers/whatsapp360_dialog_service_spec.rb
       - name: Testar janela WhatsApp de 24 horas e templates
         run: |
           ruby scripts/qa/whatsapp24h/services_test.rb
@@ -109,6 +113,17 @@ jobs:
           pnpm exec vitest run
           app/javascript/dashboard/routes/dashboard/crm/views/proposals/spec
           app/javascript/dashboard/api/crm/spec/proposals.spec.js
+          --maxWorkers=1 --minWorkers=1
+      - name: Testar indicadores, pedidos, anexos e áudio
+        run: >-
+          pnpm exec vitest run
+          app/javascript/dashboard/routes/dashboard/crm/views/orders/spec
+          app/javascript/dashboard/components/widgets/WootWriter/spec
+          app/javascript/dashboard/routes/dashboard/crm/components/shared/spec/CommercialMetricFilters.spec.js
+          app/javascript/dashboard/helper/specs/editorHelper.spec.js
+          app/javascript/dashboard/store/crm/specs/funnel.spec.js
+          app/javascript/dashboard/routes/dashboard/crm/components/kanban/specs/DealsFunnelKanban.spec.js
+          app/javascript/dashboard/routes/dashboard/crm/views/spec/CommercialViews.spec.js
           --maxWorkers=1 --minWorkers=1
       - name: Testar criação oficial e Cadastro Mestre
         run: >-

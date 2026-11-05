@@ -5,8 +5,7 @@ module Api
         class DashboardsController < BaseController
           def show
             JrcCrm::DefaultPipelineService.new(crm_scope).perform unless crm_scope.jrc_crm_pipelines.exists?
-            start_date = params[:start_date] ? Date.parse(params[:start_date]) : 30.days.ago.to_date
-            end_date = params[:end_date] ? Date.parse(params[:end_date]) : Date.current
+            start_date, end_date = commercial_metric_dates
 
             metrics = crm_metrics(
               pipeline_id: params[:pipeline_id],

@@ -328,10 +328,11 @@ module JrcCrm
     end
 
     def reset_approvals!
+      commercial_required = JrcCrm::ProposalProfile.commercial_only?(self)
       update_columns(
         status: 'draft',
-        approval_status: 'not_required',
-        commercial_approval_status: 'not_required',
+        approval_status: commercial_required ? 'pending' : 'not_required',
+        commercial_approval_status: commercial_required ? 'pending' : 'not_required',
         financial_approval_status: 'not_required',
         technical_approval_status: 'not_required',
         updated_at: Time.current

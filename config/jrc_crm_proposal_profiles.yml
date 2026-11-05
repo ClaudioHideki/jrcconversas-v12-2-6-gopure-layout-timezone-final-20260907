@@ -1,0 +1,7 @@
+shared:
+  gopure:
+    account_names:
+      - gopure
+    issuer_company_name: JRC NUTRITION COMÉRCIO IMPORTAÇÃO E EXPORTAÇÃO LTDA
+    issuer_tax_id: 52.247.628/0001-90
+    registration_verification: pending_official_document

@@ -36,6 +36,9 @@ module JrcCrm
 
       {
         id: @proposal.id,
+        commercial_profile: JrcCrm::ProposalProfile.commercial_only?(@proposal) ? 'gopure_v1' : nil,
+        commercial_approval_allowed: Current.account_user&.administrator? &&
+          (!JrcCrm::ProposalProfile.commercial_only?(@proposal) || @proposal.owner_id != Current.user&.id),
         proposal_number: @proposal.proposal_number,
         version_number: @proposal.version_number,
         title: @proposal.title,

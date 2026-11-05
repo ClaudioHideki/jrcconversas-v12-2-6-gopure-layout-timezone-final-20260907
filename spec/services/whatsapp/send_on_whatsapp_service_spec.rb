@@ -57,7 +57,7 @@ describe Whatsapp::SendOnWhatsappService do
       it 'calls channel.send_message when with in 24 hour limit' do
         # to handle the case of 24 hour window limit.
         create(:message, message_type: :incoming, content: 'test',
-                         conversation: conversation, account: conversation.account)
+                         conversation: conversation, account: conversation.account, sender: conversation.contact)
         message = create(:message, message_type: :outgoing, content: 'test',
                                    conversation: conversation, account: conversation.account)
 
@@ -74,7 +74,7 @@ describe Whatsapp::SendOnWhatsappService do
 
       it 'fails a free-form message without contacting the provider when outside the 24 hour limit' do
         create(:message, message_type: :incoming, content: 'test', created_at: 25.hours.ago,
-                         conversation: conversation, account: conversation.account)
+                         conversation: conversation, account: conversation.account, sender: conversation.contact)
         message = create(:message, message_type: :outgoing, content: 'test',
                                    conversation: conversation, account: conversation.account)
 
@@ -83,14 +83,12 @@ describe Whatsapp::SendOnWhatsappService do
         described_class.new(message: message).perform
 
         expect(message.reload.status).to eq('failed')
-        expect(message.external_error).to eq(I18n.t('errors.whatsapp.message_outside_messaging_window'))
+        expect(message.external_error).to start_with('WHATSAPP_WINDOW_CLOSED:')
         expect(a_request(:post, 'https://waba.360dialog.io/v1/messages')).not_to have_been_made
       end
 
       it 'marks message as failed when template name is blank' do
-        processor = instance_double(Whatsapp::TemplateProcessorService)
-        allow(Whatsapp::TemplateProcessorService).to receive(:new).and_return(processor)
-        allow(processor).to receive(:call).and_return([nil, nil, nil, nil])
+        expect(Whatsapp::TemplateProcessorService).not_to receive(:new)
 
         invalid_template_params = {
           name: '',
@@ -109,7 +107,8 @@ describe Whatsapp::SendOnWhatsappService do
         described_class.new(message: message).perform
 
         expect(message.reload.status).to eq('failed')
-        expect(message.reload.external_error).to eq('Template not found or invalid template name')
+        expect(message.reload.external_error).to start_with('TEMPLATE_NOT_AVAILABLE:')
+        expect(a_request(:post, 'https://waba.360dialog.io/v1/messages')).not_to have_been_made
       end
 
       it 'calls channel.send_template when after 24 hour limit' do
@@ -184,6 +183,10 @@ describe Whatsapp::SendOnWhatsappService do
       end
 
       it 'handles template with header parameters' do
+        templates = whatsapp_channel.message_templates.deep_dup
+        template = templates.find { |item| item['name'] == 'sample_shipping_confirmation' && item['language'] == 'en_US' }
+        template['components'].unshift({ 'type' => 'HEADER', 'format' => 'IMAGE' })
+        whatsapp_channel.update!(message_templates: templates)
         processed_params = {
           'body' => { '1' => '3' },
           'header' => { 'media_url' => 'https://example.com/image.jpg', 'media_type' => 'image' }
@@ -201,7 +204,7 @@ describe Whatsapp::SendOnWhatsappService do
         expect(message.reload.source_id).to eq('123456789')
       end
 
-      it 'handles empty processed_params gracefully' do
+      it 'rejects empty parameters when the approved template requires a body variable' do
         empty_template_params = {
           name: 'sample_shipping_confirmation',
           namespace: '23423423_2342423_324234234_2343224',
@@ -229,10 +232,17 @@ describe Whatsapp::SendOnWhatsappService do
           ).to_return(status: 200, body: success_response, headers: { 'content-type' => 'application/json' })
 
         described_class.new(message: message).perform
-        expect(message.reload.source_id).to eq('123456789')
+        expect(message.reload.status).to eq('failed')
+        expect(message.external_error).to start_with('INVALID_TEMPLATE_PARAMETERS:')
+        expect(message.source_id).to be_nil
+        expect(a_request(:post, 'https://waba.360dialog.io/v1/messages')).not_to have_been_made
       end
 
       it 'handles template with button parameters' do
+        templates = whatsapp_channel.message_templates.deep_dup
+        template = templates.find { |item| item['name'] == 'sample_shipping_confirmation' && item['language'] == 'en_US' }
+        template['components'] << { 'type' => 'BUTTONS', 'buttons' => [{ 'type' => 'URL', 'text' => 'Track', 'url' => 'https://track.example.com/{{1}}' }] }
+        whatsapp_channel.update!(message_templates: templates)
         processed_params = {
           'body' => { '1' => '3' },
           'buttons' => [{ 'type' => 'url', 'parameter' => 'https://track.example.com/123' }]
@@ -250,7 +260,7 @@ describe Whatsapp::SendOnWhatsappService do
         expect(message.reload.source_id).to eq('123456789')
       end
 
-      it 'processes template parameters correctly via integration' do
+      it 'drops parameters not defined by the approved template before contacting the provider' do
         processed_params = {
           'body' => { '1' => '5' },
           'footer' => { 'text' => 'Thank you' }
@@ -258,10 +268,7 @@ describe Whatsapp::SendOnWhatsappService do
         complex_template_params = build_sample_template_params(processed_params)
         message = create_message_with_template('', complex_template_params)
 
-        components = [
-          { type: 'body', parameters: [{ type: 'text', text: '5' }] },
-          { type: 'footer', parameters: [{ type: 'text', text: 'Thank you' }] }
-        ]
+        components = [{ type: 'body', parameters: [{ type: 'text', text: '5' }] }]
         stub_sample_template_request(components)
 
         expect { described_class.new(message: message).perform }.not_to raise_error
@@ -284,14 +291,10 @@ describe Whatsapp::SendOnWhatsappService do
         )
 
         expect { service.call }.not_to raise_error
-        name, namespace, language, processed_params = service.call
-        expect(name).to eq('non_existent_template')
-        expect(namespace).to eq('missing_namespace')
-        expect(language).to eq('en_US')
-        expect(processed_params).to be_nil
+        expect(service.call).to eq([nil, nil, nil, nil])
       end
 
-      it 'handles template with blank parameter values correctly' do
+      it 'rejects blank required parameters even when an extra parameter has a value' do
         processed_params = {
           'body' => { '1' => '', '2' => 'valid_value', '3' => nil },
           'header' => { 'media_url' => '', 'media_type' => 'image' }
@@ -303,7 +306,10 @@ describe Whatsapp::SendOnWhatsappService do
         stub_sample_template_request(components)
 
         described_class.new(message: message).perform
-        expect(message.reload.source_id).to eq('123456789')
+        expect(message.reload.status).to eq('failed')
+        expect(message.external_error).to start_with('INVALID_TEMPLATE_PARAMETERS:')
+        expect(message.source_id).to be_nil
+        expect(a_request(:post, 'https://waba.360dialog.io/v1/messages')).not_to have_been_made
       end
 
       it 'handles nil template_params gracefully' do

@@ -65,6 +65,13 @@ module Api
             JrcCrm::MetricsCalculatorService.new(account: crm_scope, actor: Current.user, **)
           end
 
+          def commercial_metric_dates
+            return [nil, nil] if params[:period] == 'all'
+
+            [params[:start_date].present? ? Date.iso8601(params[:start_date]) : 30.days.ago.to_date,
+             params[:end_date].present? ? Date.iso8601(params[:end_date]) : Date.current]
+          end
+
           def goal_progress(goal, user_id: crm_admin? ? nil : Current.user.id)
             JrcCrm::GoalProgressService.new(goal: goal, actor: Current.user, user_id: user_id)
           end

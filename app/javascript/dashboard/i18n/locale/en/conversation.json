@@ -248,6 +248,8 @@
       "TIP_AUDIORECORDER_PERMISSION": "Allow access to audio",
       "TIP_AUDIORECORDER_ERROR": "Could not open the audio",
       "AUDIO_CONVERSION_FAILED": "Audio conversion failed. Please try again.",
+      "AUDIO_PERMISSION_DENIED": "Permita o uso do microfone nas configurações do navegador para gravar áudio.",
+      "AUDIO_UNSUPPORTED": "Este navegador não permite gravar áudio. Use um navegador compatível em uma conexão segura ou anexe um arquivo de áudio.",
       "DRAG_DROP": "Drag and drop here to attach",
       "IMAGE_UPLOAD_SUCCESS": "Image uploaded successfully",
       "START_AUDIO_RECORDING": "Start audio recording",

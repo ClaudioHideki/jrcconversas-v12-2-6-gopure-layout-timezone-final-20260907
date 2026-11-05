@@ -8,10 +8,11 @@ module JrcCrm::CorporateProposalParameters
     render json: { business_units: units.includes(:operating_company).order(:name).map do |unit|
       {
         id: unit.id, name: [unit.operating_company&.name,
-                            unit.name].compact.join(' / '), company_id: unit.company_id
+                            unit.name].compact.join(' / '), company_id: unit.company_id,
+        proposal_defaults: JrcCrm::ProposalProfile.defaults(crm_scope, unit: unit)
       }
     end,
-                   unit_required: !allowed_ids.nil? }
+                   unit_required: !allowed_ids.nil?, proposal_defaults: JrcCrm::ProposalProfile.defaults(crm_scope) }
   end
 
   private

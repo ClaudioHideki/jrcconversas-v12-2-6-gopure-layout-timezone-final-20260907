@@ -2,12 +2,17 @@
 /* eslint-disable vue/no-bare-strings-in-template */
 import ApprovalGateBadge from 'dashboard/routes/dashboard/approvals/ApprovalGateBadge.vue';
 import { computed, onMounted, ref, watch } from 'vue';
+import { useAdmin } from 'dashboard/composables/useAdmin';
+import { useI18n } from 'vue-i18n';
+import Dialog from 'dashboard/components-next/dialog/Dialog.vue';
 import { useRoute, useRouter } from 'vue-router';
 import { salesOrdersAPI } from 'dashboard/api/crm/commercialCycle';
 import { useAlert } from 'dashboard/composables';
 import { crmControlClasses } from '../../crmControlClasses';
 
 const route = useRoute();
+const { t } = useI18n();
+const { isAdmin } = useAdmin();
 const router = useRouter();
 const rows = ref([]);
 const loading = ref(false);
@@ -22,6 +27,50 @@ const view = ref('list');
 const page = ref(1);
 const perPage = ref(10);
 const selectedIds = ref([]);
+const selectedOnly = ref(false);
+const removalRows = ref([]);
+const removalDialog = ref(null);
+const removalReason = ref('');
+const removalConfirmed = ref(false);
+const removing = ref(false);
+const removalError = ref('');
+const requestRemoval = orders => {
+  removalRows.value = orders;
+  removalReason.value = '';
+  removalConfirmed.value = false;
+  removalError.value = '';
+  removalDialog.value.open();
+};
+const removeOrders = async () => {
+  if (
+    removing.value ||
+    !removalReason.value.trim() ||
+    !removalConfirmed.value ||
+    !isAdmin.value
+  )
+    return;
+  const accountId = route.params.accountId;
+  removing.value = true;
+  removalError.value = '';
+  try {
+    const ids = removalRows.value.map(row => row.id);
+    await salesOrdersAPI.remove({
+      ids,
+      reason: removalReason.value,
+      confirmed: removalConfirmed.value,
+    });
+    if (route.params.accountId !== accountId) return;
+    rows.value = rows.value.filter(row => !ids.includes(row.id));
+    selectedIds.value = selectedIds.value.filter(id => !ids.includes(id));
+    removalRows.value = [];
+    removalDialog.value.close();
+  } catch (error) {
+    removalError.value =
+      error.response?.data?.errors?.join(' ') || t('CRM.ORDERS.REMOVE_ERROR');
+  } finally {
+    removing.value = false;
+  }
+};
 const editingItems = ref(false);
 const draftItems = ref([]);
 
@@ -99,6 +148,7 @@ const periodMatch = row => {
 const filtered = computed(() =>
   rows.value.filter(
     row =>
+      (!selectedOnly.value || selectedIds.value.includes(row.id)) &&
       periodMatch(row) &&
       (statusFilter.value === 'all' || row.status === statusFilter.value) &&
       (ownerFilter.value === 'all' ||
@@ -121,7 +171,15 @@ const pageCount = computed(() =>
   Math.max(1, Math.ceil(filtered.value.length / perPage.value))
 );
 watch(
-  [search, statusFilter, ownerFilter, customerFilter, periodFilter, perPage],
+  [
+    search,
+    statusFilter,
+    ownerFilter,
+    customerFilter,
+    periodFilter,
+    perPage,
+    selectedOnly,
+  ],
   () => {
     page.value = 1;
   }
@@ -300,10 +358,15 @@ const open = async row => {
   }
 };
 const load = async () => {
+  const accountId = route.params.accountId;
   loading.value = true;
   try {
     const response = await salesOrdersAPI.list();
+    if (route.params.accountId !== accountId) return;
     rows.value = response.data || [];
+    selectedIds.value = selectedIds.value.filter(id =>
+      rows.value.some(row => row.id === id)
+    );
     const q = route.query.orderId;
     if (q) {
       const row = rows.value.find(x => String(x.id) === String(q));
@@ -454,6 +517,17 @@ const togglePage = () => {
     ];
 };
 onMounted(load);
+watch(
+  () => route.params.accountId,
+  () => {
+    rows.value = [];
+    selectedIds.value = [];
+    selected.value = null;
+    selectedOnly.value = false;
+    removalRows.value = [];
+    load();
+  }
+);
 </script>
 
 <template>
@@ -476,6 +550,30 @@ onMounted(load);
       </div>
       <div class="flex flex-wrap gap-2">
         <button
+          type="button"
+          class="min-h-11 rounded-xl border border-solid border-n-weak bg-n-solid-2 px-4 py-2.5 text-n-slate-12"
+          :disabled="!selectedOnly && !selectedIds.length"
+          @click="selectedOnly = !selectedOnly"
+        >
+          {{
+            t(selectedOnly ? 'CRM.ORDERS.SHOW_ALL' : 'CRM.ORDERS.SHOW_SELECTED')
+          }}
+          ({{ selectedIds.length }})
+        </button>
+        <button
+          v-if="isAdmin"
+          type="button"
+          class="min-h-11 rounded-xl border border-solid border-n-ruby-6 bg-n-ruby-2 px-4 py-2.5 text-n-ruby-11 disabled:opacity-50"
+          :disabled="!selectedIds.length || selectedIds.length > 100"
+          @click="
+            requestRemoval(rows.filter(row => selectedIds.includes(row.id)))
+          "
+        >
+          <i class="i-lucide-trash-2 mr-2 inline-block size-4 align-middle" />{{
+            t('CRM.ORDERS.REMOVE_SELECTED')
+          }}
+        </button>
+        <button
           class="rounded-xl border bg-n-solid-2 px-4 py-2.5 font-semibold"
           @click="exportCsv"
         >
@@ -494,6 +592,47 @@ onMounted(load);
         </button>
       </div>
     </header>
+    <Dialog
+      ref="removalDialog"
+      :title="t('CRM.ORDERS.REMOVE_SELECTED')"
+      :description="t('CRM.ORDERS.REMOVAL_HELP')"
+      :confirm-button-label="t('CRM.ORDERS.CONFIRM_REMOVE')"
+      :disable-confirm-button="
+        !removalConfirmed || !removalReason.trim() || removing
+      "
+      :dismissible="!removing"
+      :is-loading="removing"
+      @confirm="removeOrders"
+    >
+      <ul class="max-h-48 overflow-auto text-sm text-n-slate-12">
+        <li v-for="row in removalRows" :key="row.id" class="py-1">
+          {{ row.order_number }} — {{ customerName(row) }} —
+          {{ money(row.total_cents) }}
+        </li>
+      </ul>
+      <label class="mt-4 block text-sm text-n-slate-12"
+        >{{ t('CRM.ORDERS.REASON') }}
+        <textarea
+          v-model="removalReason"
+          name="removal_reason"
+          required
+          rows="3"
+          class="mt-2 w-full rounded-lg border border-n-weak bg-n-solid-2 p-3"
+        />
+      </label>
+      <label class="mt-4 flex items-start gap-2 text-sm text-n-slate-12">
+        <input
+          v-model="removalConfirmed"
+          name="removal_confirmed"
+          type="checkbox"
+          required
+          class="mt-1"
+        />{{ t('CRM.ORDERS.CONFIRMATION') }}
+      </label>
+      <p v-if="removalError" role="alert" class="mt-3 text-sm text-n-ruby-11">
+        {{ removalError }}
+      </p>
+    </Dialog>
 
     <section class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
       <article
@@ -844,6 +983,16 @@ onMounted(load);
                       @click.stop="downloadPdf(row, $event)"
                     >
                       <i class="i-lucide-file-down size-4" />
+                    </button>
+                    <button
+                      v-if="isAdmin"
+                      type="button"
+                      class="ml-2 rounded-lg border border-n-ruby-7 p-2 text-n-ruby-11"
+                      :title="t('CRM.ORDERS.REMOVE')"
+                      :aria-label="t('CRM.ORDERS.REMOVE')"
+                      @click.stop="requestRemoval([row])"
+                    >
+                      <i class="i-lucide-trash-2 size-4" />
                     </button>
                   </td>
                 </tr>

@@ -2,6 +2,8 @@
 /* eslint-disable vue/no-bare-strings-in-template, @intlify/vue-i18n/no-raw-text */
 import { computed } from 'vue';
 import { useStore } from 'vuex';
+import { useAdmin } from 'dashboard/composables/useAdmin';
+import { useI18n } from 'vue-i18n';
 
 const props = defineProps({
   filters: { type: Object, required: true },
@@ -10,6 +12,8 @@ const props = defineProps({
 const emit = defineEmits(['update:filters', 'change']);
 
 const store = useStore();
+const { isAdmin } = useAdmin();
+const { t } = useI18n();
 
 const pipelines = computed(
   () => store.state.jrcCrm?.pipelines?.pipelines || []
@@ -33,6 +37,8 @@ const clearFilters = () => {
     status: 'open',
     overdueOnly: false,
     noNextActivity: false,
+    start_date: '',
+    end_date: '',
   };
   emit('change');
 };
@@ -69,7 +75,7 @@ const clearFilters = () => {
         </select>
       </div>
 
-      <div class="w-48">
+      <div v-if="isAdmin" class="w-48">
         <select
           v-model="localFilters.owner_id"
           class="h-10 w-full rounded-xl border border-n-weak bg-n-solid-2 px-3 text-sm"
@@ -81,6 +87,27 @@ const clearFilters = () => {
           </option>
         </select>
       </div>
+
+      <label class="text-xs text-n-slate-11"
+        >{{ t('CRM.METRICS.START') }}
+        <input
+          v-model="localFilters.start_date"
+          type="date"
+          :max="localFilters.end_date || undefined"
+          class="mt-1 block h-10 rounded-xl border border-n-weak bg-n-solid-2 px-3"
+          @change="onFilterChange"
+        />
+      </label>
+      <label class="text-xs text-n-slate-11"
+        >{{ t('CRM.METRICS.END') }}
+        <input
+          v-model="localFilters.end_date"
+          type="date"
+          :min="localFilters.start_date || undefined"
+          class="mt-1 block h-10 rounded-xl border border-n-weak bg-n-solid-2 px-3"
+          @change="onFilterChange"
+        />
+      </label>
 
       <div class="flex items-center gap-2">
         <label

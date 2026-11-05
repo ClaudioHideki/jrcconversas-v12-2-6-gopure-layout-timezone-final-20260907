@@ -282,38 +282,53 @@ describe Whatsapp::Providers::WhatsappCloudService do
 
   describe '#sync_templates' do
     context 'when called' do
-      it 'updated the message templates' do
-        stub_request(:get, 'https://graph.facebook.com/v14.0/123456789/message_templates?access_token=test_key')
-          .to_return(
-            { status: 200, headers: response_headers,
-              body: { data: [
-                { id: '123456789', name: 'test_template' }
-              ], paging: { next: 'https://graph.facebook.com/v14.0/123456789/message_templates?access_token=test_key' } }.to_json },
-            { status: 200, headers: response_headers,
-              body: { data: [
-                { id: '123456789', name: 'next_template' }
-              ], paging: { next: 'https://graph.facebook.com/v14.0/123456789/message_templates?access_token=test_key' } }.to_json },
-            { status: 200, headers: response_headers,
-              body: { data: [
-                { id: '123456789', name: 'last_template' }
-              ], paging: { prev: 'https://graph.facebook.com/v14.0/123456789/message_templates?access_token=test_key' } }.to_json }
-          )
+      it 'loads every cursor page using bearer authentication before replacing the catalog' do
+        url = 'https://graph.facebook.com/v14.0/123456789/message_templates'
+        headers = { 'Authorization' => 'Bearer test_key' }
+        stub_request(:get, url).with(query: { limit: 100 }, headers: headers)
+          .to_return(status: 200, headers: response_headers,
+                     body: { data: [{ id: '123456789', name: 'test_template' }],
+                             paging: { next: "#{url}?after=page_2", cursors: { after: 'page_2' } } }.to_json)
+        stub_request(:get, url).with(query: { limit: 100, after: 'page_2' }, headers: headers)
+          .to_return(status: 200, headers: response_headers,
+                     body: { data: [{ id: '123456789', name: 'next_template' }],
+                             paging: { next: "#{url}?after=page_3", cursors: { after: 'page_3' } } }.to_json)
+        stub_request(:get, url).with(query: { limit: 100, after: 'page_3' }, headers: headers)
+          .to_return(status: 200, headers: response_headers, body: { data: [{ id: '123456789', name: 'last_template' }] }.to_json)
 
-        timstamp = whatsapp_channel.reload.message_templates_last_updated
-        expect(subject.sync_templates).to be(true)
-        expect(whatsapp_channel.reload.message_templates.first).to eq({ id: '123456789', name: 'test_template' }.stringify_keys)
-        expect(whatsapp_channel.reload.message_templates.second).to eq({ id: '123456789', name: 'next_template' }.stringify_keys)
-        expect(whatsapp_channel.reload.message_templates.last).to eq({ id: '123456789', name: 'last_template' }.stringify_keys)
-        expect(whatsapp_channel.reload.message_templates_last_updated).not_to eq(timstamp)
+        previous_sync = whatsapp_channel.reload.message_templates_last_updated
+        result = service.sync_templates
+        expect(result.pluck('name')).to eq(%w[test_template next_template last_template])
+        expect(whatsapp_channel.reload.message_templates).to eq(result)
+        expect(whatsapp_channel.message_templates_last_updated).not_to eq(previous_sync)
+        expect(a_request(:get, url).with(query: { limit: 100 }, headers: headers)).to have_been_made.once
+        expect(a_request(:get, url).with(query: { limit: 100, after: 'page_2' }, headers: headers)).to have_been_made.once
+        expect(a_request(:get, url).with(query: { limit: 100, after: 'page_3' }, headers: headers)).to have_been_made.once
       end
 
-      it 'updates message_templates_last_updated even when template request fails' do
-        stub_request(:get, 'https://graph.facebook.com/v14.0/123456789/message_templates?access_token=test_key')
+      it 'preserves the catalog and last successful sync when the template request fails' do
+        stub_request(:get, 'https://graph.facebook.com/v14.0/123456789/message_templates')
+          .with(query: { limit: 100 }, headers: { 'Authorization' => 'Bearer test_key' })
           .to_return(status: 401)
 
-        timstamp = whatsapp_channel.reload.message_templates_last_updated
-        subject.sync_templates
-        expect(whatsapp_channel.reload.message_templates_last_updated).not_to eq(timstamp)
+        original = whatsapp_channel.reload.attributes.slice('message_templates', 'message_templates_last_updated')
+        expect { service.sync_templates }.to raise_error(Whatsapp::TemplateSyncService::Error)
+        expect(whatsapp_channel.reload.attributes.slice(*original.keys)).to eq(original)
+        settings = whatsapp_channel.provider_config.fetch(Whatsapp::TemplateCatalogService::SETTINGS_KEY)
+        expect(settings['last_attempt_at']).to be_present
+        expect(settings['last_error']).to be_present
+      end
+
+      it 'does not expose a partial catalog when a later page fails' do
+        url = 'https://graph.facebook.com/v14.0/123456789/message_templates'
+        stub_request(:get, url).with(query: { limit: 100 })
+          .to_return(status: 200, headers: response_headers,
+                     body: { data: [{ name: 'partial_template' }], paging: { next: "#{url}?after=next_page", cursors: { after: 'next_page' } } }.to_json)
+        stub_request(:get, url).with(query: { limit: 100, after: 'next_page' }).to_return(status: 503)
+        original = whatsapp_channel.reload.attributes.slice('message_templates', 'message_templates_last_updated')
+
+        expect { service.sync_templates }.to raise_error(Whatsapp::TemplateSyncService::Error)
+        expect(whatsapp_channel.reload.attributes.slice(*original.keys)).to eq(original)
       end
     end
   end

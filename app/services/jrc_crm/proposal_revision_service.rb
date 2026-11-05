@@ -42,6 +42,10 @@ class JrcCrm::ProposalRevisionService
     revised.assign_attributes(RESET_ATTRIBUTES.merge(version_number: number, owner_id: @actor.id,
                                                      title: "#{@proposal.title} - Versão #{number}", down_payment_cents: 0))
     revised.save!
+    if JrcCrm::ProposalProfile.gopure?(revised.account, unit: revised.business_unit)
+      revised.update!(approval_status: 'pending', commercial_approval_status: 'pending',
+                      financial_approval_status: 'not_required', technical_approval_status: 'not_required')
+    end
     @proposal.proposal_items.find_each do |item|
       revised.proposal_items.create!(item.attributes.except('id', 'proposal_id', 'created_at', 'updated_at'))
     end
@@ -52,7 +56,8 @@ class JrcCrm::ProposalRevisionService
 
   def record_lineage(revised)
     revised.events.create!(account_id: @proposal.account_id, user: @actor, event_type: 'duplicated',
-                           metadata: { relationship_origin: @proposal.relationship_origin, source_proposal_id: @proposal.id },
+                           metadata: { relationship_origin: @proposal.relationship_origin, source_proposal_id: @proposal.id,
+                                       commercial_profile: JrcCrm::ProposalProfile.gopure?(revised.account, unit: revised.business_unit) ? 'gopure_v1' : nil },
                            description: "Nova versão criada a partir da proposta #{@proposal.proposal_number}")
     @proposal.events.create!(account_id: @proposal.account_id, user: @actor, event_type: 'version_created',
                              description: "Criada a versão #{revised.version_number}", metadata: { new_proposal_id: revised.id })

@@ -17,6 +17,7 @@ module JrcCrm
       @order = @kind == :contract ? value(record, :sales_order) : (@kind == :order ? record : nil)
       @snapshot = CommercialFinancials.symbolize(value(@order, :snapshot, {}))
       @financials = CommercialFinancials.symbolize(record.financial_summary)
+      @gopure_proposal = @kind == :proposal && JrcCrm::ProposalProfile.gopure?(record.account, unit: value(record, :business_unit))
       @contact = @kind == :proposal ? value(record, :customer_contact) : value(record, :contact)
       @contact ||= value(@order, :contact)
     end
@@ -69,8 +70,8 @@ module JrcCrm
               ['Emissor informado', issuer]]
       rows << ['Contato', [value(@contact, :email), value(@contact, :phone_number)].compact.join(' | ')] if value(@contact, :email) || value(@contact, :phone_number)
       if @kind == :proposal
-        rows += [['Validade', date(value(@record, :valid_until))], ['Versão', value(@record, :version_number, 1).to_s],
-                 ['Vigência', "#{value(@record, :term_months)} meses"]]
+        rows += [['Validade', date(value(@record, :valid_until))], ['Versão', value(@record, :version_number, 1).to_s]]
+        rows << ['Vigência', "#{value(@record, :term_months)} meses"] unless @gopure_proposal && JrcCrm::ProposalProfile.commercial_only?(@record)
         rows << ['Documento do emissor', value(@record, :issuer_tax_id)] if present?(value(@record, :issuer_tax_id))
         rows << ['Unidade emissora', value(@record, :issuer_unit)] if present?(value(@record, :issuer_unit))
       else
@@ -78,7 +79,7 @@ module JrcCrm
         rows << ['Pedido de origem', value(@order, :order_number)] if @kind == :contract
         rows << ['Situação', value(@record, :status, 'A definir')]
       end
-      @layout.key_values(rows)
+      @layout.key_values(rows, compact: @gopure_proposal)
     end
 
     def item_records
@@ -99,7 +100,8 @@ module JrcCrm
         snap = CommercialFinancials.symbolize(raw[:snapshot] || {})
         normalized = if @kind == :proposal
                        CommercialFinancials.new(attributes: @financials, items: []).normalize_item(raw)
-                     else raw
+                     else
+                       raw
                      end
         name = raw[:name] || raw[:name_snapshot] || 'Item'
         description = raw[:description_snapshot] || snap[:description]
@@ -134,15 +136,17 @@ module JrcCrm
     def financial_terms
       f = @financials
       @layout.section('Resumo financeiro')
-      @layout.key_values([
+      rows = [
         ['Subtotal bruto dos itens', money(f[:subtotal_cents])], ['Desconto nos itens', money(f[:item_discount_cents])],
         ['Desconto comercial', money(f[:discount_cents])], ["Frete - #{SHIPPING.fetch(f[:shipping_mode], f[:shipping_mode].to_s)}", money(f[:shipping_cents])],
-        ['Impostos adicionados', money(f[:taxes_cents])], ['TOTAL INICIAL', money(f[:total_cents])],
-        ['Recorrência mensal equivalente', f[:has_monthly_fee] ? money(f[:monthly_cents]) : 'Nao contratada'],
+        ['Impostos adicionados', money(f[:taxes_cents])],
+        [@gopure_proposal && f[:monthly_cents].to_i.zero? ? 'Valor total da proposta' : 'TOTAL INICIAL', money(f[:total_cents])],
         ['Condição comercial', PAYMENTS.fetch(f[:payment_condition], f[:payment_condition].to_s)],
         ['Meio de pagamento', f[:payment_method] || 'A definir'], ['Entrada', money(f[:down_payment_cents])],
         ['Frete fora das parcelas', money(f[:upfront_shipping_cents])], ['Saldo após entrada', money(f[:balance_cents])]
-      ])
+      ]
+      rows << ['Recorrência mensal equivalente', f[:has_monthly_fee] ? money(f[:monthly_cents]) : 'Nao contratada'] unless @gopure_proposal
+      @layout.key_values(rows, compact: @gopure_proposal)
       if f[:surcharge_cents].to_i.positive?
         @layout.key_values([['Acréscimo registrado', money(f[:surcharge_cents])]])
       end
@@ -151,7 +155,7 @@ module JrcCrm
                     else
                       'A recorrencia futura e apresentada separadamente. Nos itens de cobranca mensal ou anual, o primeiro periodo compoe o total inicial. Valores anuais sao mostrados tambem pelo equivalente mensal.'
                     end
-      @layout.paragraph(explanation, size: 9, color: CommercialPdf::Layout::MUTED)
+      @layout.paragraph(explanation, size: 9, color: CommercialPdf::Layout::MUTED) if f[:monthly_cents].to_i.positive?
       if f[:payment_method].to_s == 'boleto'
         @layout.paragraph('Boleto identifica a condicao comercial. Este documento nao e um boleto bancario nem comprova sua emissao.', size: 9, color: CommercialPdf::Layout::MUTED)
       end
@@ -170,14 +174,17 @@ module JrcCrm
 
     def proposal_terms
       @layout.section('Condições comerciais')
-      @layout.key_values([
+      rows = [
         ['Dia de vencimento', value(@record, :billing_day, 'A definir')],
         ['Primeiro faturamento', "#{value(@record, :first_billing_days, 0)} dias, conforme contratacao"],
         ['Impostos nos valores dos itens', value(@record, :taxes_included) == false ? 'Nao inclusos' : 'Inclusos'],
-        ['Reajuste anual', value(@record, :annual_adjustment_index, 'A definir')],
-        ['Renovação', RENEWALS.fetch(value(@record, :renewal_type), 'A definir')],
-        ['Multa de cancelamento', "#{value(@record, :cancellation_penalty_percent, 0)}%"]
-      ])
+        ['Reajuste anual', value(@record, :annual_adjustment_index, 'A definir')]
+      ]
+      unless @gopure_proposal && JrcCrm::ProposalProfile.commercial_only?(@record)
+        rows += [['Renovação', RENEWALS.fetch(value(@record, :renewal_type), 'A definir')],
+                 ['Multa de cancelamento', "#{value(@record, :cancellation_penalty_percent, 0)}%"]]
+      end
+      @layout.key_values(rows, compact: @gopure_proposal)
       text_section('Observações comerciais', value(@record, :commercial_notes))
       text_section('Próximos passos', value(@record, :next_steps))
       if value(@record, :status) == 'accepted'

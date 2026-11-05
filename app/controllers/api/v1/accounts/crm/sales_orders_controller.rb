@@ -4,6 +4,7 @@ module Api::V1::Accounts::Crm
 
     def index
       orders = visible_to_current_user(crm_scope.jrc_crm_sales_orders)
+               .where("NOT (snapshot ? 'removal')")
                .includes(:contact, :owner, :deal, :proposal, :order_items, :business_unit)
                .order(created_at: :desc)
       render json: orders.map { |order| serialize(order) }
@@ -17,6 +18,19 @@ module Api::V1::Accounts::Crm
         history: JrcCrm::AuditEvent.where(account_id: crm_scope.id, resource_type: 'JrcCrm::SalesOrder', resource_id: @order.id)
           .order(created_at: :desc, id: :desc).limit(100).map { |event| { id: event.id, event_type: event.event_type, created_at: event.created_at, metadata: event.metadata } }
       )
+    end
+
+    def remove
+      ensure_crm_admin!
+      ids = Array(params[:ids]).map(&:to_s).uniq
+      unless params[:confirmed] == true && ids.any? && ids.length <= 100
+        return render json: { errors: ['Confirme explicitamente de 1 a 100 pedidos.'] }, status: :unprocessable_entity
+      end
+      orders = visible_to_current_user(crm_scope.jrc_crm_sales_orders).where(id: ids)
+      raise ActiveRecord::RecordNotFound unless orders.count == ids.length
+
+      JrcCrm::SalesOrderRemovalService.new(account: crm_scope, actor: Current.user, orders: orders, reason: params[:reason]).call
+      render json: { removed_ids: ids.map(&:to_i) }
     end
 
     def preview
@@ -71,6 +85,9 @@ module Api::V1::Accounts::Crm
 
     def update
       @order.with_lock do
+        if @order.snapshot['removal'].present? || params.dig(:sales_order, :snapshot)&.key?(:removal)
+          raise JrcCrm::CommercialFinancials::InvalidTerms, 'O registro de exclusão é auditável e não pode ser alterado por esta ação.'
+        end
         before_trace = order_trace(@order)
         attrs = order_params.to_h
         if attrs['status'].present? && attrs['status'] != @order.status && !allowed_order_statuses(@order).include?(attrs['status'])
@@ -165,7 +182,7 @@ module Api::V1::Accounts::Crm
         raise JrcCrm::CommercialFinancials::InvalidTerms, 'Origem Proposta/Negocio exige um negocio vinculado.'
       end
 
-      snapshot = order_snapshot.to_h.except('financials', 'financial_version', 'document_brand')
+      snapshot = order_snapshot.to_h.except('financials', 'financial_version', 'document_brand', 'removal')
       snapshot['company_name'] = crm_scope.name if snapshot['company_name'].blank?
       snapshot['document_brand'] = JrcCrm::DocumentBranding.name(crm_scope)
       snapshot['order_origin'] = order_origin

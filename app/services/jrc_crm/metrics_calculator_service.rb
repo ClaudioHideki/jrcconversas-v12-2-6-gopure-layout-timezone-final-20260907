@@ -7,8 +7,8 @@ module JrcCrm
 
       @pipeline_id = pipeline_id
       @owner_id = context.fetch(:owner_id, nil)
-      @start_date = start_date.beginning_of_day
-      @end_date = end_date.end_of_day
+      @start_date = start_date&.beginning_of_day
+      @end_date = end_date&.end_of_day
     end
 
     def call
@@ -35,24 +35,20 @@ module JrcCrm
     private
 
     def base_deals
-      deals = JrcCrm::CorporateCoverage.new(account: @account,
-                                            user: @actor).restrict(@account.jrc_crm_deals).where(created_at: @start_date..@end_date)
-      deals = deals.where(pipeline_id: @pipeline_id) if @pipeline_id.present?
-      deals = deals.where(owner_id: @owner_id) if @owner_id.present?
-      deals
+      metrics_scope(@account.jrc_crm_deals)
+    end
+
+    def metrics_scope(relation, owner_column: :owner_id)
+      JrcCrm::CommercialMetricsScope.call(account: @account, actor: @actor, relation: relation, owner_id: @owner_id,
+                                         owner_column: owner_column, pipeline_id: @pipeline_id, start_date: @start_date, end_date: @end_date)
     end
 
     def count_leads
-      leads = JrcCrm::CorporateCoverage.new(account: @account,
-                                            user: @actor).restrict(@account.jrc_crm_leads).where(created_at: @start_date..@end_date)
-      leads = leads.where(owner_id: @owner_id) if @owner_id.present?
-      leads.count
+      metrics_scope(@account.jrc_crm_leads).count
     end
 
     def count_new_leads
-      leads = JrcCrm::CorporateCoverage.new(account: @account, user: @actor).restrict(@account.jrc_crm_leads).where(status: 'new')
-      leads = leads.where(owner_id: @owner_id) if @owner_id.present?
-      leads.count
+      metrics_scope(@account.jrc_crm_leads).where(status: 'new').count
     end
 
     def count_open_deals
@@ -78,7 +74,7 @@ module JrcCrm
     def calculate_weighted_value
       # Weighted value = value * probability
       # Simplified via SQL sum
-      base_deals.where(status: 'open').joins(:stage).sum('jrc_crm_deals.value_cents * (jrc_crm_stages.probability / 100.0)').to_i
+      base_deals.where(status: 'open').joins(:stage).sum('jrc_crm_deals.value_cents * (jrc_crm_stages.probability / 100.0)').round
     end
 
     def calculate_conversion_rate
@@ -92,12 +88,11 @@ module JrcCrm
       won_count = count_won_deals
       return 0 if won_count.zero?
 
-      (calculate_won_revenue / won_count).to_i
+      Rational(calculate_won_revenue, won_count).round
     end
 
     def overdue_activities_count
-      activities = JrcCrm::CorporateCoverage.new(account: @account, user: @actor)
-                                            .restrict(@account.jrc_crm_activities).where(completed_at: nil).where(
+      activities = metrics_scope(@account.jrc_crm_activities, owner_column: :user_id).where(completed_at: nil).where(
                                               'due_at < ?', Time.current
                                             )
       activities = activities.where(user_id: @owner_id) if @owner_id.present?
@@ -109,17 +104,12 @@ module JrcCrm
     end
 
     def funnel_stages
-      pipeline = if @pipeline_id.present?
-                   @account.jrc_crm_pipelines.find_by(id: @pipeline_id)
-                 else
-                   @account.jrc_crm_pipelines.active.ordered.first
-                 end
-      return [] unless pipeline
-
-      counts = base_deals.where(pipeline_id: pipeline.id).group(:stage_id).count
-      values = base_deals.where(pipeline_id: pipeline.id).group(:stage_id).sum(:value_cents)
+      pipelines = @account.jrc_crm_pipelines.active
+      pipelines = pipelines.where(id: @pipeline_id) if @pipeline_id.present?
+      counts = base_deals.group(:stage_id).count
+      values = base_deals.group(:stage_id).sum(:value_cents)
       maximum = [counts.values.max.to_i, 1].max
-      pipeline.stages.active.ordered.map do |stage|
+      @account.jrc_crm_stages.where(pipeline_id: pipelines.select(:id)).active.ordered.map do |stage|
         {
           id: stage.id,
           name: stage.name,

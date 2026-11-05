@@ -1,5 +1,5 @@
 <script>
-import { ref } from 'vue';
+import { ref, useId } from 'vue';
 import { useUISettings } from 'dashboard/composables/useUISettings';
 import { useKeyboardEvents } from 'dashboard/composables/useKeyboardEvents';
 import FileUpload from 'vue-upload-component';
@@ -137,6 +137,11 @@ export default {
       useUISettings();
 
     const uploadRef = ref(false);
+    const attachmentInputId = `conversationAttachment-${props.conversationId}-${useId()}`;
+    const openAttachmentPicker = () => {
+      if (props.isEditorDisabled) return;
+      document.getElementById(attachmentInputId)?.click();
+    };
 
     const keyboardEvents = {
       '$mod+Alt+KeyA': {
@@ -144,14 +149,7 @@ export default {
           // Skip if editor is disabled (e.g., WhatsApp 24-hour window expired)
           if (props.isEditorDisabled) return;
 
-          // TODO: This is really hacky, we need to replace the file picker component with
-          // a custom one, where the logic and the component markup is isolated.
-          // Once we have the custom component, we can remove the hacky logic below.
-
-          const uploadTriggerButton = document.querySelector(
-            '#conversationAttachment'
-          );
-          if (uploadTriggerButton) uploadTriggerButton.click();
+          openAttachmentPicker();
         },
         allowOnFocusedInput: true,
       },
@@ -163,6 +161,8 @@ export default {
       setSignatureFlagForInbox,
       fetchSignatureFlagFromUISettings,
       uploadRef,
+      attachmentInputId,
+      openAttachmentPicker,
     };
   },
   computed: {
@@ -196,6 +196,12 @@ export default {
           FEATURE_FLAGS.VOICE_RECORDER
         ) && this.showAudioRecorder
         // !isSafari
+      );
+    },
+    canRecordAudio() {
+      return (
+        typeof window.MediaRecorder !== 'undefined' &&
+        Boolean(navigator.mediaDevices?.getUserMedia)
       );
     },
     showAudioPlayStopButton() {
@@ -282,16 +288,18 @@ export default {
         v-if="!isEditorDisabled"
         v-tooltip.top-end="$t('CONVERSATION.REPLYBOX.TIP_EMOJI_ICON')"
         icon="i-ph-smiley-sticker"
+        :aria-label="$t('CONVERSATION.REPLYBOX.TIP_EMOJI_ICON')"
         slate
         faded
         sm
         @click="toggleEmojiPicker"
+        @mousedown.prevent
       />
       <FileUpload
         v-if="showAttachButton"
         ref="uploadRef"
         v-tooltip.top-end="$t('CONVERSATION.REPLYBOX.TIP_ATTACH_ICON')"
-        input-id="conversationAttachment"
+        :input-id="attachmentInputId"
         :size="4096 * 4096"
         :accept="allowedFileTypes"
         :multiple="enableMultipleFileUpload"
@@ -307,15 +315,28 @@ export default {
           v-if="showAttachButton"
           v-tooltip.top-end="$t('CONVERSATION.REPLYBOX.TIP_ATTACH_ICON')"
           icon="i-ph-paperclip"
+          :aria-label="$t('CONVERSATION.REPLYBOX.TIP_ATTACH_ICON')"
           slate
           faded
           sm
+          @click.stop="openAttachmentPicker"
         />
       </FileUpload>
       <NextButton
         v-if="showAudioRecorderButton"
-        v-tooltip.top-end="$t('CONVERSATION.REPLYBOX.TIP_AUDIORECORDER_ICON')"
+        v-tooltip.top-end="
+          canRecordAudio
+            ? $t('CONVERSATION.REPLYBOX.TIP_AUDIORECORDER_ICON')
+            : $t('CONVERSATION.REPLYBOX.AUDIO_UNSUPPORTED')
+        "
         :icon="!isRecordingAudio ? 'i-ph-microphone' : 'i-ph-microphone-slash'"
+        :aria-label="$t('CONVERSATION.REPLYBOX.TIP_AUDIORECORDER_ICON')"
+        :disabled="!canRecordAudio"
+        :title="
+          !canRecordAudio
+            ? $t('CONVERSATION.REPLYBOX.AUDIO_UNSUPPORTED')
+            : undefined
+        "
         slate
         faded
         sm

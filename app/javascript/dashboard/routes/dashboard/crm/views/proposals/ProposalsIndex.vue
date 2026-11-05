@@ -162,6 +162,21 @@ const withoutMonthlyFee = computed({
     proposalForm.has_monthly_fee = !value;
   },
 });
+const simpleCommercialTerms = computed(
+  () => selectedProposal.value?.commercial_profile === 'gopure_v1'
+);
+const totalLabel = computed(() =>
+  t(
+    simpleCommercialTerms.value &&
+      Number(
+        selectedProposal.value?.recurring_monthly_cents ??
+          selectedProposal.value?.monthly_cents ??
+          0
+      ) === 0
+      ? 'CRM.FINANCIAL_LABELS.TOTAL_PROPOSAL'
+      : 'CRM.FINANCIAL_LABELS.FIRST_PERIOD'
+  )
+);
 const moneyInput = cents => (Number(cents || 0) / 100).toFixed(2);
 const installmentPreview = computed(() => {
   const values = selectedProposal.value?.installment_plan_cents || [];
@@ -374,6 +389,18 @@ const openForm = async () => {
       operatingUnits.value = options.data.business_units || [];
       if (!businessUnitId.value && operatingUnits.value.length === 1)
         businessUnitId.value = operatingUnits.value[0].id;
+      if (!restored) {
+        const unit = operatingUnits.value.find(
+          item => String(item.id) === String(businessUnitId.value)
+        );
+        const defaults =
+          unit?.proposal_defaults || options.data.proposal_defaults || {};
+        Object.keys(initialProposalForm).forEach(key => {
+          if (Object.hasOwn(defaults, key)) proposalForm[key] = defaults[key];
+        });
+        if (Object.hasOwn(defaults, 'monthly_cents'))
+          proposalForm.monthly = moneyInput(defaults.monthly_cents);
+      }
     }
     await loadProducts();
     showForm.value = true;
@@ -1644,7 +1671,7 @@ onMounted(async () => {
               />
             </div>
             <div>
-              <p class="text-xs text-n-slate-10">Total no primeiro mês</p>
+              <p class="text-xs text-n-slate-10">{{ totalLabel }}</p>
               <CrmValueDisplay
                 class="mt-1 font-bold text-n-teal-11"
                 :cents="selectedProposal.total_first_month_cents"
@@ -1761,6 +1788,7 @@ onMounted(async () => {
                     />
                   </label>
                   <label
+                    v-if="!simpleCommercialTerms"
                     class="flex items-center justify-between gap-3 rounded-xl border border-n-weak bg-n-alpha-2 p-3 text-sm font-medium text-n-slate-11 md:col-span-2"
                   >
                     <span
@@ -1778,7 +1806,7 @@ onMounted(async () => {
                     />
                   </label>
                   <label
-                    v-if="proposalForm.has_monthly_fee"
+                    v-if="simpleCommercialTerms || proposalForm.has_monthly_fee"
                     class="text-sm font-medium text-n-slate-11"
                   >
                     Mensalidade (R$)
@@ -1914,7 +1942,10 @@ onMounted(async () => {
                       class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
                     />
                   </label>
-                  <label class="text-sm font-medium text-n-slate-11">
+                  <label
+                    v-if="!simpleCommercialTerms"
+                    class="text-sm font-medium text-n-slate-11"
+                  >
                     Vigência (meses)
                     <input
                       v-model.number="proposalForm.term_months"
@@ -2018,7 +2049,10 @@ onMounted(async () => {
                       placeholder="IPCA"
                     />
                   </label>
-                  <label class="text-sm font-medium text-n-slate-11">
+                  <label
+                    v-if="!simpleCommercialTerms"
+                    class="text-sm font-medium text-n-slate-11"
+                  >
                     Renovação
                     <select
                       v-model="proposalForm.renewal_type"
@@ -2029,7 +2063,10 @@ onMounted(async () => {
                       <option value="none">Sem renovação</option>
                     </select>
                   </label>
-                  <label class="text-sm font-medium text-n-slate-11">
+                  <label
+                    v-if="!simpleCommercialTerms"
+                    class="text-sm font-medium text-n-slate-11"
+                  >
                     Multa de cancelamento (%)
                     <input
                       v-model.number="proposalForm.cancellation_penalty_percent"
@@ -2167,7 +2204,7 @@ onMounted(async () => {
                     <th class="px-4 py-3 text-right">Qtd</th>
                     <th class="px-4 py-3 text-right">Preço unitário</th>
                     <th class="px-4 py-3 text-right">Desconto</th>
-                    <th class="px-4 py-3 text-right">Total no primeiro mês</th>
+                    <th class="px-4 py-3 text-right">{{ totalLabel }}</th>
                     <th class="px-4 py-3" />
                   </tr>
                 </thead>
@@ -2336,7 +2373,7 @@ onMounted(async () => {
                 </p>
               </div>
               <div class="border-t border-n-weak pt-4">
-                <p class="text-xs text-n-slate-10">Total no primeiro mês</p>
+                <p class="text-xs text-n-slate-10">{{ totalLabel }}</p>
                 <CrmValueDisplay
                   class="mt-1 text-xl font-bold text-n-teal-11"
                   :cents="selectedProposal.total_first_month_cents"
@@ -2387,7 +2424,9 @@ onMounted(async () => {
                   { key: 'commercial', label: 'Comercial' },
                   { key: 'financial', label: 'Financeira' },
                   { key: 'technical', label: 'Técnica' },
-                ]"
+                ].filter(
+                  item => !simpleCommercialTerms || item.key === 'commercial'
+                )"
                 :key="approvalItem.key"
                 class="rounded-xl border border-n-weak p-3"
               >
@@ -2420,6 +2459,8 @@ onMounted(async () => {
                 <div
                   v-if="
                     isAdmin &&
+                    (!simpleCommercialTerms ||
+                      selectedProposal.commercial_approval_allowed) &&
                     selectedProposal.approval?.[approvalItem.key] === 'pending'
                   "
                   class="mt-3 flex gap-2"

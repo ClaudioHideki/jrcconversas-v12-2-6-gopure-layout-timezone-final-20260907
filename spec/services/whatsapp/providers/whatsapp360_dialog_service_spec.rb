@@ -10,13 +10,16 @@ describe Whatsapp::Providers::Whatsapp360DialogService do
 
   describe '#sync_templates' do
     context 'when called' do
-      it 'updates message_templates_last_updated even when template request fails' do
+      it 'preserves the catalog and last successful sync when the template request fails' do
         stub_request(:get, 'https://waba.360dialog.io/v1/configs/templates')
           .to_return(status: 401)
 
-        timstamp = whatsapp_channel.reload.message_templates_last_updated
-        subject.sync_templates
-        expect(whatsapp_channel.reload.message_templates_last_updated).not_to eq(timstamp)
+        original = whatsapp_channel.reload.attributes.slice('message_templates', 'message_templates_last_updated')
+        expect { service.sync_templates }.to raise_error(Whatsapp::TemplateSyncService::Error)
+        expect(whatsapp_channel.reload.attributes.slice(*original.keys)).to eq(original)
+        settings = whatsapp_channel.provider_config.fetch(Whatsapp::TemplateCatalogService::SETTINGS_KEY)
+        expect(settings['last_attempt_at']).to be_present
+        expect(settings['last_error']).to be_present
       end
     end
   end

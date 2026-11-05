@@ -98,6 +98,7 @@ module JrcCrm
 
     validate :lost_reason_required_when_lost
     validate :associations_belong_to_account
+    before_validation :synchronize_stage_outcome, if: :will_save_change_to_stage_id?
     after_save :ensure_primary_contact_link, if: :saved_change_to_contact_id?
     after_update_commit :dispatch_flow_stage_change, if: :saved_change_to_stage_id?
 
@@ -148,6 +149,24 @@ module JrcCrm
     validate :preserve_project_contact, if: :will_save_change_to_contact_id?
 
     private
+
+    def synchronize_stage_outcome
+      return unless stage && !archived?
+
+      if stage.is_won?
+        self.status = 'won'
+        self.won_at ||= Time.current
+        self.lost_at = nil
+      elsif stage.is_lost?
+        self.status = 'lost'
+        self.lost_at ||= Time.current
+        self.won_at = nil
+      elsif persisted? && !stage.is_terminal?
+        self.status = 'open'
+        self.won_at = self.lost_at = nil
+        self.lost_reason = self.lost_reason_note = nil
+      end
+    end
 
     def preserve_project_contact
       return unless persisted? && JrcOperations::Link.table_exists?

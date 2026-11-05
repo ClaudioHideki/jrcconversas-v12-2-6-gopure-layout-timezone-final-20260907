@@ -30,6 +30,7 @@ beforeEach(() => {
   });
   dealsAPI.list.mockResolvedValue({ data: [] });
   store = createStore({
+    getters: { getCurrentRole: () => 'administrator' },
     modules: {
       agents: {
         namespaced: true,

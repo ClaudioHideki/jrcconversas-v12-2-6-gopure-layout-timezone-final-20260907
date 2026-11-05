@@ -173,7 +173,11 @@ export default {
       const templates = this.$store.getters['inboxes/getWhatsAppTemplates'](
         this.inboxId
       );
-      return (this.whatsappWindow.isOfficial.value || !!(templates && templates.length)) && !this.isPrivate;
+      return (
+        (this.whatsappWindow.isOfficial.value ||
+          !!(templates && templates.length)) &&
+        !this.isPrivate
+      );
     },
     showContentTemplates() {
       return this.isATwilioWhatsAppChannel && !this.isPrivate;
@@ -454,7 +458,10 @@ export default {
     },
     isEditorDisabled() {
       if (this.whatsappWindow.isOfficial.value) {
-        return !this.isOnPrivateNote && !this.whatsappWindow.state.value.can_send_free_message;
+        return (
+          !this.isOnPrivateNote &&
+          !this.whatsappWindow.state.value.can_send_free_message
+        );
       }
       return (
         (this.isAWhatsAppChannel || this.isAPIInbox) &&
@@ -922,7 +929,8 @@ export default {
         const errorMessage =
           error?.response?.data?.error || this.$t('CONVERSATION.MESSAGE_ERROR');
         useAlert(errorMessage);
-        if (error?.response?.data?.code === 'WHATSAPP_WINDOW_CLOSED') this.whatsappWindow.refresh();
+        if (error?.response?.data?.code === 'WHATSAPP_WINDOW_CLOSED')
+          this.whatsappWindow.refresh();
         return false;
       }
     },
@@ -1048,9 +1056,13 @@ export default {
       };
       return file && this.onFileUpload(autoRecordedFile);
     },
-    onRecordError() {
-      this.toggleAudioRecorder();
-      useAlert(this.$t('CONVERSATION.REPLYBOX.AUDIO_CONVERSION_FAILED'));
+    onRecordError({ error } = {}) {
+      this.resetAudioRecorderInput();
+      let key = 'AUDIO_CONVERSION_FAILED';
+      if (error?.name === 'NotAllowedError') key = 'AUDIO_PERMISSION_DENIED';
+      if (error?.message === 'AUDIO_RECORDING_UNSUPPORTED')
+        key = 'AUDIO_UNSUPPORTED';
+      useAlert(this.$t(`CONVERSATION.REPLYBOX.${key}`));
     },
     toggleTyping(status) {
       const conversationId = this.currentChat.id;
@@ -1326,10 +1338,8 @@ export default {
           v-if="showEmojiPicker"
           v-on-clickaway="hideEmojiPicker"
           mode="emoji"
-          class="emoji-dialog"
-          :class="{
-            'emoji-dialog--expanded': isOnExpandedLayout,
-          }"
+          class="absolute start-0 z-50 max-w-full"
+          :class="isOnExpandedLayout ? 'bottom-0' : 'bottom-full mb-2'"
           @select="addIntoEditor($event.value)"
         />
         <ReplyEmailHead
@@ -1518,23 +1528,5 @@ export default {
 
 .reply-box__top {
   @apply relative py-0 px-3 -mt-px;
-}
-
-.emoji-dialog {
-  @apply top-[unset] -bottom-10 ltr:-left-80 ltr:right-[unset] rtl:left-[unset] rtl:-right-80;
-
-  &::before {
-    filter: drop-shadow(0px 4px 4px rgba(0, 0, 0, 0.08));
-    @apply ltr:-right-4 bottom-2 rtl:-left-4 ltr:rotate-[270deg] rtl:rotate-[90deg];
-  }
-}
-
-.emoji-dialog--expanded {
-  @apply left-[unset] bottom-0 absolute z-[100];
-
-  &::before {
-    transform: rotate(0deg);
-    @apply ltr:left-1 rtl:right-1 -bottom-2;
-  }
 }
 </style>

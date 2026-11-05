@@ -120,6 +120,12 @@ module JrcCrm
     def recalculate_proposal_totals
       return if proposal.destroyed? || proposal.marked_for_destruction?
 
+      if JrcCrm::ProposalProfile.commercial_only?(proposal)
+        items = proposal.proposal_items.reload
+        attributes = { has_monthly_fee: items.any?(&:recurring?) }
+        attributes.merge!(monthly_cents: 0, implementation_cents: 0) if items.empty?
+        proposal.update_columns(attributes)
+      end
       proposal.recalculate_totals!
     end
   end

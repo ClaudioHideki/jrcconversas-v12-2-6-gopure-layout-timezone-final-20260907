@@ -127,6 +127,10 @@ module Api
           def approve
             ensure_crm_admin!
             type = params[:approval_type].to_s
+            if JrcCrm::ProposalProfile.commercial_only?(@proposal)
+              raise Pundit::NotAuthorizedError if @proposal.owner_id == Current.user.id
+              raise ActionController::BadRequest, 'Somente aprovação comercial é aplicável.' unless type == 'commercial'
+            end
             column = {
               'commercial' => :commercial_approval_status,
               'financial' => :financial_approval_status,
@@ -393,6 +397,9 @@ module Api
           end
 
           def normalize_payment_attributes!(attributes)
+            if JrcCrm::ProposalProfile.commercial_only?(@proposal) && !@proposal.proposal_items.exists? && attributes.key?(:monthly_cents)
+              attributes[:has_monthly_fee] = attributes[:monthly_cents].to_i.positive?
+            end
             condition = attributes[:payment_condition].presence || @proposal.payment_condition
             case condition
             when 'cash'

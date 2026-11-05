@@ -667,6 +667,7 @@ Rails.application.routes.draw do
               end
             end
             resources :sales_orders, only: [:index, :show, :create, :update] do
+              post :remove, on: :collection
               post :preview, on: :collection
               get :selection_options, on: :collection
               member do

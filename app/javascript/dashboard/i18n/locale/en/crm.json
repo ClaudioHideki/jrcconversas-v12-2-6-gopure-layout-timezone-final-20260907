@@ -1,5 +1,34 @@
 {
   "CRM": {
+    "FINANCIAL_LABELS": {
+      "TOTAL_PROPOSAL": "Valor total da proposta",
+      "FIRST_PERIOD": "Total no primeiro mês"
+    },
+    "ORDERS": {
+      "SHOW_SELECTED": "Mostrar selecionados",
+      "SHOW_ALL": "Mostrar todos",
+      "REMOVE": "Excluir pedido",
+      "REMOVE_SELECTED": "Excluir selecionados",
+      "CONFIRM_REMOVE": "Confirmar exclusão lógica",
+      "REASON": "Motivo da exclusão",
+      "CONFIRMATION": "Confirmo a exclusão lógica dos pedidos identificados acima.",
+      "REMOVAL_HELP": "Os pedidos serão cancelados e ocultados da lista. Valores, registros e auditoria serão preservados. Pedidos vinculados a contratos, faturamento ou operações não podem ser excluídos por esta ação. Limite de 100 por confirmação.",
+      "REMOVE_ERROR": "Não foi possível excluir os pedidos. Confira os vínculos e suas permissões."
+    },
+    "METRICS": {
+      "FILTERS": "Filtros dos indicadores",
+      "OWNER": "Responsável",
+      "ALL_OWNERS": "Todos os responsáveis autorizados",
+      "PIPELINE": "Funil",
+      "ALL_PIPELINES": "Todos os funis",
+      "PERIOD": "Período de criação",
+      "ALL_TIME": "Todo o período",
+      "CUSTOM": "Selecionar datas",
+      "START": "Criados a partir de",
+      "END": "Criados até",
+      "APPLY": "Atualizar resultados",
+      "SCOPE_HELP": "O período considera a criação do negócio. Agentes veem seus próprios negócios; administradores veem o consolidado dentro do acesso autorizado. Use os mesmos filtros nas outras telas para comparar."
+    },
     "VERSIONS": {
       "DOCUMENT_CURRENT": "Visualizar proposta",
       "LOCKED": "Esta versão está bloqueada para preservar o histórico. Use Editar e criar nova versão.",

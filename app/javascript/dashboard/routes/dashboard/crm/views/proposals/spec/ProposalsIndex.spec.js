@@ -78,6 +78,21 @@ beforeEach(() => {
   vi.spyOn(window, 'open').mockImplementation(() => {});
 });
 
+it('simplifies new GoPure commercial terms without clearing saved notes', async () => {
+  proposal.commercial_profile = 'gopure_v1';
+  proposal.monthly_cents = 0;
+  await mountPage();
+  expect(wrapper.text()).not.toContain('Sem mensalidade');
+  expect(wrapper.text()).not.toContain('Vigência (meses)');
+  expect(wrapper.text()).not.toContain('Multa de cancelamento (%)');
+  expect(wrapper.text()).toContain('Mensalidade (R$)');
+  expect(wrapper.text()).toContain('Valor total da proposta');
+  const notes = wrapper
+    .findAll('textarea')
+    .find(input => input.element.value === 'Saved notes');
+  expect(notes).toBeDefined();
+});
+
 it('creates an editable version from the prominent action without saving over its source', async () => {
   const next = { ...proposal, id: 2, version_number: 4, title: 'Nova versão' };
   proposalsAPI.duplicate.mockResolvedValue({ data: next });

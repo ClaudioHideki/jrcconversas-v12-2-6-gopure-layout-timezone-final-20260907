@@ -12,6 +12,11 @@ module Api
             deals = deals.where(stage_id: params[:stage_id]) if params[:stage_id].present?
             deals = deals.where(owner_id: params[:owner_id]) if params[:owner_id].present?
             deals = deals.where(status: params[:status]) if params[:status].present?
+            if params[:start_date].present? || params[:end_date].present?
+              start_date, end_date = commercial_metric_dates
+              deals = JrcCrm::CommercialMetricsScope.call(account: crm_scope, actor: Current.user, relation: deals,
+                                                         start_date: start_date, end_date: end_date)
+            end
 
             if params[:conversation_id].present?
               deals = deals

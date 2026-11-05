@@ -5,6 +5,9 @@ module JrcCrm
     end
 
     def call
+      original = ProposalDocumentArchive.new(@record).blob
+      return original.download if original
+
       CommercialDocumentService.new(kind: :proposal, record: @record).call
     end
   end

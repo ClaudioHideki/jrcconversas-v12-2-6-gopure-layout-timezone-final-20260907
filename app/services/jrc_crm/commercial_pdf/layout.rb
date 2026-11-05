@@ -4,7 +4,7 @@ module JrcCrm
     # item descriptions; tables repeat their header across page boundaries.
     class Layout
       LEFT = 44.0
-      WIDTH = Document::WIDTH - LEFT * 2
+      WIDTH = Document::WIDTH - (LEFT * 2)
       BOTTOM = 76.0
       TOP = 722.0
       BLUE = [0.05, 0.27, 0.53].freeze
@@ -45,17 +45,17 @@ module JrcCrm
         @y -= 6
       end
 
-      def key_values(rows)
-        table(rows, widths: [205, WIDTH - 205], headers: nil)
+      def key_values(rows, compact: false)
+        table(rows, widths: [205, WIDTH - 205], headers: nil, compact: compact)
       end
 
-      def table(rows, widths:, headers:)
+      def table(rows, widths:, headers:, compact: false)
         @table_widths = widths
         @table_header = headers
         ensure_space(75)
         draw_header if headers
         rows.each_with_index do |row, index|
-          draw_row(row, widths: widths, stripe: index.odd?)
+          draw_row(row, widths: widths, stripe: index.odd?, compact: compact)
         end
         @table_header = nil
         @y -= 12
@@ -125,13 +125,13 @@ module JrcCrm
         @y -= height
       end
 
-      def draw_row(values, widths:, stripe:)
-        size, leading, padding = 9.2, 13.0, 14.0
+      def draw_row(values, widths:, stripe:, compact: false)
+        size, leading, padding = compact ? [9.2, 12.0, 8.0] : [9.2, 13.0, 14.0]
         lines = values.each_with_index.map do |value, i|
           FontMetrics.wrap(value.to_s, width: widths[i] - 14, size: size)
         end
         remaining = lines.map(&:length).max || 1
-        full_height = [remaining * leading + padding, 31].max
+        full_height = [(remaining * leading) + padding, compact ? 24 : 31].max
         fresh_height = TOP - BOTTOM - (@table_header ? 27 : 0)
         if full_height <= fresh_height && @y - full_height < BOTTOM
           new_page
@@ -146,13 +146,13 @@ module JrcCrm
             fit = ((@y - BOTTOM - padding) / leading).floor
           end
           count = [remaining, fit].min
-          height = [count * leading + padding, 31].max
+          height = [(count * leading) + padding, compact ? 24 : 31].max
           @page.fill_rect(LEFT, @y - height, WIDTH, height, stripe ? PALE : WHITE)
           x = LEFT
           values.each_index do |column|
             chunk = lines[column].slice(offset, count) || []
             chunk.each_with_index do |value, line|
-              @page.text(x + 7, @y - 15 - line * leading, value, size: size, color: TEXT)
+              @page.text(x + 7, @y - 15 - (line * leading), value, size: size, color: TEXT)
             end
             x += widths[column]
           end

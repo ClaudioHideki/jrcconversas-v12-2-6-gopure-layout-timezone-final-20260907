@@ -45,9 +45,15 @@ module JrcCrm
           commercial_approval_status: 'not_required',
           financial_approval_status: 'not_required',
           technical_approval_status: 'not_required'
-        }.merge(@attributes).merge(JrcCrm::CorporateIssuer.attributes(@business_unit)).merge(down_payment_cents: 0))
+        }.merge(JrcCrm::ProposalProfile.defaults(@account, unit: @business_unit))
+         .merge(@attributes).merge(JrcCrm::CorporateIssuer.attributes(@business_unit)).merge(down_payment_cents: 0))
 
         create_items!(proposal)
+        if JrcCrm::ProposalProfile.gopure?(@account, unit: @business_unit)
+          items = proposal.proposal_items.reload
+          enabled = items.any? ? items.any?(&:recurring?) : proposal.monthly_cents.to_i.positive?
+          proposal.update_columns(has_monthly_fee: enabled)
+        end
 
         proposal.update!(down_payment_cents: @attributes[:down_payment_cents]) if @attributes.key?(:down_payment_cents)
         proposal.reload
@@ -58,7 +64,8 @@ module JrcCrm
           proposal_id: proposal.id,
           event_type: 'created',
           user_id: @actor.id,
-          metadata: { relationship_origin: if @deal
+          metadata: { commercial_profile: JrcCrm::ProposalProfile.gopure?(@account, unit: @business_unit) ? 'gopure_v1' : nil,
+                      relationship_origin: if @deal
                                              @deal.metadata.to_h.slice('origin', 'relationship_assignment_id',
                                                                        'relationship_resource_type',
                                                                        'relationship_resource_id', 'source_contract_id',

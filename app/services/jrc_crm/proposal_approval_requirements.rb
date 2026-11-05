@@ -6,6 +6,7 @@ class JrcCrm::ProposalApprovalRequirements
   end
 
   def commercial?
+    return true if JrcCrm::ProposalProfile.commercial_only?(@proposal)
     general = @proposal.subtotal_cents.to_i.zero? ? 0.0 : (@proposal.discount_cents.to_f / @proposal.subtotal_cents.to_i) * 100
     general > 10 || @proposal.proposal_items.any? do |item|
       threshold = item.product&.discount_approval_percent.to_f
@@ -15,12 +16,14 @@ class JrcCrm::ProposalApprovalRequirements
   end
 
   def financial?
+    return false if JrcCrm::ProposalProfile.commercial_only?(@proposal)
     return false if @proposal.subtotal_cents.to_i.zero?
 
     (@proposal.total_discount_cents.to_f / @proposal.subtotal_cents.to_i) * 100 > 10
   end
 
   def technical?
+    return false if JrcCrm::ProposalProfile.commercial_only?(@proposal)
     @proposal.proposal_items.any? { |item| item.product&.requires_contract? || item.product&.technical_requirements.present? }
   end
 

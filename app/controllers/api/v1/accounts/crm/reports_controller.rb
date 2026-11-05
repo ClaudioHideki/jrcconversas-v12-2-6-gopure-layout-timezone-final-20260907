@@ -17,8 +17,7 @@ class Api::V1::Accounts::Crm::ReportsController < Api::V1::Accounts::Crm::BaseCo
   private
 
   def set_report_filters
-    @start_date = params[:start_date] ? Date.parse(params[:start_date]) : 30.days.ago.to_date
-    @end_date = params[:end_date] ? Date.parse(params[:end_date]) : Date.current
+    @start_date, @end_date = commercial_metric_dates
     @owner_id = crm_admin? ? params[:owner_id] : Current.user.id
   end
 
@@ -32,23 +31,20 @@ class Api::V1::Accounts::Crm::ReportsController < Api::V1::Accounts::Crm::BaseCo
   end
 
   def leads_scope
-    scope = corporate_records(:jrc_crm_leads).where(created_at: report_period)
-    @owner_id.present? ? scope.where(owner_id: @owner_id) : scope
+    report_scope(:jrc_crm_leads)
   end
 
   def deals_scope
-    scope = corporate_records(:jrc_crm_deals).where(created_at: report_period)
-    scope = scope.where(pipeline_id: params[:pipeline_id]) if params[:pipeline_id].present?
-    @owner_id.present? ? scope.where(owner_id: @owner_id) : scope
+    report_scope(:jrc_crm_deals)
   end
 
   def proposals_scope
-    scope = corporate_records(:jrc_crm_proposals).where(created_at: report_period)
+    scope = report_scope(:jrc_crm_proposals)
     @owner_id.present? ? scope.joins(:deal).where(jrc_crm_deals: { owner_id: @owner_id }) : scope
   end
 
   def activity_metrics
-    scope = corporate_records(:jrc_crm_activities).where(created_at: report_period)
+    scope = report_scope(:jrc_crm_activities, owner_column: :user_id)
     scope = scope.where(user_id: @owner_id) if @owner_id.present?
     { completed: scope.completed.count, pending: scope.pending.count, overdue: scope.overdue.count }
   end
@@ -76,7 +72,9 @@ class Api::V1::Accounts::Crm::ReportsController < Api::V1::Accounts::Crm::BaseCo
     totals.map { |name, count| { name: name, count: count } }.sort_by { |item| -item[:count] }
   end
 
-  def report_period
-    @start_date.beginning_of_day..@end_date.end_of_day
+  def report_scope(association, owner_column: :owner_id)
+    JrcCrm::CommercialMetricsScope.call(account: crm_scope, actor: Current.user, relation: crm_scope.public_send(association),
+                                       owner_id: @owner_id, owner_column: owner_column, pipeline_id: params[:pipeline_id],
+                                       start_date: @start_date, end_date: @end_date)
   end
 end

@@ -28,6 +28,7 @@ const isRecording = ref(false);
 const isPlaying = ref(false);
 const hasRecording = ref(false);
 const recordedAudioUrl = ref(null);
+let disposed = false;
 
 const formatTimeProgress = time => {
   const duration = intervalToDuration({ start: 0, end: time });
@@ -83,8 +84,10 @@ const initWaveSurfer = () => {
   });
 
   record.value.on('record-end', async blob => {
+    if (disposed) return;
     try {
       const audioBlob = await convertAudio(blob, props.audioRecordFormat);
+      if (disposed) return;
       // Use the converted blob's actual type, which may differ from the
       // requested format when the browser can't produce it (e.g. Safari falls
       // back to MP3 instead of OGG). This keeps the filename, content type, and
@@ -97,7 +100,8 @@ const initWaveSurfer = () => {
       });
       if (recordedAudioUrl.value) URL.revokeObjectURL(recordedAudioUrl.value);
       recordedAudioUrl.value = URL.createObjectURL(audioBlob);
-      wavesurfer.value.load(recordedAudioUrl.value);
+      await wavesurfer.value.load(recordedAudioUrl.value);
+      if (disposed) return;
       emit('finishRecord', {
         name: file.name,
         type: file.type,
@@ -109,7 +113,7 @@ const initWaveSurfer = () => {
     } catch (error) {
       isRecording.value = false;
       hasRecording.value = false;
-      emit('recordError', { error });
+      if (!disposed) emit('recordError', { error });
     }
   });
 
@@ -125,9 +129,19 @@ const stopRecording = () => {
   }
 };
 
-const startRecording = () => {
-  record.value.startRecording();
-  isRecording.value = true;
+const startRecording = async () => {
+  try {
+    await record.value.startRecording();
+    if (disposed) {
+      record.value.stopRecording();
+      record.value.stopMic();
+      return;
+    }
+    isRecording.value = true;
+  } catch (error) {
+    isRecording.value = false;
+    if (!disposed) emit('recordError', { error });
+  }
 };
 
 const playPause = () => {
@@ -138,11 +152,23 @@ const playPause = () => {
 };
 
 onMounted(() => {
-  initWaveSurfer();
-  startRecording();
+  if (
+    !navigator.mediaDevices?.getUserMedia ||
+    typeof MediaRecorder === 'undefined'
+  ) {
+    emit('recordError', { error: new Error('AUDIO_RECORDING_UNSUPPORTED') });
+    return;
+  }
+  try {
+    initWaveSurfer();
+    startRecording();
+  } catch (error) {
+    emit('recordError', { error });
+  }
 });
 
 onUnmounted(() => {
+  disposed = true;
   if (recordedAudioUrl.value) {
     URL.revokeObjectURL(recordedAudioUrl.value);
     recordedAudioUrl.value = null;
