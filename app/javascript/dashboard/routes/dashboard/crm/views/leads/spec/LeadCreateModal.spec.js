@@ -7,6 +7,9 @@ import { routeLocationKey } from 'vue-router';
 
 vi.mock('dashboard/api/crm', () => ({ leadsAPI: { create: vi.fn() } }));
 vi.mock('dashboard/composables', () => ({ useAlert: vi.fn() }));
+vi.mock('dashboard/composables/usePolicy', () => ({
+  usePolicy: () => ({ checkPermissions: () => true }),
+}));
 
 const mountForm = props =>
   mount(LeadCreateModal, {
@@ -18,11 +21,44 @@ const mountForm = props =>
         }),
       ],
       provide: { [routeLocationKey]: { params: { accountId: '1' } } },
-      stubs: { Teleport: true },
+      stubs: { Teleport: true, LeadContactCreateDialog: true },
     },
   });
 
 describe('Shared lead creation form', () => {
+  it('opens client creation below company search and links the saved contact without losing lead notes', async () => {
+    leadsAPI.create.mockResolvedValue({
+      status: 201,
+      data: { id: 23, contact_id: 42 },
+    });
+    const wrapper = mountForm();
+    await wrapper.get('[name="notes"]').setValue('Conservar acompanhamento');
+    await wrapper
+      .findAll('button')
+      .find(button => button.text() === 'Criar cliente')
+      .trigger('click');
+    const dialog = wrapper.findComponent({ name: 'LeadContactCreateDialog' });
+    dialog.vm.$emit('created', {
+      id: 42,
+      name: 'Pessoa QA',
+      email: 'pessoa@example.test',
+      phone_number: '+5511988887777',
+    });
+    await flushPromises();
+    expect(wrapper.get('[name="name"]').element.value).toBe('Pessoa QA');
+    expect(wrapper.get('[name="notes"]').element.value).toBe(
+      'Conservar acompanhamento'
+    );
+    expect(wrapper.get('[role="dialog"]').text()).toContain('Pessoa QA');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(leadsAPI.create).toHaveBeenCalledWith({
+      lead: expect.objectContaining({
+        contact_id: 42,
+        notes: 'Conservar acompanhamento',
+      }),
+    });
+  });
   it('prefills the selected Contact and posts the same contact ID', async () => {
     leadsAPI.create.mockResolvedValue({
       status: 201,

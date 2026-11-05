@@ -61,6 +61,29 @@ RSpec.describe 'Customer master API', type: :request do
     expect(response).to have_http_status(:unprocessable_entity)
   end
 
+  it 'creates the complete contact and company link atomically, preserving profile attributes and audit' do
+    account.disable_features!('companies')
+    company = account.master_companies.create!(name: 'Empresa de teste')
+    attributes = { city: 'São Paulo', country: 'Brazil', country_code: 'BR', description: 'Contato comercial',
+                   social_profiles: { linkedin: 'perfil-de-teste' } }
+    post "#{root}/contacts", headers: headers, params: { contact: { name: 'Pessoa de teste', email: 'pessoa@example.test',
+      company_id: company.id, additional_attributes: attributes, blocked: true } }, as: :json
+    expect(response).to have_http_status(:created)
+    contact = account.contacts.find(response.parsed_body.dig('payload', 'id'))
+    expect(contact.company_id).to eq(company.id)
+    expect(contact.additional_attributes).to include(attributes.deep_stringify_keys)
+    expect(contact.blocked).not_to be(true)
+    audit = JrcCrm::AuditEvent.find_by!(account: account, resource_type: 'Contact', resource_id: contact.id)
+    expect(audit.actor_id).to eq(admin.id)
+    expect(audit.to_value['additional_attributes']).to include(attributes.deep_stringify_keys)
+    post "#{root}/contacts", headers: headers, params: { contact: { name: 'Duplicado', email: contact.email,
+      company_id: company.id, additional_attributes: { city: 'Não substituir' } } }, as: :json
+    expect(response).to have_http_status(:conflict)
+    expect(response.parsed_body['code']).to eq('POSSIBLE_DUPLICATE')
+    expect(account.contacts.where(email: contact.email).count).to eq(1)
+    expect(contact.reload.additional_attributes['city']).to eq('São Paulo')
+  end
+
   it 'restricts merges to administrators' do
     agent = create(:user, account: account)
     base = create(:contact, account: account)

@@ -10,6 +10,7 @@ class Api::V1::Accounts::Crm::ReportsController < Api::V1::Accounts::Crm::BaseCo
       deals_by_status: group_count(deals_scope, :status),
       proposals_by_status: group_count(proposals_scope, :status),
       revenue_by_owner: revenue_by_owner,
+      revenue_basis: JrcCrm::ProposalProfile.gopure?(crm_scope) ? 'active_orders' : 'won_deals',
       activities: activity_metrics
     }
   end
@@ -39,8 +40,7 @@ class Api::V1::Accounts::Crm::ReportsController < Api::V1::Accounts::Crm::BaseCo
   end
 
   def proposals_scope
-    scope = report_scope(:jrc_crm_proposals)
-    @owner_id.present? ? scope.joins(:deal).where(jrc_crm_deals: { owner_id: @owner_id }) : scope
+    report_scope(:jrc_crm_proposals)
   end
 
   def activity_metrics
@@ -50,7 +50,13 @@ class Api::V1::Accounts::Crm::ReportsController < Api::V1::Accounts::Crm::BaseCo
   end
 
   def revenue_by_owner
-    totals = deals_scope.won_deals.group(:owner_id).sum(:value_cents)
+    totals = if JrcCrm::ProposalProfile.gopure?(crm_scope)
+               report_scope(:jrc_crm_sales_orders).where("NOT (snapshot ? 'removal')")
+                                                   .where(status: JrcCrm::SalesOrder::COMMERCIAL_ACTIVE_STATUSES)
+                                                   .group(:owner_id).sum(:total_cents)
+             else
+               deals_scope.won_deals.group(:owner_id).sum(:value_cents)
+             end
     items = User.where(id: totals.keys).pluck(:id, :name).map do |id, name|
       { owner_id: id, owner_name: name, value_cents: totals[id] }
     end

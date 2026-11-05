@@ -9,6 +9,7 @@ module JrcCrm::CorporateProposalParameters
       {
         id: unit.id, name: [unit.operating_company&.name,
                             unit.name].compact.join(' / '), company_id: unit.company_id,
+        issuer: JrcCrm::CorporateIssuer.attributes(unit),
         proposal_defaults: JrcCrm::ProposalProfile.defaults(crm_scope, unit: unit)
       }
     end,
@@ -25,7 +26,38 @@ module JrcCrm::CorporateProposalParameters
   end
 
   def corporate_proposal_attributes
-    proposal_params.to_h.symbolize_keys.merge(JrcCrm::CorporateIssuer.attributes(@proposal.business_unit))
+    attributes = proposal_params.to_h.symbolize_keys
+    references = attributes.slice(:business_unit_id, :company_id, :contact_id)
+    changed = references.any? { |key, value| value.to_s != @proposal.public_send(key).to_s }
+    if changed
+      unless @proposal.draft? && @proposal.sent_at.nil? && !@proposal.sales_orders.exists?
+        raise JrcCrm::CommercialFinancials::InvalidTerms, 'Crie uma nova versão antes de alterar empresa ou contato de um documento enviado.'
+      end
+      if attributes.key?(:company_id) || attributes.key?(:contact_id)
+        authorize :directory, :access?, policy_class: JrcCustomers::DirectoryPolicy
+        attributes[:company_id] = corporate_records(:master_companies).find(attributes[:company_id]).id if attributes[:company_id].present?
+        attributes[:contact_id] = corporate_records(:contacts).find(attributes[:contact_id]).id if attributes[:contact_id].present?
+      end
+    end
+    unit_changed = attributes.key?(:business_unit_id) && attributes[:business_unit_id].to_s != @proposal.business_unit_id.to_s
+    unit = @proposal.business_unit
+    unit = attributes[:business_unit_id].present? ? crm_scope.jrc_crm_business_units.active.find(attributes[:business_unit_id]) : nil if unit_changed
+    if unit_changed
+      authorize_operating_unit!(unit)
+      JrcCrm::CorporateIssuer.authorize!(account: crm_scope, user: Current.user, unit: unit)
+      if JrcCrm::ProposalProfile.gopure?(crm_scope, unit: unit) != JrcCrm::ProposalProfile.gopure?(crm_scope, unit: @proposal.business_unit)
+        raise JrcCrm::CommercialFinancials::InvalidTerms, 'Crie uma proposta separada para uma emissora com outro perfil comercial.'
+      end
+      if @proposal.deal && @proposal.deal.business_unit_id != unit&.id
+        raise JrcCrm::CommercialFinancials::InvalidTerms, 'A emissora deve corresponder à unidade do negócio.'
+      end
+      @proposal.proposal_items.includes(:product).each do |item|
+        if item.product&.business_unit_id && item.product.business_unit_id != unit&.id
+          raise JrcCrm::CommercialFinancials::InvalidTerms, 'Os produtos devem pertencer à emissora selecionada.'
+        end
+      end
+    end
+    attributes.merge(JrcCrm::CorporateIssuer.attributes(unit))
   end
 
   def build_corporate_proposal(deal, company, contact, unit, attributes)

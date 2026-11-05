@@ -1,13 +1,17 @@
 <script setup>
 /* eslint-disable vue/no-bare-strings-in-template, @intlify/vue-i18n/no-raw-text */
+import { useI18n } from 'vue-i18n';
+import { commercialSummaryCards } from '../../components/shared/commercialSummaryCards';
 import { computed, onMounted, ref } from 'vue';
 import { useStore } from 'vuex';
 import { pipelinesAPI, reportsAPI } from 'dashboard/api/crm';
 import { useAlert } from 'dashboard/composables';
 import { useAdmin } from 'dashboard/composables/useAdmin';
+import CommercialSummaryCards from '../../components/shared/CommercialSummaryCards.vue';
 import { useCrmMetrics } from '../../composables/useCrmMetrics';
 
 const store = useStore();
+const { t } = useI18n();
 const { isAdmin } = useAdmin();
 const { formatBRL } = useCrmMetrics();
 
@@ -44,51 +48,6 @@ const dateParameters = computed(() => {
     ].join('-');
   return { start_date: format(start), end_date: format(end) };
 });
-
-const metricCards = computed(() => [
-  {
-    label: 'Leads criados',
-    value: report.value.summary.total_leads || 0,
-    helper: 'No período selecionado',
-    icon: 'i-lucide-users-round',
-    accent: 'border-blue-200 bg-blue-50 text-blue-600',
-  },
-  {
-    label: 'Negócios abertos',
-    value: report.value.summary.open_deals || 0,
-    helper: 'Oportunidades em andamento',
-    icon: 'i-lucide-briefcase-business',
-    accent: 'border-violet-200 bg-violet-50 text-violet-600',
-  },
-  {
-    label: 'Valor no pipeline',
-    value: formatBRL(report.value.summary.pipeline_value_cents || 0),
-    helper: 'Soma dos negócios abertos',
-    icon: 'i-lucide-circle-dollar-sign',
-    accent: 'border-amber-200 bg-amber-50 text-amber-600',
-  },
-  {
-    label: 'Receita ganha',
-    value: formatBRL(report.value.summary.won_revenue_cents || 0),
-    helper: 'Negócios ganhos no período',
-    icon: 'i-lucide-trophy',
-    accent: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  },
-  {
-    label: 'Conversão',
-    value: `${report.value.summary.conversion_rate || 0}%`,
-    helper: 'Ganhos sobre negócios encerrados',
-    icon: 'i-lucide-percent',
-    accent: 'border-teal-200 bg-teal-50 text-teal-700',
-  },
-  {
-    label: 'Ticket médio',
-    value: formatBRL(report.value.summary.avg_ticket_cents || 0),
-    helper: 'Valor médio dos ganhos',
-    icon: 'i-lucide-receipt-text',
-    accent: 'border-rose-200 bg-rose-50 text-rose-600',
-  },
-]);
 
 const sourceTotal = computed(() =>
   report.value.leads_by_source.reduce(
@@ -171,7 +130,14 @@ const statusLabel = value => {
 const exportReport = () => {
   const rows = [
     ['Indicador', 'Valor'],
-    ...metricCards.value.map(item => [item.label, item.value]),
+    ...commercialSummaryCards(
+      report.value.summary.commercial_summary || {},
+      t,
+      formatBRL
+    ).flatMap(item => [
+      [t(`CRM.COMMERCIAL_SUMMARY.${item.key}`), item.value],
+      ...item.details,
+    ]),
   ];
   const csv = rows
     .map(row =>
@@ -340,33 +306,7 @@ onMounted(async () => {
       </div>
 
       <template v-else>
-        <section
-          class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6"
-        >
-          <article
-            v-for="metric in metricCards"
-            :key="metric.label"
-            class="rounded-2xl border border-n-weak bg-n-solid-2 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-          >
-            <div class="flex items-start justify-between gap-3">
-              <p class="text-xs font-semibold text-n-slate-11">
-                {{ metric.label }}
-              </p>
-              <span
-                class="grid size-10 place-content-center rounded-xl border"
-                :class="metric.accent"
-              >
-                <i class="size-4" :class="metric.icon" />
-              </span>
-            </div>
-            <p class="mt-3 truncate text-2xl font-bold text-n-slate-12">
-              {{ metric.value }}
-            </p>
-            <small class="mt-1 block min-h-8 text-n-slate-11">{{
-              metric.helper
-            }}</small>
-          </article>
-        </section>
+        <CommercialSummaryCards :summary="report.summary.commercial_summary" />
 
         <section class="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
           <article
@@ -582,7 +522,11 @@ onMounted(async () => {
                   Desempenho por vendedor
                 </h3>
                 <p class="mt-1 text-xs text-n-slate-11">
-                  Receita ganha por responsável no período selecionado.
+                  {{
+                    report.revenue_basis === 'active_orders'
+                      ? t('CRM.COMMERCIAL_SUMMARY.OWNER_REVENUE')
+                      : t('CRM.COMMERCIAL_SUMMARY.OWNER_WON')
+                  }}
                 </p>
               </div>
               <span

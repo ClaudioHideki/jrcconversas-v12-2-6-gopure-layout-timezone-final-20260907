@@ -3,6 +3,7 @@
 import { computed } from 'vue';
 import CommercialMetricFilters from '../../components/shared/CommercialMetricFilters.vue';
 import { useStore } from 'vuex';
+import CommercialSummaryCards from '../../components/shared/CommercialSummaryCards.vue';
 import { useCrmMetrics } from '../../composables/useCrmMetrics';
 
 const store = useStore();
@@ -18,7 +19,6 @@ const weightedValue = computed(() =>
   Number(metrics.value.weighted_value_cents || 0)
 );
 const wonRevenue = computed(() => Number(metrics.value.won_revenue_cents || 0));
-const conversion = computed(() => Number(metrics.value.conversion_rate || 0));
 const maxStageCount = computed(() =>
   Math.max(...stages.value.map(stage => Number(stage.deals_count || 0)), 1)
 );
@@ -28,51 +28,6 @@ const totalFunnelDeals = computed(() =>
 const totalFunnelValue = computed(() =>
   stages.value.reduce((sum, stage) => sum + Number(stage.value_cents || 0), 0)
 );
-
-const cards = computed(() => [
-  {
-    label: 'Leads novos',
-    value: metrics.value.new_leads_count ?? metrics.value.leads_count ?? 0,
-    helper: 'Base comercial atual',
-    icon: 'i-lucide-users-round',
-    accent: 'border-blue-200 bg-blue-50 text-blue-600',
-  },
-  {
-    label: 'Pipeline aberto',
-    value: formatBRL(pipelineValue.value),
-    helper: `${metrics.value.open_deals_count || 0} negócios em andamento`,
-    icon: 'i-lucide-circle-dollar-sign',
-    accent: 'border-violet-200 bg-violet-50 text-violet-600',
-  },
-  {
-    label: 'Receita prevista',
-    value: formatBRL(weightedValue.value),
-    helper: 'Negócios abertos ponderados pela etapa',
-    icon: 'i-lucide-crosshair',
-    accent: 'border-cyan-200 bg-cyan-50 text-cyan-700',
-  },
-  {
-    label: 'Receita ganha',
-    value: formatBRL(wonRevenue.value),
-    helper: `${metrics.value.closed_won_count || 0} negócios ganhos`,
-    icon: 'i-lucide-trophy',
-    accent: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  },
-  {
-    label: 'Conversão',
-    value: `${conversion.value.toLocaleString('pt-BR')}%`,
-    helper: 'Taxa de negócios encerrados',
-    icon: 'i-lucide-chart-no-axes-combined',
-    accent: 'border-orange-200 bg-orange-50 text-orange-600',
-  },
-  {
-    label: 'Ticket médio',
-    value: formatBRL(metrics.value.average_ticket_cents || 0),
-    helper: 'Valor médio dos negócios ganhos',
-    icon: 'i-lucide-receipt-text',
-    accent: 'border-rose-200 bg-rose-50 text-rose-600',
-  },
-]);
 
 const stagePalette = [
   'from-blue-600 to-blue-500',
@@ -152,34 +107,7 @@ const loadMetrics = filters =>
       </div>
 
       <template v-else>
-        <section
-          class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6"
-        >
-          <article
-            v-for="card in cards"
-            :key="card.label"
-            class="group rounded-2xl border border-n-weak bg-n-solid-2 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-          >
-            <div class="flex items-start justify-between gap-3">
-              <span class="text-xs font-semibold text-n-slate-11">{{
-                card.label
-              }}</span>
-              <span
-                class="grid size-10 place-content-center rounded-xl border"
-                :class="card.accent"
-              >
-                <i class="size-4" :class="card.icon" />
-              </span>
-            </div>
-            <strong
-              class="mt-3 block truncate text-2xl font-bold text-n-slate-12"
-              >{{ card.value }}</strong
-            >
-            <small class="mt-1 block min-h-8 text-n-slate-11">{{
-              card.helper
-            }}</small>
-          </article>
-        </section>
+        <CommercialSummaryCards :summary="metrics.commercial_summary" />
 
         <section class="grid gap-5 xl:grid-cols-[1.12fr_.88fr]">
           <article
@@ -392,7 +320,7 @@ const loadMetrics = filters =>
                 class="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4"
               >
                 <span class="text-xs font-semibold text-emerald-700"
-                  >Receita ganha</span
+                  >Valor dos negócios ganhos</span
                 ><strong class="mt-2 block text-xl text-n-slate-12">{{
                   formatBRL(wonRevenue)
                 }}</strong>

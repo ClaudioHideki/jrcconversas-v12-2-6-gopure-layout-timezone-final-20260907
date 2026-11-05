@@ -62,7 +62,8 @@ module JrcCrm
         @proposal.events.create!(
           account_id: @proposal.account_id,
           event_type: 'accepted',
-          description: 'Proposta aceita pelo cliente com evidência digital'
+          description: 'Proposta aceita pelo cliente com evidência digital',
+          metadata: { acceptance_origin: 'public_link' }
         )
       end
       JrcCrm::AcceptedProposalLifecycleService.new(proposal: @proposal.reload, actor: @proposal.owner).call

@@ -103,7 +103,18 @@ class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
   def create
     ActiveRecord::Base.transaction do
       @contact = Current.account.contacts.new(permitted_params.except(:avatar_url))
+      if Current.account.feature_enabled?('jrc_customer_master') && params[:company_id].present?
+        authorize :directory, :access?, policy_class: JrcCustomers::DirectoryPolicy
+        companies = JrcCrm::CorporateCoverage.new(account: Current.account, user: Current.user).companies(Current.account.master_companies)
+        company = companies.find(params[:company_id])
+        @contact.company_id = company.id
+        @contact.additional_attributes = @contact.additional_attributes.merge('company_name' => company.name)
+      end
       @contact.save!
+      if @contact.company_id && Current.account.feature_enabled?('jrc_customer_master')
+        JrcCustomers::Audit.record!(account: Current.account, actor: Current.user, resource: @contact,
+                                    event_type: 'customer_contact_linked', to_value: { company_id: @contact.company_id })
+      end
       @contact_inbox = build_contact_inbox
       process_avatar_from_url
     end

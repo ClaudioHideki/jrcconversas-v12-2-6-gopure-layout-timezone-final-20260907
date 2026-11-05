@@ -1,5 +1,6 @@
 <script setup>
 /* eslint-disable vue/no-bare-strings-in-template */
+import { calculateOrderMetrics } from './orderMetrics';
 import ApprovalGateBadge from 'dashboard/routes/dashboard/approvals/ApprovalGateBadge.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useAdmin } from 'dashboard/composables/useAdmin';
@@ -15,6 +16,7 @@ const { t } = useI18n();
 const { isAdmin } = useAdmin();
 const router = useRouter();
 const rows = ref([]);
+const listCommercialFlow = ref(null);
 const loading = ref(false);
 const selected = ref(null);
 const approvalDialog = ref(null);
@@ -167,13 +169,13 @@ const originLabel = origin =>
   '—';
 const customerName = row =>
   row.contact?.name || row.snapshot?.customer_name || 'Cliente não informado';
-const orderDate = row => row.sold_at || row.created_at;
-const active = row => row.status !== 'canceled';
+const orderDate = row => row.created_at;
 const orderStatus = row => row.commercial_status || row.status;
-const simpleListFlow = computed(
-  () =>
-    rows.value.length > 0 &&
-    rows.value.every(row => row.commercial_flow === 'simple')
+const simpleListFlow = computed(() =>
+  listCommercialFlow.value
+    ? listCommercialFlow.value === 'simple'
+    : rows.value.length > 0 &&
+      rows.value.every(row => row.commercial_flow === 'simple')
 );
 const kanbanStages = computed(() =>
   simpleListFlow.value
@@ -296,47 +298,7 @@ const previousPeriodRows = computed(() => {
     );
   });
 });
-const totals = computed(() => {
-  const rs = kpiRows.value;
-  const live = rs.filter(active);
-  const total = live.reduce(
-    (sum, row) => sum + Number(row.total_cents || 0),
-    0
-  );
-  const mrr = live.reduce(
-    (sum, row) => sum + Number(row.monthly_cents || 0),
-    0
-  );
-  return {
-    count: rs.length,
-    total,
-    mrr,
-    approval: rs.filter(r => r.status === 'pending').length,
-    implementation: rs.filter(
-      r =>
-        (r.commercial_flow !== 'simple' && r.status === 'approved') ||
-        ['separating', 'invoiced', 'shipped'].includes(r.status)
-    ).length,
-    active: rs.filter(r => ['active', 'completed'].includes(orderStatus(r)))
-      .length,
-    ticket: live.length ? Math.round(total / live.length) : 0,
-    conversion: rs.length
-      ? Math.round(
-          (rs.filter(r =>
-            [
-              'approved',
-              'separating',
-              'invoiced',
-              'shipped',
-              'completed',
-            ].includes(r.status)
-          ).length /
-            rs.length) *
-            100
-        )
-      : 0,
-  };
-});
+const totals = computed(() => calculateOrderMetrics(kpiRows.value));
 const statusCounts = computed(() =>
   (simpleListFlow.value
     ? ['draft', 'pending', 'active', 'canceled']
@@ -353,18 +315,16 @@ const statusCounts = computed(() =>
           ? ['active']
           : []),
       ]
-  ).map(status => ({
-    status,
-    count: kpiRows.value.filter(r => orderStatus(r) === status).length,
-  }))
+  )
+    .map(status => ({
+      status,
+      count: kpiRows.value.filter(r => orderStatus(r) === status).length,
+    }))
+    .filter(item => item.count > 0)
 );
-const previousTotals = computed(() => {
-  const live = previousPeriodRows.value.filter(active);
-  return {
-    total: live.reduce((sum, row) => sum + Number(row.total_cents || 0), 0),
-    count: previousPeriodRows.value.length,
-  };
-});
+const previousTotals = computed(() =>
+  calculateOrderMetrics(previousPeriodRows.value)
+);
 const salesDelta = computed(() =>
   previousTotals.value.total
     ? Math.round(
@@ -443,10 +403,13 @@ const open = async row => {
 };
 const load = async () => {
   const accountId = route.params.accountId;
+  listCommercialFlow.value = null;
   loading.value = true;
   try {
     const response = await salesOrdersAPI.list();
     if (route.params.accountId !== accountId) return;
+    listCommercialFlow.value =
+      response.headers?.['x-jrc-commercial-flow'] || null;
     rows.value = response.data || [];
     selectedIds.value = selectedIds.value.filter(id =>
       rows.value.some(row => row.id === id)
@@ -745,19 +708,19 @@ watch(
           [
             'Vendas no período',
             money(totals.total),
-            `${totals.count} pedidos`,
+            `${totals.active} pedidos aprovados/ativos`,
             'i-lucide-shopping-cart',
           ],
           [
             'Receita vendida',
             money(totals.total),
-            'Valor contratado',
+            'Somente pedidos aprovados/ativos',
             'i-lucide-circle-dollar-sign',
           ],
           [
-            'MRR vendido',
-            money(totals.mrr),
-            'Receita recorrente mensal',
+            simpleListFlow ? 'Pedidos no período' : 'MRR vendido',
+            simpleListFlow ? totals.count : money(totals.mrr),
+            simpleListFlow ? 'Todos os status' : 'Receita recorrente mensal',
             'i-lucide-chart-no-axes-combined',
           ],
           [
@@ -775,7 +738,7 @@ watch(
           [
             'Ativas',
             totals.active,
-            'Pedidos concluídos',
+            'Aprovados comercialmente',
             'i-lucide-circle-check-big',
           ],
         ]"
@@ -1016,7 +979,7 @@ watch(
                   <th class="p-3">Proposta</th>
                   <th class="p-3">Responsável</th>
                   <th class="p-3">Valor</th>
-                  <th class="p-3">MRR</th>
+                  <th v-if="!simpleListFlow" class="p-3">MRR</th>
                   <th class="p-3">Data</th>
                   <th class="p-3">Status</th>
                   <th class="p-3">Ações</th>
@@ -1062,7 +1025,9 @@ watch(
                   <td class="p-3 font-semibold">
                     {{ money(row.total_cents) }}
                   </td>
-                  <td class="p-3">{{ money(row.monthly_cents) }}</td>
+                  <td v-if="!simpleListFlow" class="p-3">
+                    {{ money(row.monthly_cents) }}
+                  </td>
                   <td class="p-3">{{ dateLabel(orderDate(row)) }}</td>
                   <td class="p-3">
                     <span
@@ -1244,9 +1209,10 @@ watch(
               <span>Pedidos</span><b>{{ totals.count }}</b>
             </p>
             <p class="flex justify-between">
-              <span>Valor único</span><b>{{ money(totals.total) }}</b>
+              <span>Receita de pedidos ativos</span
+              ><b>{{ money(totals.total) }}</b>
             </p>
-            <p class="flex justify-between">
+            <p v-if="!simpleListFlow" class="flex justify-between">
               <span>MRR</span><b>{{ money(totals.mrr) }}</b>
             </p>
             <p class="flex justify-between">

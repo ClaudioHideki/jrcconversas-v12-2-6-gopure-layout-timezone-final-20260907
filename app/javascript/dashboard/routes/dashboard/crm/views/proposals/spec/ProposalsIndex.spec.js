@@ -5,6 +5,7 @@ import { useAlert } from 'dashboard/composables';
 import { proposalsAPI, dealsAPI, productsAPI } from 'dashboard/api/crm';
 import messages from 'dashboard/i18n/locale/en/crm.json';
 import ProposalsIndex from '../ProposalsIndex.vue';
+import CompanyPicker from 'dashboard/routes/dashboard/jrcCustomers/components/CompanyPicker.vue';
 
 vi.mock('vue-router', () => ({ useRoute: vi.fn(), useRouter: vi.fn() }));
 vi.mock('dashboard/composables', () => ({ useAlert: vi.fn() }));
@@ -28,7 +29,7 @@ vi.mock('dashboard/api/crm', () => ({
 let wrapper;
 let proposal;
 let click;
-const mountPage = async (query = { proposalId: '1' }) => {
+const mountPage = async (query = { proposalId: '1' }, masterEnabled = true) => {
   useRoute.mockReturnValue({ query, params: { accountId: '1' } });
   useRouter.mockReturnValue({ push: vi.fn() });
   const store = createStore({
@@ -36,7 +37,7 @@ const mountPage = async (query = { proposalId: '1' }) => {
       'jrcCrm/proposals/allProposals': () => [proposal],
       getCurrentRole: () => 'agent',
       getCurrentUser: () => ({ id: 25, accounts: [{ id: 1, role: 'agent' }] }),
-      'accounts/isFeatureEnabledonAccount': () => () => true,
+      'accounts/isFeatureEnabledonAccount': () => () => masterEnabled,
     },
   });
   store.dispatch = vi.fn().mockResolvedValue();
@@ -92,6 +93,14 @@ it('simplifies new GoPure commercial terms without clearing saved notes', async 
     .find(input => input.element.value === 'Saved notes');
   expect(notes).toBeDefined();
 });
+
+it.each([true, false])(
+  'shows customer company selection only when the master directory is enabled: %s',
+  async enabled => {
+    await mountPage({ proposalId: '1' }, enabled);
+    expect(wrapper.findComponent(CompanyPicker).exists()).toBe(enabled);
+  }
+);
 
 it('creates an editable version from the prominent action without saving over its source', async () => {
   const next = { ...proposal, id: 2, version_number: 4, title: 'Nova versão' };

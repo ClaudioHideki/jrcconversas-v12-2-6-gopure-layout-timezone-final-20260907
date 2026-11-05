@@ -66,6 +66,28 @@ beforeEach(() => {
 });
 afterEach(() => wrapper?.unmount());
 
+it('keeps MRR hidden for an empty GoPure account without inferring the profile from order rows', async () => {
+  salesOrdersAPI.list.mockResolvedValue({
+    data: [],
+    headers: { 'x-jrc-commercial-flow': 'simple' },
+  });
+  const store = createStore({
+    getters: {
+      getCurrentRole: () => 'administrator',
+      getCurrentUser: () => ({ id: 1 }),
+    },
+  });
+  wrapper = mount(SalesOrdersView, {
+    global: {
+      plugins: [store],
+      stubs: { ApprovalGateBadge: true, teleport: true },
+    },
+  });
+  await flushPromises();
+  expect(wrapper.text()).not.toContain('MRR');
+  expect(wrapper.text()).toContain('Receita vendida');
+});
+
 it('confirms the identified order and immediately updates its commercial status without inventing operational completion', async () => {
   salesOrdersAPI.approve.mockResolvedValue({
     data: {

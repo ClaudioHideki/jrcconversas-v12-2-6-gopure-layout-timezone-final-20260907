@@ -10,12 +10,22 @@ module Api
             leads = leads.where(status: normalized_filter_status) if params[:status].present?
             leads = leads.where(owner_id: params[:owner_id]) if params[:owner_id].present?
             leads = leads.where(conversation_id: params[:conversation_id]) if params[:conversation_id].present?
+            if params[:funnel] == 'true'
+              start_date, end_date = commercial_metric_dates
+              leads = JrcCrm::CommercialMetricsScope.call(account: crm_scope, actor: Current.user, relation: leads,
+                                                         start_date: start_date, end_date: end_date)
+              leads = leads.active.where.missing(:deal)
+            end
             
             if params[:search].present?
               leads = leads.where('name ILIKE :q OR email ILIKE :q', q: "%#{params[:search]}%")
             end
 
-            render json: leads.includes(:owner).order(updated_at: :desc).map { |lead| JrcCrm::LeadSerializer.new(lead).as_json }
+            if params[:funnel] == 'true'
+              render json: leads.order(updated_at: :desc).select(:id, :name, :status).map { |lead| lead.slice(:id, :name, :status) }
+            else
+              render json: leads.includes(:owner).order(updated_at: :desc).map { |lead| JrcCrm::LeadSerializer.new(lead).as_json }
+            end
           end
 
           def from_conversation

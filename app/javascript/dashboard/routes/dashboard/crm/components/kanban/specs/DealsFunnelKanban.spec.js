@@ -9,6 +9,7 @@ import {
   stagesAPI,
   pipelinesAPI,
   lostReasonsAPI,
+  leadsAPI,
 } from 'dashboard/api/crm';
 
 vi.mock('dashboard/api/crm', () => ({
@@ -16,11 +17,13 @@ vi.mock('dashboard/api/crm', () => ({
   stagesAPI: { list: vi.fn() },
   pipelinesAPI: { list: vi.fn() },
   lostReasonsAPI: { list: vi.fn() },
+  leadsAPI: { list: vi.fn() },
 }));
 let wrapper;
 let store;
 let router;
 beforeEach(() => {
+  leadsAPI.list.mockResolvedValue({ data: [] });
   pipelinesAPI.list.mockResolvedValue({ data: [{ id: 1, name: 'Comercial' }] });
   stagesAPI.list.mockResolvedValue({
     data: [
@@ -50,6 +53,7 @@ beforeEach(() => {
     history: createMemoryHistory(),
     routes: [
       { path: '/', component: Funnel },
+      { path: '/leads', name: 'crm_leads', component: { template: '<div />' } },
       { path: '/deals', name: 'crm_deals', component: { template: '<div />' } },
     ],
   });
@@ -63,6 +67,22 @@ const render = async () => {
 };
 
 describe('funnel rendered journeys', () => {
+  it('shows qualified leads separately and never routes them through deal drag/drop', async () => {
+    leadsAPI.list.mockResolvedValue({
+      data: [
+        { id: 99, name: 'Qualified synthetic person', status: 'qualified' },
+      ],
+    });
+    await render();
+    expect(wrapper.text()).toContain('Qualified synthetic person');
+    const link = wrapper.find('a[href="/leads?leadId=99"]');
+    expect(link.exists()).toBe(true);
+    expect(link.attributes('draggable')).toBeUndefined();
+    expect(dealsAPI.moveStage).not.toHaveBeenCalled();
+    await link.trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.query.leadId).toBe('99');
+  });
   it('renders empty stages, explanatory empty state and working New opportunity destination', async () => {
     await render();
     expect(wrapper.text()).toContain('Entrada');

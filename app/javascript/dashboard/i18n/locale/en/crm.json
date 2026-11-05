@@ -83,7 +83,15 @@
       "NO_STAGES": "Este funil não tem etapas configuradas. Solicite a configuração das etapas ao administrador.",
       "NO_DEALS": "Nenhuma oportunidade encontrada para estes filtros. Limpe os filtros ou crie uma nova oportunidade.",
       "MOVE_ERROR": "Não foi possível mover a oportunidade. A etapa anterior foi mantida.",
-      "REASONS_ERROR": "Não foi possível carregar os motivos de perda. Tente novamente."
+      "REASONS_ERROR": "Não foi possível carregar os motivos de perda. Tente novamente.",
+      "LEADS_TITLE": "Leads em qualificação",
+      "LEADS_HELP": "Leads sem negócio, separados por situação. Ainda não pertencem a um pipeline; não entram nos valores de negócios.",
+      "LEADS_LOADING": "Carregando leads...",
+      "LEADS_ERROR": "Não foi possível carregar os leads.",
+      "LEAD_TYPE": "Lead",
+      "DEAL_TYPE": "Negócios",
+      "OPEN_VALUE": "em negócios abertos",
+      "SENT_BADGE": "Propostas enviadas: {count}"
     },
     "SIDEBAR": "CRM",
     "TITLE": "CRM",
@@ -241,6 +249,9 @@
       "UNSAVED": "Salve as alterações antes de baixar o PDF. Se houve falha ao atualizar um produto, reabra a proposta e revise os dados primeiro."
     },
     "LEAD_FORM": {
+      "CREATE_CUSTOMER": "Criar cliente",
+      "CREATE_COMPANY": "Cadastrar nova empresa",
+      "USE_CONTACT": "Usar contato existente",
       "TITLE": "Novo Lead",
       "CLOSE": "Fechar",
       "NAME": "Nome *",
@@ -550,7 +561,11 @@
       "NOTES": "Observações",
       "ADD_ITEM": "Adicionar item",
       "UNIT_PRICE": "Preço unitário",
-      "ITEM_DISCOUNT": "Desconto do item"
+      "ITEM_DISCOUNT": "Desconto do item",
+      "ISSUER_COMPANY": "Empresa emissora / unidade autorizada",
+      "SELECT_ISSUER": "Selecione a emissora",
+      "CUSTOMER_COMPANY": "Empresa do cliente (Cadastro Mestre)",
+      "PARTIES_HELP": "Emissora e cliente são cadastros separados. Para alterar um documento enviado, crie nova versão. Documentos de um negócio preservam seus vínculos."
     },
     "PROPOSALS": {
       "APPROVED_READY": "Aprovada internamente — pronta para envio"
@@ -648,6 +663,34 @@
       "IMPLEMENTATION_OWNER": "Responsável pela implantação",
       "IMPLEMENTATION_DATE": "Data da implantação",
       "DOCUMENTS": "Documentos de apoio"
+    },
+    "COMMERCIAL_SUMMARY": {
+      "TITLE": "Resumo comercial",
+      "LEADS": "Leads",
+      "LEADS_HELP": "Pipeline de leads; ainda sem vínculo a funil comercial.",
+      "DEALS": "Valores dos negócios",
+      "DEALS_HELP": "Aberto, ganho e perdido conforme o status do negócio.",
+      "SENT": "Propostas enviadas",
+      "SENT_HELP": "Documentos enviados; reenvios não somam novamente.",
+      "ORDERS": "Pedidos ativos",
+      "ORDERS_HELP": "Aprovados comercialmente; operação e faturamento separados.",
+      "PENDING": "Não aprovados",
+      "REVENUE": "Receita de pedidos ativos",
+      "REVENUE_HELP": "Somente aprovados, em operação ou concluídos.",
+      "SIGNED": "Aceites digitais de clientes",
+      "SIGNED_HELP": "Documentos aceitos no link público com evidência digital.",
+      "DOCUMENTS": "Documentos assinados",
+      "LEAD_NEW": "Novos",
+      "LEAD_IN_CONTACT": "Em contato",
+      "LEAD_QUALIFIED": "Qualificados",
+      "LEAD_CONVERTED": "Convertidos",
+      "LEAD_UNQUALIFIED": "Descartados",
+      "LEAD_LOST": "Perdidos",
+      "DEAL_OPEN": "Abertos",
+      "DEAL_WON": "Ganhos",
+      "DEAL_LOST": "Perdidos",
+      "OWNER_REVENUE": "Receita de pedidos aprovados/ativos por responsável no período selecionado.",
+      "OWNER_WON": "Valor de negócios ganhos por responsável no período selecionado."
     }
   }
 }

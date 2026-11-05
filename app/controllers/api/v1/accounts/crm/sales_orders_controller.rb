@@ -3,6 +3,7 @@ module Api::V1::Accounts::Crm
     before_action :set_order, only: [:show, :update, :approve, :pdf, :upload_attachments, :download_attachment]
 
     def index
+      response.set_header('X-Jrc-Commercial-Flow', JrcCrm::ProposalProfile.gopure?(crm_scope) ? 'simple' : 'operational')
       orders = visible_to_current_user(crm_scope.jrc_crm_sales_orders)
                .where("NOT (snapshot ? 'removal')")
                .includes(:contact, :owner, :deal, :proposal, :order_items, :business_unit)

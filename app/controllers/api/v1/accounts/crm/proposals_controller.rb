@@ -38,7 +38,7 @@ module Api
             end
             unit = crm_scope.jrc_crm_business_units.find(params[:business_unit_id]) if params[:business_unit_id].present?
             authorize_operating_unit!(unit)
-            attributes = params[:proposal].present? ? proposal_params.to_h.except('owner_id') : {}
+            attributes = params[:proposal].present? ? proposal_params.to_h.except('owner_id', 'company_id', 'contact_id', 'business_unit_id') : {}
             attributes.delete('title') if attributes['title'].blank?
             proposal = build_corporate_proposal(deal, company, contact, unit, attributes)
             render json: serialize(proposal), status: :created
@@ -47,6 +47,7 @@ module Api
           end
 
           def update
+            previous_parties = @proposal.slice(:business_unit_id, :company_id, :contact_id)
             attributes = corporate_proposal_attributes
             validate_proposal_owner!(attributes[:owner_id]) if attributes[:owner_id].present?
             normalize_payment_attributes!(attributes)
@@ -57,7 +58,9 @@ module Api
               @proposal.reset_approvals! if commercial_changes.any?
               @proposal.recalculate_totals!
               JrcApprovals::CommercialInvalidation.call(resource: @proposal.reload, user: Current.user)
-              audit_event!('updated', 'Proposta atualizada no CRM')
+              current_parties = @proposal.slice(:business_unit_id, :company_id, :contact_id)
+              audit_event!('updated', 'Proposta atualizada no CRM',
+                           metadata: previous_parties == current_parties ? {} : { parties: { before: previous_parties, after: current_parties } })
               render json: serialize(@proposal.reload)
             else
               render json: { errors: @proposal.errors.full_messages }, status: :unprocessable_entity
@@ -337,12 +340,13 @@ module Api
             params.require(:delivery).permit(:contact_id, :inbox_id, :content, template_params: {}).to_h
           end
 
-          def audit_event!(event_type, description)
+          def audit_event!(event_type, description, metadata: {})
             @proposal.events.create!(
               account_id: crm_scope.id,
               event_type: event_type,
               user_id: Current.user&.id,
-              description: description
+              description: description,
+              metadata: metadata
             )
           end
 
@@ -414,7 +418,7 @@ module Api
 
           def proposal_params
             params.require(:proposal).permit(
-              :title, :discount_cents,
+              :title, :discount_cents, :business_unit_id, :company_id, :contact_id,
               :public_token_expires_at, :solution_description, :implementation_cents,
               :monthly_cents, :valid_until, :term_months, :commercial_notes,
               :next_steps, :notes, :customer_notes, :issuer_company_name,

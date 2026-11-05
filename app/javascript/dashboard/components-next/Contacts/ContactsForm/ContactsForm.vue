@@ -11,10 +11,12 @@ import { useAccount } from 'dashboard/composables/useAccount';
 import Input from 'dashboard/components-next/input/Input.vue';
 import ComboBox from 'dashboard/components-next/combobox/ComboBox.vue';
 import CompanySelector from 'dashboard/components-next/Companies/CompanySelector.vue';
+import MasterCompanyPicker from 'dashboard/routes/dashboard/jrcCustomers/components/CompanyPicker.vue';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import PhoneNumberInput from 'dashboard/components-next/phonenumberinput/PhoneNumberInput.vue';
 
 const props = defineProps({
+  draftScope: { type: String, default: 'crm:native_contact' },
   contactData: {
     type: Object,
     default: null,
@@ -94,6 +96,12 @@ const isFormInvalid = computed(() => v$.value.$invalid);
 const hasCompaniesFeature = computed(
   () =>
     currentAccount.value?.id && isCloudFeatureEnabled(FEATURE_FLAGS.COMPANIES)
+);
+const hasCustomerMaster = computed(
+  () =>
+    props.isNewContact &&
+    currentAccount.value?.id &&
+    isCloudFeatureEnabled(FEATURE_FLAGS.JRC_CUSTOMER_MASTER)
 );
 const showCompanySelector = computed(
   () =>
@@ -252,17 +260,8 @@ const resetValidation = () => {
   v$.value.$reset();
 };
 
-const resetForm = (savedDraftKey = contactDraft.key.value) => {
-  if (props.isNewContact) {
-    if (!contactDraft.complete(savedDraftKey)) return false;
-    activeDraft.value = false;
-  }
-  Object.assign(state, JSON.parse(JSON.stringify(defaultState)));
-  return true;
-};
-
 const activeDraft = ref(props.isNewContact);
-const contactDraft = useFormDraft('crm:native_contact', {
+const contactDraft = useFormDraft(props.draftScope, {
   active: activeDraft,
   snapshot: () => ({ ...state }),
   restore: value => {
@@ -279,6 +278,15 @@ const contactDraft = useFormDraft('crm:native_contact', {
   reset: () => Object.assign(state, JSON.parse(JSON.stringify(defaultState))),
 });
 if (props.isNewContact) contactDraft.open();
+
+const resetForm = (savedDraftKey = contactDraft.key.value) => {
+  if (props.isNewContact) {
+    if (!contactDraft.complete(savedDraftKey)) return false;
+    activeDraft.value = false;
+  }
+  Object.assign(state, JSON.parse(JSON.stringify(defaultState)));
+  return true;
+};
 
 watch(
   () => props.contactData?.id,
@@ -339,6 +347,18 @@ defineExpose({
             v-model="getFormBinding(item.key).value"
             :placeholder="item.placeholder"
             :show-border="isDetailsView"
+          />
+          <slot
+            v-else-if="item.key === 'COMPANY_NAME' && $slots.company"
+            name="company"
+            :company-id="state.companyId"
+            :company-name="state.additionalAttributes.companyName"
+            :select="handleCompanySelection"
+          />
+          <MasterCompanyPicker
+            v-else-if="item.key === 'COMPANY_NAME' && hasCustomerMaster"
+            :model-value="state.companyId"
+            @selected="company => handleCompanySelection(company || {})"
           />
           <CompanySelector
             v-else-if="item.key === 'COMPANY_NAME' && showCompanySelector"

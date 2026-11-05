@@ -28,14 +28,15 @@ class Api::V1::Accounts::Customers::ContactsController < Api::V1::Accounts::Cust
     Contact.transaction do
       contact = Current.account.contacts.create!(values)
       JrcCustomers::Audit.record!(account: Current.account, actor: Current.user, resource: contact,
-                                  event_type: 'customer_contact_updated', to_value: serializer.contact(contact))
+                                  event_type: 'customer_contact_updated',
+                                  to_value: serializer.contact(contact).merge('additional_attributes' => contact.additional_attributes))
       render json: { payload: serializer.contact(contact) }, status: :created
     end
   end
 
   def update
     @contact.with_lock do
-      previous = serializer.contact(@contact)
+      previous = serializer.contact(@contact).merge('additional_attributes' => @contact.additional_attributes)
       values = contact_params
       if values.key?(:company_id) && values[:company_id].to_s != @contact.company_id.to_s && @contact.company_id.present? && params[:confirm_reassignment] != true
         raise JrcCustomers::MergePreserver::Conflict, 'Confirm reassignment; the current company and its historical context will change'
@@ -43,7 +44,8 @@ class Api::V1::Accounts::Customers::ContactsController < Api::V1::Accounts::Cust
       @contact.update!(values)
       JrcCustomers::Audit.record!(account: Current.account, actor: Current.user, resource: @contact,
                                   event_type: values.key?(:company_id) ? 'customer_contact_linked' : 'customer_contact_updated',
-                                  from_value: previous, to_value: serializer.contact(@contact))
+                                  from_value: previous,
+                                  to_value: serializer.contact(@contact).merge('additional_attributes' => @contact.additional_attributes))
     end
     render json: { payload: serializer.contact(@contact) }
   end
@@ -85,7 +87,8 @@ class Api::V1::Accounts::Customers::ContactsController < Api::V1::Accounts::Cust
   end
 
   def contact_params
-    values = params.require(:contact).permit(:name, :email, :phone_number, :company_id, :job_title, :department, :registration_status)
+    values = params.require(:contact).permit(:name, :email, :phone_number, :company_id, :job_title, :department, :registration_status,
+                                            additional_attributes: {})
     company = Current.account.master_companies.find_by(id: values[:company_id])
     corporate_companies.find(company.id) if company
     values

@@ -79,6 +79,9 @@ const itemForm = reactive({
 });
 const hasPendingItem = computed(() => Boolean(itemForm.product_id));
 const proposalForm = reactive({
+  business_unit_id: null,
+  company_id: null,
+  contact_id: null,
   title: '',
   solution_description: '',
   implementation: '',
@@ -270,7 +273,27 @@ const loadProducts = async () => {
   products.value = data;
 };
 
+const canChangeParties = computed(
+  () =>
+    selectedProposal.value?.status === 'draft' &&
+    !selectedProposal.value?.sent_at &&
+    !selectedProposal.value?.locked &&
+    !selectedProposal.value?.deal?.id
+);
+const selectIssuer = () => {
+  const unit = operatingUnits.value.find(
+    item => String(item.id) === String(proposalForm.business_unit_id)
+  );
+  const defaults = unit?.issuer || unit?.proposal_defaults || {};
+  proposalForm.issuer_company_name =
+    defaults.issuer_company_name || proposalForm.issuer_company_name;
+  proposalForm.issuer_tax_id = defaults.issuer_tax_id || '';
+  proposalForm.issuer_unit = defaults.issuer_unit || '';
+};
 const hydrateProposalForm = data => {
+  proposalForm.business_unit_id = data.business_unit_id || null;
+  proposalForm.company_id = data.company_id || null;
+  proposalForm.contact_id = data.contact_id || null;
   proposalForm.title = data.title || '';
   proposalForm.solution_description = data.solution_description || '';
   proposalForm.implementation = moneyInput(data.implementation_cents);
@@ -341,6 +364,9 @@ const openProposal = async proposal => {
     const [{ data }] = await Promise.all([
       proposalsAPI.show(proposal.id),
       loadProducts(),
+      proposalsAPI.creationOptions?.().then(response => {
+        operatingUnits.value = response.data.business_units || [];
+      }),
     ]);
     selectedProposal.value = data;
     hydrateProposalForm(data);
@@ -523,6 +549,13 @@ const persistCommercialData = async (showSuccess = true) => {
   try {
     const { data } = await proposalsAPI.update(selectedProposal.value.id, {
       proposal: {
+        ...(canChangeParties.value
+          ? {
+              business_unit_id: proposalForm.business_unit_id,
+              company_id: proposalForm.company_id,
+              contact_id: proposalForm.contact_id,
+            }
+          : {}),
         title: proposalForm.title,
         solution_description: proposalForm.solution_description,
         implementation_cents: centsFromInput(proposalForm.implementation),
@@ -1983,12 +2016,64 @@ onMounted(async () => {
                 <h5 class="mb-3 text-sm font-bold text-n-slate-12">
                   Empresa emissora e faturamento
                 </h5>
+                <div
+                  v-if="hasCustomerMaster"
+                  class="mb-4 grid gap-4 md:grid-cols-2"
+                >
+                  <div>
+                    <span class="text-sm font-medium text-n-slate-11">{{
+                      t('CRM.CREATION.CUSTOMER_COMPANY')
+                    }}</span>
+                    <CompanyPicker
+                      v-model="proposalForm.company_id"
+                      :disabled="!canChangeParties || saving"
+                      @selected="proposalForm.contact_id = null"
+                    />
+                  </div>
+                  <div>
+                    <span class="text-sm font-medium text-n-slate-11">{{
+                      t('CRM.CREATION.CONTACT')
+                    }}</span>
+                    <ContactPicker
+                      v-model="proposalForm.contact_id"
+                      :company-id="proposalForm.company_id"
+                      :disabled="!canChangeParties || saving"
+                    />
+                  </div>
+                  <p class="text-xs text-n-slate-11 md:col-span-2">
+                    {{ t('CRM.CREATION.PARTIES_HELP') }}
+                  </p>
+                </div>
                 <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                   <label class="text-sm font-medium text-n-slate-11">
-                    Empresa emissora
+                    {{ t('CRM.CREATION.ISSUER_COMPANY') }}
+                    <select
+                      v-if="operatingUnits.some(unit => unit.company_id)"
+                      v-model="proposalForm.business_unit_id"
+                      :disabled="!canChangeParties || saving"
+                      class="mt-1 w-full rounded-lg border border-n-weak bg-n-solid-2 px-3 py-2"
+                      @change="selectIssuer"
+                    >
+                      <option :value="null" disabled>
+                        {{ t('CRM.CREATION.SELECT_ISSUER') }}
+                      </option>
+                      <option
+                        v-for="unit in operatingUnits.filter(
+                          item => item.company_id
+                        )"
+                        :key="unit.id"
+                        :value="unit.id"
+                      >
+                        {{ unit.name }}
+                      </option>
+                    </select>
                     <input
+                      v-else
                       v-model="proposalForm.issuer_company_name"
-                      :disabled="!!selectedProposal.issuer_company_id"
+                      :disabled="
+                        !!selectedProposal.issuer_company_id ||
+                        selectedProposal.locked
+                      "
                       class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
                     />
                   </label>
@@ -1996,7 +2081,11 @@ onMounted(async () => {
                     CNPJ da emissora
                     <input
                       v-model="proposalForm.issuer_tax_id"
-                      :disabled="!!selectedProposal.issuer_company_id"
+                      :disabled="
+                        !!selectedProposal.issuer_company_id ||
+                        !!proposalForm.business_unit_id ||
+                        selectedProposal.locked
+                      "
                       class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
                       placeholder="00.000.000/0000-00"
                     />
@@ -2005,7 +2094,11 @@ onMounted(async () => {
                     Unidade JRC
                     <input
                       v-model="proposalForm.issuer_unit"
-                      :disabled="!!selectedProposal.issuer_company_id"
+                      :disabled="
+                        !!selectedProposal.issuer_company_id ||
+                        !!proposalForm.business_unit_id ||
+                        selectedProposal.locked
+                      "
                       class="mt-1 w-full rounded-lg border border-n-weak px-3 py-2"
                     />
                   </label>

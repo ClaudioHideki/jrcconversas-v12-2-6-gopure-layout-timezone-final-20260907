@@ -36,6 +36,7 @@ const owners = ref([]);
 const metadata = ref({ segments: [] });
 const error = ref('');
 const busy = ref(false);
+defineExpose({ busy });
 
 const secondaryRelationships = computed(() =>
   Object.entries(RELATIONSHIPS).filter(
@@ -132,31 +133,17 @@ const save = async () => {
       </span>
     </div>
 
-    <fieldset
-      :disabled="busy"
-      class="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
-    >
+    <fieldset :disabled="busy" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       <label class="text-sm">
         {{ T.kind }}
-        <select
-          v-model="form.person_kind"
-          :class="inputClass"
-        >
-          <option
-            v-for="(label, key) in PERSON_KINDS"
-            :key="key"
-            :value="key"
-          >
+        <select v-model="form.person_kind" :class="inputClass">
+          <option v-for="(label, key) in PERSON_KINDS" :key="key" :value="key">
             {{ label }}
           </option>
         </select>
       </label>
 
-      <label
-        v-for="field in textFields"
-        :key="field"
-        class="text-sm"
-      >
+      <label v-for="field in textFields" :key="field" class="text-sm">
         {{ FIELD_LABELS[field] }}
         <input
           v-model.trim="form[field]"
@@ -169,10 +156,7 @@ const save = async () => {
 
       <label class="text-sm">
         {{ FIELD_LABELS.segment }}
-        <select
-          v-model="form.segment"
-          :class="inputClass"
-        >
+        <select v-model="form.segment" :class="inputClass">
           <option value="">—</option>
           <option
             v-for="value in metadata.segments || []"
@@ -186,16 +170,9 @@ const save = async () => {
 
       <label class="text-sm">
         {{ FIELD_LABELS.size }}
-        <select
-          v-model="form.size"
-          :class="inputClass"
-        >
+        <select v-model="form.size" :class="inputClass">
           <option value="">—</option>
-          <option
-            v-for="(label, key) in SIZE_OPTIONS"
-            :key="key"
-            :value="key"
-          >
+          <option v-for="(label, key) in SIZE_OPTIONS" :key="key" :value="key">
             {{ label }}
           </option>
         </select>
@@ -203,10 +180,7 @@ const save = async () => {
 
       <label class="text-sm">
         {{ FIELD_LABELS.source }}
-        <select
-          v-model="form.source"
-          :class="inputClass"
-        >
+        <select v-model="form.source" :class="inputClass">
           <option value="">—</option>
           <option
             v-for="(label, key) in SOURCE_OPTIONS"
@@ -220,15 +194,8 @@ const save = async () => {
 
       <label class="text-sm">
         {{ T.relationship }}
-        <select
-          v-model="form.relationship_type"
-          :class="inputClass"
-        >
-          <option
-            v-for="(label, key) in RELATIONSHIPS"
-            :key="key"
-            :value="key"
-          >
+        <select v-model="form.relationship_type" :class="inputClass">
+          <option v-for="(label, key) in RELATIONSHIPS" :key="key" :value="key">
             {{ label }}
           </option>
         </select>
@@ -236,16 +203,9 @@ const save = async () => {
 
       <label class="text-sm">
         {{ T.owner }}
-        <select
-          v-model="form.owner_id"
-          :class="inputClass"
-        >
+        <select v-model="form.owner_id" :class="inputClass">
           <option :value="null">{{ T.noOwner }}</option>
-          <option
-            v-for="owner in owners"
-            :key="owner.id"
-            :value="owner.id"
-          >
+          <option v-for="owner in owners" :key="owner.id" :value="owner.id">
             {{ owner.name }}
           </option>
         </select>
@@ -288,10 +248,7 @@ const save = async () => {
       </label>
 
       <label class="flex items-center gap-2 text-sm">
-        <input
-          v-model="form.active"
-          type="checkbox"
-        />{{ T.active }}
+        <input v-model="form.active" type="checkbox" />{{ T.active }}
       </label>
 
       <label class="text-sm md:col-span-2 xl:col-span-3">
@@ -305,19 +262,11 @@ const save = async () => {
       </label>
     </fieldset>
 
-    <p
-      v-if="error"
-      class="mt-4 text-sm text-n-ruby-11"
-      role="alert"
-    >
+    <p v-if="error" class="mt-4 text-sm text-n-ruby-11" role="alert">
       {{ error }}
     </p>
     <div class="mt-5 flex gap-3">
-      <button
-        type="submit"
-        :class="primaryClass"
-        :disabled="busy"
-      >
+      <button type="submit" :class="primaryClass" :disabled="busy">
         {{ busy ? T.saving : T.save }}
       </button>
       <button

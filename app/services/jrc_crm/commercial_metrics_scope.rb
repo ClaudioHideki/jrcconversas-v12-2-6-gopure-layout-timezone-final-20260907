@@ -11,7 +11,15 @@ class JrcCrm::CommercialMetricsScope
                else
                  JrcCrm::CorporateCoverage.new(account: account, user: actor).restrict(relation)
                end
-    relation = relation.where(pipeline_id: pipeline_id) if pipeline_id.present? && relation.klass.column_names.include?('pipeline_id')
+    if pipeline_id.present?
+      if relation.klass.column_names.include?('pipeline_id')
+        relation = relation.where(pipeline_id: pipeline_id)
+      elsif relation.klass.column_names.include?('deal_id')
+        # A pipeline filter must also constrain direct proposals/orders, rather than
+        # silently counting documents from unrelated pipelines or without a deal.
+        relation = relation.where(deal_id: account.jrc_crm_deals.where(pipeline_id: pipeline_id).select(:id))
+      end
+    end
     relation = relation.where(relation.klass.arel_table[:created_at].gteq(start_date.beginning_of_day)) if start_date
     relation = relation.where(relation.klass.arel_table[:created_at].lteq(end_date.end_of_day)) if end_date
     relation = relation.where.not(status: 'archived') if relation.klass == JrcCrm::Deal

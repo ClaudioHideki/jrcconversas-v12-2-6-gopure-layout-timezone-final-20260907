@@ -1,6 +1,7 @@
 <script setup>
 /* eslint-disable vue/no-bare-strings-in-template, @intlify/vue-i18n/no-raw-text */
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import CrmValueDisplay from '../shared/CrmValueDisplay.vue';
 import CrmBadge from '../shared/CrmBadge.vue';
@@ -11,6 +12,7 @@ const props = defineProps({
 });
 
 const router = useRouter();
+const { t } = useI18n();
 
 const openDeal = () => {
   router.push({ name: 'crm_deals', query: { dealId: props.deal.id } });
@@ -27,6 +29,10 @@ const ownerInitials = computed(() => {
     class="mb-3 cursor-grab rounded-2xl border border-n-weak bg-n-solid-2 p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-n-brand hover:shadow-md"
     @click="openDeal"
   >
+    <span
+      class="mb-2 inline-block rounded bg-n-teal-3 px-1.5 text-xs text-n-teal-11"
+      >{{ t('CRM.FUNNEL.DEAL_TYPE') }}</span
+    >
     <div class="flex justify-between items-start mb-1">
       <h4
         class="font-semibold text-sm text-n-slate-12 line-clamp-2 leading-tight"
@@ -94,6 +100,12 @@ const ownerInitials = computed(() => {
       </div>
     </div>
 
+    <p
+      v-if="deal.proposals_sent_count"
+      class="mt-2 rounded bg-n-blue-3 p-1 text-xs text-n-blue-11"
+    >
+      {{ t('CRM.FUNNEL.SENT_BADGE', { count: deal.proposals_sent_count }) }}
+    </p>
     <div class="mt-2 text-[10px] text-n-slate-10 flex flex-col gap-0.5">
       <div v-if="deal.last_interaction_at" class="flex items-center gap-1">
         <i class="i-lucide-clock w-3 h-3" /> Última:

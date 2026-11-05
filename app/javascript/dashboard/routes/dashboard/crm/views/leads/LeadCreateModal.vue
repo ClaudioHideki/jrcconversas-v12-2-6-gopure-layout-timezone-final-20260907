@@ -1,11 +1,20 @@
 <script setup>
-import { reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
+import { usePolicy } from 'dashboard/composables/usePolicy';
+import LeadContactCreateDialog from './LeadContactCreateDialog.vue';
 import { useFormDraft } from '../../helpers/useFormDraft';
 import CompanyPicker from 'dashboard/routes/dashboard/jrcCustomers/components/CompanyPicker.vue';
 import { useCustomerMaster } from 'dashboard/routes/dashboard/jrcCustomers/useCustomerMaster';
 const props = defineProps({ contact: { type: Object, default: null } });
 const emit = defineEmits(['close', 'created']);
-const { enabled: hasCustomerMaster } = useCustomerMaster();
+const { enabled: hasCustomerMaster, canAccess } = useCustomerMaster();
+const { checkPermissions } = usePolicy();
+const canCreateContact = computed(
+  () =>
+    checkPermissions(['administrator', 'agent', 'contact_manage']) &&
+    (!hasCustomerMaster.value || canAccess.value)
+);
+const showContactForm = ref(false);
 const companyId = ref(null);
 import { crmControlClasses } from '../../crmControlClasses';
 
@@ -16,18 +25,21 @@ import { useAlert } from 'dashboard/composables';
 const { t } = useI18n();
 const saving = ref(false);
 const errorMessage = ref('');
-const contact = props.contact;
-companyId.value = contact?.company_id || contact?.companyId || null;
+const selectedContact = ref(props.contact);
+const linkedContact = computed(() => selectedContact.value);
+companyId.value =
+  linkedContact.value?.company_id || linkedContact.value?.companyId || null;
 const form = reactive({
-  name: contact?.name || '',
+  name: linkedContact.value?.name || '',
   company_name:
-    contact?.company?.name ||
-    contact?.companyName ||
-    contact?.additionalAttributes?.companyName ||
-    contact?.additional_attributes?.company_name ||
+    linkedContact.value?.company?.name ||
+    linkedContact.value?.companyName ||
+    linkedContact.value?.additionalAttributes?.companyName ||
+    linkedContact.value?.additional_attributes?.company_name ||
     '',
-  email: contact?.email || '',
-  phone: contact?.phoneNumber || contact?.phone_number || '',
+  email: linkedContact.value?.email || '',
+  phone:
+    linkedContact.value?.phoneNumber || linkedContact.value?.phone_number || '',
   source: '',
   status: 'new',
   temperature: 'warm',
@@ -37,14 +49,34 @@ const form = reactive({
 const activeDraft = ref(true);
 const initialForm = { ...form };
 const initialCompany = companyId.value;
-const draft = useFormDraft('crm:new_lead:' + (contact?.id || 'standalone'), {
-  active: activeDraft, snapshot: () => ({ form: { ...form }, company_id: companyId.value }),
-  restore: value => { Object.assign(form, value.form || {}); companyId.value = value.company_id || null; },
-  reset: () => { Object.assign(form, initialForm); companyId.value = initialCompany; },
-});
+const draft = useFormDraft(
+  'crm:new_lead:' + (props.contact?.id || 'standalone'),
+  {
+    active: activeDraft,
+    snapshot: () => ({
+      form: { ...form },
+      company_id: companyId.value,
+      contact: selectedContact.value,
+    }),
+    restore: value => {
+      Object.assign(form, value.form || {});
+      companyId.value = value.company_id || null;
+      selectedContact.value = value.contact || props.contact;
+    },
+    reset: () => {
+      Object.assign(form, initialForm);
+      companyId.value = initialCompany;
+      selectedContact.value = props.contact;
+    },
+  }
+);
 draft.open();
 const close = () => {
-  if (!saving.value) { draft.flush(); activeDraft.value = false; emit('close'); }
+  if (!saving.value) {
+    draft.flush();
+    activeDraft.value = false;
+    emit('close');
+  }
 };
 const save = async () => {
   const savingDraftKey = draft.key.value;
@@ -56,7 +88,7 @@ const save = async () => {
       lead: {
         ...form,
         ...(hasCustomerMaster.value ? { company_id: companyId.value } : {}),
-        ...(contact ? { contact_id: contact.id } : {}),
+        ...(linkedContact.value ? { contact_id: linkedContact.value.id } : {}),
       },
     });
     useAlert(
@@ -75,12 +107,26 @@ const save = async () => {
     saving.value = false;
   }
 };
+const contactCreated = value => {
+  selectedContact.value = value;
+  form.name = value.name;
+  form.email = value.email || '';
+  form.phone = value.phone_number || value.phoneNumber || '';
+  companyId.value = value.company_id || value.companyId || null;
+  form.company_name =
+    value.company_name ||
+    value.company?.name ||
+    value.additional_attributes?.company_name ||
+    '';
+  showContactForm.value = false;
+};
 </script>
 
 <template>
   <Teleport to="body">
     <div
-      :class="crmControlClasses" class="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4"
+      :class="crmControlClasses"
+      class="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4"
       @click.self="close"
       @keydown.esc="close"
     >
@@ -106,13 +152,13 @@ const save = async () => {
           </button>
         </div>
         <p
-          v-if="contact"
+          v-if="linkedContact"
           class="rounded-xl bg-n-blue-3 p-3 text-sm text-n-blue-11"
         >
           {{
             t('CRM.LEAD_FORM.LINKED_CONTACT', {
-              name: contact.name,
-              id: contact.id,
+              name: linkedContact.name,
+              id: linkedContact.id,
             })
           }}
         </p>
@@ -126,23 +172,35 @@ const save = async () => {
           />
         </label>
         <div class="grid gap-3 sm:grid-cols-2">
-          <CompanyPicker
-            v-if="hasCustomerMaster"
-            v-model="companyId"
-            :disabled="saving"
-            @selected="
-              value => {
-                form.company_name = value?.name || '';
-              }
-            "
-          />
-          <label v-else class="text-sm text-n-slate-11">
-            <span class="block">{{ t('CRM.LEAD_FORM.COMPANY') }}</span
-            ><input
-              v-model="form.company_name"
-              name="company_name"
-              class="mt-1 w-full rounded-xl border border-n-weak bg-n-solid-1 px-3 py-2.5 text-n-slate-12"
-          /></label>
+          <div class="min-w-0 space-y-2">
+            <CompanyPicker
+              v-if="hasCustomerMaster"
+              v-model="companyId"
+              :disabled="saving"
+              @selected="
+                value => {
+                  form.company_name = value?.name || '';
+                }
+              "
+            />
+            <label v-else class="text-sm text-n-slate-11">
+              <span class="block">{{ t('CRM.LEAD_FORM.COMPANY') }}</span
+              ><input
+                v-model="form.company_name"
+                name="company_name"
+                class="mt-1 w-full rounded-xl border border-n-weak bg-n-solid-1 px-3 py-2.5 text-n-slate-12"
+            /></label>
+            <button
+              v-if="canCreateContact && !linkedContact"
+              type="button"
+              :disabled="saving"
+              class="inline-flex min-h-10 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-n-brand disabled:opacity-50"
+              @click="showContactForm = true"
+            >
+              <i class="i-lucide-user-round-plus size-4" aria-hidden="true" />
+              {{ t('CRM.LEAD_FORM.CREATE_CUSTOMER') }}
+            </button>
+          </div>
           <label class="text-sm text-n-slate-11">
             <span class="block">{{ t('CRM.LEAD_FORM.SOURCE') }}</span
             ><input
@@ -193,7 +251,7 @@ const save = async () => {
             class="mt-1 w-full rounded-xl border border-n-weak bg-n-solid-1 px-3 py-2.5 text-n-slate-12"
           />
         </label>
-        <p v-if="!contact" class="text-xs text-n-slate-11">
+        <p v-if="!linkedContact" class="text-xs text-n-slate-11">
           {{ t('CRM.LEAD_FORM.IDENTITY_HINT') }}
         </p>
         <p
@@ -204,7 +262,14 @@ const save = async () => {
           {{ errorMessage }}
         </p>
         <div class="flex justify-end gap-2">
-          <button type="button" :disabled="saving" class="mr-auto rounded-xl border border-n-weak px-3 py-2" @click="draft.discard">{{ t('CRM.CREATION.DISCARD') }}</button>
+          <button
+            type="button"
+            :disabled="saving"
+            class="mr-auto rounded-xl border border-n-weak px-3 py-2"
+            @click="draft.discard"
+          >
+            {{ t('CRM.CREATION.DISCARD') }}
+          </button>
           <button
             type="button"
             :disabled="saving"
@@ -224,4 +289,11 @@ const save = async () => {
       </form>
     </div>
   </Teleport>
+  <LeadContactCreateDialog
+    v-if="showContactForm"
+    :company-id="companyId"
+    :company-name="form.company_name"
+    @created="contactCreated"
+    @close="showContactForm = false"
+  />
 </template>

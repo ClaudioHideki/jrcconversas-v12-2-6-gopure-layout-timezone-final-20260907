@@ -4,7 +4,7 @@ module JrcCrm
       @deal = deal
     end
 
-    def as_json(options = {})
+    def as_json(_options = {})
       next_activity = @deal.next_activity
       primary_contact = @deal.contact || @deal.contacts.first
       conversation = latest_conversation
@@ -39,6 +39,7 @@ module JrcCrm
         products_subtotal_cents: @deal.deal_products.sum { |item| item.unit_price_cents.to_i * item.quantity.to_i },
         products_discount_cents: @deal.deal_products.sum { |item| item.discount_cents.to_i },
         proposals_count: association_count(@deal.proposals),
+        proposals_sent_count: sent_proposals_count,
         last_activity_at: @deal.last_activity_at,
         next_activity: next_activity && serialize_activity(next_activity),
         overdue: @deal.overdue?,
@@ -57,6 +58,11 @@ module JrcCrm
     end
 
     private
+
+    def sent_proposals_count
+      JrcCrm::CommercialMetricsScope.call(account: @deal.account, actor: Current.user, relation: @deal.proposals)
+                                    .where.not(sent_at: nil).count
+    end
 
     def format_currency(cents, currency)
       # simplified currency formatting

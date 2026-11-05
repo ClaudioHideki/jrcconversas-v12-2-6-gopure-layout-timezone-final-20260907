@@ -7,9 +7,13 @@ import Dialog from 'dashboard/components-next/dialog/Dialog.vue';
 import Button from 'dashboard/components-next/button/Button.vue';
 import ContactsForm from 'dashboard/components-next/Contacts/ContactsForm/ContactsForm.vue';
 
-defineProps({ nestedPopover: { type: Boolean, default: false } });
+const props = defineProps({
+  draftScope: { type: String, default: 'crm:native_contact' },
+  nestedPopover: { type: Boolean, default: false },
+  saving: { type: Boolean, default: false },
+});
 
-const emit = defineEmits(['create']);
+const emit = defineEmits(['create', 'close']);
 
 const { t } = useI18n();
 
@@ -26,7 +30,7 @@ const createNewContact = contactItem => {
 };
 
 const handleDialogConfirm = async () => {
-  if (!contact.value) return;
+  if (!contact.value || props.saving) return;
   submittedDraftKey.value = contactsFormRef.value.draftKey();
   emit('create', contact.value);
 };
@@ -41,6 +45,7 @@ const onSuccess = () => {
 };
 
 const closeDialog = () => {
+  if (props.saving) return;
   dialogRef.value.close();
 };
 
@@ -56,8 +61,10 @@ defineExpose({ open, dialogRef, contactsFormRef, onSuccess });
     ref="dialogRef"
     width="3xl"
     :nested-popover="nestedPopover"
-    show-close-button
+    :show-close-button="!saving"
+    :dismissible="!saving"
     overflow-y-auto
+    @close="emit('close')"
     @confirm="handleDialogConfirm"
   >
     <header
@@ -72,17 +79,26 @@ defineExpose({ open, dialogRef, contactsFormRef, onSuccess });
         {{ t('JRC_HOME.ACTIONS.CONTACT') }}
       </h2>
     </header>
-    <ContactsForm
-      ref="contactsFormRef"
-      is-new-contact
-      @update="createNewContact"
-    />
+    <fieldset :disabled="saving" class="min-w-0">
+      <ContactsForm
+        ref="contactsFormRef"
+        is-new-contact
+        :draft-scope="draftScope"
+        @update="createNewContact"
+      >
+        <template v-if="$slots.company" #company="scope">
+          <slot name="company" v-bind="scope" />
+        </template>
+      </ContactsForm>
+    </fieldset>
+    <slot />
     <template #footer>
       <div class="flex items-center justify-between w-full gap-3">
         <Button
           :label="t('DIALOG.BUTTONS.CANCEL')"
           variant="link"
           type="reset"
+          :disabled="saving"
           class="h-10 hover:!no-underline hover:text-n-brand"
           @click="closeDialog"
         />
@@ -92,8 +108,8 @@ defineExpose({ open, dialogRef, contactsFormRef, onSuccess });
             t('CONTACTS_LAYOUT.HEADER.ACTIONS.CONTACT_CREATION.SAVE_CONTACT')
           "
           color="blue"
-          :disabled="contactsFormRef?.isFormInvalid"
-          :is-loading="isCreatingContact"
+          :disabled="contactsFormRef?.isFormInvalid || saving"
+          :is-loading="isCreatingContact || saving"
         />
       </div>
     </template>

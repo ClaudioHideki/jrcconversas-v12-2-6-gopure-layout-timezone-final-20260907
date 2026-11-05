@@ -120,6 +120,7 @@ jobs:
           app/javascript/dashboard/routes/dashboard/crm/views/orders/spec
           app/javascript/dashboard/components/widgets/WootWriter/spec
           app/javascript/dashboard/routes/dashboard/crm/components/shared/spec/CommercialMetricFilters.spec.js
+          app/javascript/dashboard/routes/dashboard/crm/components/shared/spec/CommercialSummaryCards.spec.js
           app/javascript/dashboard/helper/specs/editorHelper.spec.js
           app/javascript/dashboard/store/crm/specs/funnel.spec.js
           app/javascript/dashboard/routes/dashboard/crm/components/kanban/specs/DealsFunnelKanban.spec.js
@@ -131,6 +132,7 @@ jobs:
           app/javascript/dashboard/routes/dashboard/crm/helpers/spec
           app/javascript/dashboard/routes/dashboard/crm/views/leads/spec
           app/javascript/dashboard/routes/dashboard/jrcCustomers
+          app/javascript/dashboard/components-next/Contacts/ContactsForm/specs
           app/javascript/dashboard/components-next/sidebar/specs/sections.spec.js
           app/javascript/dashboard/components-next/sidebar/specs/ServiceDeskNavigation.spec.js
           --maxWorkers=1 --minWorkers=1

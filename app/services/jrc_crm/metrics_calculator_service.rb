@@ -28,11 +28,39 @@ module JrcCrm
         closed_lost_count: count_lost_deals,
         overdue_activities_count: overdue_activities_count,
         stalled_deals_count: stalled_deals_count,
-        funnel_stages: funnel_stages
+        funnel_stages: funnel_stages,
+        commercial_summary: commercial_summary
       }
     end
 
     private
+
+    def commercial_summary
+      leads = metrics_scope(@account.jrc_crm_leads)
+      proposals = metrics_scope(@account.jrc_crm_proposals)
+      orders = metrics_scope(@account.jrc_crm_sales_orders).where("NOT (snapshot ? 'removal')")
+      active_orders = orders.where(status: JrcCrm::SalesOrder::COMMERCIAL_ACTIVE_STATUSES)
+      # Preserve provenance even if a former internal actor was deleted. Legacy
+      # public events have the native public-controller description, not metadata.
+      public_acceptances = JrcCrm::ProposalEvent.where(account_id: @account.id, event_type: 'accepted')
+                                               .where("metadata ->> 'acceptance_origin' = :origin OR description = :legacy",
+                                                      origin: 'public_link', legacy: 'Proposta aceita pelo cliente com evidência digital')
+      signed = proposals.where(status: 'accepted', id: public_acceptances.select(:proposal_id))
+                        .where.not(accepted_at: nil).where.not(accepted_by_name: [nil, '']).where.not(accepted_by_document: [nil, ''])
+      {
+        leads: leads.group(:status).count,
+        deals: %w[open won lost].index_with do |status|
+          scope = base_deals.where(status: status)
+          { count: scope.count, value_cents: scope.sum(:value_cents) }
+        end,
+        proposals_sent_count: proposals.where.not(sent_at: nil).count,
+        signed_proposals: { count: signed.count, value_cents: signed.sum(:total_cents) },
+        orders: { total_count: orders.count, active_count: active_orders.count,
+                  pending_count: orders.where(status: %w[draft pending]).count,
+                  revenue_cents: active_orders.sum(:total_cents),
+                  statuses: orders.group(:status).count }
+      }
+    end
 
     def base_deals
       metrics_scope(@account.jrc_crm_deals)

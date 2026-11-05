@@ -4,6 +4,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useStore } from 'vuex';
 import { useI18n } from 'vue-i18n';
 import { lostReasonsAPI } from 'dashboard/api/crm';
+import FunnelLeads from './FunnelLeads.vue';
 import KanbanColumn from './KanbanColumn.vue';
 import KanbanFilters from './KanbanFilters.vue';
 import { useDragAndDrop } from '../../composables/useDragAndDrop';
@@ -70,7 +71,9 @@ const pipelineValue = computed(() =>
     (total, column) =>
       total +
       column.deals.reduce(
-        (columnTotal, deal) => columnTotal + Number(deal.value_cents || 0),
+        (columnTotal, deal) =>
+          columnTotal +
+          (deal.status === 'open' ? Number(deal.value_cents || 0) : 0),
         0
       ),
     0
@@ -150,13 +153,14 @@ const { onDragStart, onDragOver, onDrop, onDragEnd } = useDragAndDrop({
             class="inline-flex items-center gap-1 rounded-full bg-n-blue-3 px-3 py-1 text-xs font-semibold text-n-blue-11"
           >
             <i class="i-lucide-chart-no-axes-column-increasing size-3" />
-            {{ dealCount }} oportunidades
+            {{ dealCount }} {{ t('CRM.FUNNEL.DEAL_TYPE') }}
           </span>
           <span
             class="inline-flex items-center gap-1 rounded-full bg-n-teal-3 px-3 py-1 text-xs font-semibold text-n-teal-11"
           >
             <i class="i-lucide-circle-dollar-sign size-3" />
-            <CrmValueDisplay :cents="pipelineValue" /> no pipeline
+            <CrmValueDisplay :cents="pipelineValue" />
+            {{ t('CRM.FUNNEL.OPEN_VALUE') }}
           </span>
         </template>
         <template #actions>
@@ -177,6 +181,7 @@ const { onDragStart, onDragOver, onDrop, onDragEnd } = useDragAndDrop({
         <KanbanFilters v-model:filters="filters" @change="loadKanbanData" />
       </div>
     </div>
+    <FunnelLeads :filters="filters" />
     <div
       v-if="loading"
       class="m-6 rounded-2xl border border-n-weak bg-n-solid-2 p-8 text-center text-n-slate-10 shadow-sm"
