@@ -17,6 +17,55 @@ const router = useRouter();
 const rows = ref([]);
 const loading = ref(false);
 const selected = ref(null);
+const approvalDialog = ref(null);
+const approvalOrder = ref(null);
+const approving = ref(false);
+const approvalError = ref('');
+const approvalLabel = computed(() =>
+  t(
+    approvalOrder.value?.commercial_flow === 'simple'
+      ? 'CRM.ORDERS.APPROVE_ACTIVATE'
+      : 'CRM.ORDERS.APPROVE'
+  )
+);
+const openApproval = () => {
+  if (!isAdmin.value || !selected.value?.approval?.can_approve) return;
+  approvalOrder.value = selected.value;
+  approvalError.value = '';
+  approvalDialog.value.open();
+};
+const approveOrder = async () => {
+  if (approving.value || !isAdmin.value || !approvalOrder.value) return;
+  const accountId = route.params.accountId;
+  const id = approvalOrder.value.id;
+  approving.value = true;
+  approvalError.value = '';
+  try {
+    const { data } = await salesOrdersAPI.approve(id);
+    if (route.params.accountId !== accountId) return;
+    rows.value = rows.value.map(row => (row.id === id ? data : row));
+    if (selected.value?.id === id) selected.value = data;
+    approvalDialog.value.close();
+    useAlert(
+      t(
+        data.commercial_status === 'active'
+          ? 'CRM.ORDERS.ACTIVATION_SUCCESS'
+          : 'CRM.ORDERS.APPROVAL_SUCCESS'
+      )
+    );
+  } catch (error) {
+    if (route.params.accountId !== accountId) return;
+    approvalError.value =
+      error.response?.data?.errors?.join(', ') ||
+      t(
+        error.response?.data?.code
+          ? 'CRM.ORDERS.APPROVAL_GATE_BLOCKED'
+          : 'CRM.ORDERS.APPROVAL_ERROR'
+      );
+  } finally {
+    approving.value = false;
+  }
+};
 const saving = ref(false);
 const search = ref('');
 const statusFilter = ref('all');
@@ -63,6 +112,9 @@ const removeOrders = async () => {
     rows.value = rows.value.filter(row => !ids.includes(row.id));
     selectedIds.value = selectedIds.value.filter(id => !ids.includes(id));
     removalRows.value = [];
+    approvalOrder.value = null;
+    approvalError.value = '';
+    approvalDialog.value?.close();
     removalDialog.value.close();
   } catch (error) {
     removalError.value =
@@ -82,6 +134,7 @@ const dateLabel = value =>
   value ? new Intl.DateTimeFormat('pt-BR').format(new Date(value)) : '—';
 const statusLabel = status =>
   ({
+    active: t('CRM.ORDERS.ACTIVE'),
     draft: 'Rascunho',
     pending: 'Pendente',
     approved: 'Aprovado',
@@ -93,6 +146,7 @@ const statusLabel = status =>
   })[status] || status;
 const statusTone = status =>
   ({
+    active: 'bg-n-teal-3 text-n-teal-11',
     draft: 'bg-n-slate-3 text-n-slate-12',
     pending: 'bg-amber-50 text-amber-700',
     approved: 'bg-emerald-50 text-emerald-700',
@@ -115,6 +169,25 @@ const customerName = row =>
   row.contact?.name || row.snapshot?.customer_name || 'Cliente não informado';
 const orderDate = row => row.sold_at || row.created_at;
 const active = row => row.status !== 'canceled';
+const orderStatus = row => row.commercial_status || row.status;
+const simpleListFlow = computed(
+  () =>
+    rows.value.length > 0 &&
+    rows.value.every(row => row.commercial_flow === 'simple')
+);
+const kanbanStages = computed(() =>
+  simpleListFlow.value
+    ? ['draft', 'pending', 'active', 'canceled']
+    : [
+        'pending',
+        'approved',
+        'separating',
+        'completed',
+        ...(rows.value.some(row => row.commercial_flow === 'simple')
+          ? ['active']
+          : []),
+      ]
+);
 
 const owners = computed(() => [
   ...new Map(
@@ -150,7 +223,8 @@ const filtered = computed(() =>
     row =>
       (!selectedOnly.value || selectedIds.value.includes(row.id)) &&
       periodMatch(row) &&
-      (statusFilter.value === 'all' || row.status === statusFilter.value) &&
+      (statusFilter.value === 'all' ||
+        orderStatus(row) === statusFilter.value) &&
       (ownerFilter.value === 'all' ||
         String(row.owner?.id) === String(ownerFilter.value)) &&
       (customerFilter.value === 'all' ||
@@ -209,7 +283,8 @@ const previousPeriodRows = computed(() => {
     return (
       d >= start &&
       d <= end &&
-      (statusFilter.value === 'all' || row.status === statusFilter.value) &&
+      (statusFilter.value === 'all' ||
+        orderStatus(row) === statusFilter.value) &&
       (ownerFilter.value === 'all' ||
         String(row.owner?.id) === String(ownerFilter.value)) &&
       (customerFilter.value === 'all' ||
@@ -237,10 +312,13 @@ const totals = computed(() => {
     total,
     mrr,
     approval: rs.filter(r => r.status === 'pending').length,
-    implementation: rs.filter(r =>
-      ['approved', 'separating', 'invoiced', 'shipped'].includes(r.status)
+    implementation: rs.filter(
+      r =>
+        (r.commercial_flow !== 'simple' && r.status === 'approved') ||
+        ['separating', 'invoiced', 'shipped'].includes(r.status)
     ).length,
-    active: rs.filter(r => r.status === 'completed').length,
+    active: rs.filter(r => ['active', 'completed'].includes(orderStatus(r)))
+      .length,
     ticket: live.length ? Math.round(total / live.length) : 0,
     conversion: rs.length
       ? Math.round(
@@ -260,18 +338,24 @@ const totals = computed(() => {
   };
 });
 const statusCounts = computed(() =>
-  [
-    'draft',
-    'pending',
-    'approved',
-    'separating',
-    'invoiced',
-    'shipped',
-    'completed',
-    'canceled',
-  ].map(status => ({
+  (simpleListFlow.value
+    ? ['draft', 'pending', 'active', 'canceled']
+    : [
+        'draft',
+        'pending',
+        'approved',
+        'separating',
+        'invoiced',
+        'shipped',
+        'completed',
+        'canceled',
+        ...(rows.value.some(row => row.commercial_flow === 'simple')
+          ? ['active']
+          : []),
+      ]
+  ).map(status => ({
     status,
-    count: kpiRows.value.filter(r => r.status === status).length,
+    count: kpiRows.value.filter(r => orderStatus(r) === status).length,
   }))
 );
 const previousTotals = computed(() => {
@@ -481,7 +565,7 @@ const exportCsv = () => {
     (Number(r.total_cents || 0) / 100).toFixed(2),
     (Number(r.monthly_cents || 0) / 100).toFixed(2),
     dateLabel(orderDate(r)),
-    statusLabel(r.status),
+    statusLabel(orderStatus(r)),
   ]);
   const csv = [header, ...body]
     .map(line =>
@@ -592,6 +676,27 @@ watch(
         </button>
       </div>
     </header>
+    <Dialog
+      ref="approvalDialog"
+      type="edit"
+      :title="approvalLabel"
+      :description="t('CRM.ORDERS.APPROVAL_HELP')"
+      :confirm-button-label="t('CRM.ORDERS.CONFIRM_APPROVAL')"
+      :cancel-button-label="t('CRM.ORDERS.CANCEL_APPROVAL')"
+      :disable-confirm-button="approving"
+      :dismissible="!approving"
+      :is-loading="approving"
+      @confirm="approveOrder"
+    >
+      <p v-if="approvalOrder" class="text-sm text-n-slate-12">
+        <strong>{{ approvalOrder.order_number }}</strong> —
+        {{ customerName(approvalOrder) }} —
+        {{ money(approvalOrder.total_cents) }}
+      </p>
+      <p v-if="approvalError" role="alert" class="mt-3 text-sm text-n-ruby-11">
+        {{ approvalError }}
+      </p>
+    </Dialog>
     <Dialog
       ref="removalDialog"
       :title="t('CRM.ORDERS.REMOVE_SELECTED')"
@@ -962,8 +1067,8 @@ watch(
                   <td class="p-3">
                     <span
                       class="rounded-full px-2.5 py-1 text-xs font-semibold"
-                      :class="statusTone(row.status)"
-                      >{{ statusLabel(row.status) }}</span
+                      :class="statusTone(orderStatus(row))"
+                      >{{ statusLabel(orderStatus(row)) }}</span
                     >
                   </td>
                   <td class="p-3">
@@ -1009,18 +1114,18 @@ watch(
             class="grid min-w-[1000px] grid-cols-4 gap-3 overflow-x-auto bg-n-slate-2 p-4"
           >
             <section
-              v-for="st in ['pending', 'approved', 'separating', 'completed']"
+              v-for="st in kanbanStages"
               :key="st"
               class="rounded-2xl bg-n-slate-3 p-3"
             >
               <h3 class="mb-3 font-bold">
                 {{ statusLabel(st) }}
                 <span class="float-right text-xs text-n-slate-11">{{
-                  filtered.filter(r => r.status === st).length
+                  filtered.filter(r => orderStatus(r) === st).length
                 }}</span>
               </h3>
               <article
-                v-for="row in filtered.filter(r => r.status === st)"
+                v-for="row in filtered.filter(r => orderStatus(r) === st)"
                 :key="row.id"
                 class="mb-2 cursor-pointer rounded-xl border bg-n-solid-2 p-3 shadow-sm"
                 @click="open(row)"
@@ -1088,8 +1193,8 @@ watch(
               </div>
               <span
                 class="rounded-full px-2 py-1 text-xs"
-                :class="statusTone(row.status)"
-                >{{ statusLabel(row.status) }}</span
+                :class="statusTone(orderStatus(row))"
+                >{{ statusLabel(orderStatus(row)) }}</span
               >
             </div>
             <p
@@ -1117,7 +1222,7 @@ watch(
               <div class="text-right">
                 <b>{{ dateLabel(row.snapshot.activation_date) }}</b>
                 <p class="text-xs text-blue-600">
-                  {{ statusLabel(row.status) }}
+                  {{ statusLabel(orderStatus(row)) }}
                 </p>
               </div>
             </div>
@@ -1451,14 +1556,47 @@ watch(
           </section>
           <section class="mt-4 rounded-xl border p-4">
             <h4 class="font-semibold">Fluxo do pedido</h4>
-            <p class="mt-2 text-sm">
+            <p
+              v-if="selected.commercial_flow === 'simple'"
+              class="mt-2 text-sm"
+            >
+              {{ t('CRM.ORDERS.SIMPLE_FLOW') }}
+            </p>
+            <p v-else class="mt-2 text-sm">
               Pendente → Aprovado → Em implantação → Faturado → Em entrega →
               Ativo
             </p>
-            <p class="mt-2 font-semibold">{{ statusLabel(selected.status) }}</p>
-            <div class="mt-3 flex gap-2">
+            <p class="mt-2 font-semibold">
+              {{ statusLabel(orderStatus(selected)) }}
+            </p>
+            <p
+              v-if="selected.commercial_flow === 'simple'"
+              class="mt-2 text-sm text-n-slate-11"
+            >
+              {{ t('CRM.ORDERS.SIMPLE_FLOW_HELP') }}
+            </p>
+            <div class="mt-3 flex flex-wrap gap-2">
               <button
-                v-for="status in selected.allowed_statuses || []"
+                v-if="isAdmin && selected.approval?.can_approve"
+                class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-n-brand px-4 py-2.5 font-semibold text-white sm:w-auto"
+                :disabled="saving || detailLoading || approving"
+                @click="openApproval"
+              >
+                <i class="i-lucide-check-circle size-5" aria-hidden="true" />
+                {{
+                  t(
+                    selected.commercial_flow === 'simple'
+                      ? 'CRM.ORDERS.APPROVE_ACTIVATE'
+                      : 'CRM.ORDERS.APPROVE'
+                  )
+                }}
+              </button>
+              <button
+                v-for="status in (selected.allowed_statuses || []).filter(
+                  status =>
+                    selected.commercial_flow !== 'simple' ||
+                    status === 'canceled'
+                )"
                 :key="status"
                 class="rounded-lg border px-3 py-2"
                 :disabled="saving || detailLoading"
@@ -1480,7 +1618,22 @@ watch(
                 :key="event.id"
                 class="border-l-2 pl-3 text-sm"
               >
-                <strong>{{ event.event_type }}</strong>
+                <strong>{{
+                  event.metadata?.decision === 'approved'
+                    ? t(
+                        selected.commercial_flow === 'simple'
+                          ? 'CRM.ORDERS.ACTIVATION_SUCCESS'
+                          : 'CRM.ORDERS.APPROVAL_SUCCESS'
+                      )
+                    : event.event_type
+                }}</strong>
+                <p
+                  v-if="
+                    event.metadata?.decision === 'approved' && event.actor?.name
+                  "
+                >
+                  {{ t('CRM.ORDERS.APPROVED_BY', { name: event.actor.name }) }}
+                </p>
                 <p>{{ new Date(event.created_at).toLocaleString('pt-BR') }}</p>
                 <p v-if="event.metadata?.before?.status">
                   {{ statusLabel(event.metadata.before.status) }} →

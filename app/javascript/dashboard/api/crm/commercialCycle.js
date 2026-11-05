@@ -17,6 +17,8 @@ const uploadFiles = (url, files, extra = {}) => {
 };
 
 export const salesOrdersAPI = make('sales_orders');
+salesOrdersAPI.approve = id =>
+  axios.post(`${salesOrdersAPI.url}/${id}/approve`, { confirmed: true });
 salesOrdersAPI.remove = data =>
   axios.post(`${salesOrdersAPI.url}/remove`, data);
 salesOrdersAPI.preview = data =>

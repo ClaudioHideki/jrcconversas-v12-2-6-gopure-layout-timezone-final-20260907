@@ -671,6 +671,7 @@ Rails.application.routes.draw do
               post :preview, on: :collection
               get :selection_options, on: :collection
               member do
+                post :approve
                 get :pdf
                 post :attachments, action: :upload_attachments
                 get 'attachments/:attachment_id', action: :download_attachment, as: :attachment

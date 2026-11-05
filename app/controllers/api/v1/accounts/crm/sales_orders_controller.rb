@@ -1,6 +1,6 @@
 module Api::V1::Accounts::Crm
   class SalesOrdersController < BaseController
-    before_action :set_order, only: [:show, :update, :pdf, :upload_attachments, :download_attachment]
+    before_action :set_order, only: [:show, :update, :approve, :pdf, :upload_attachments, :download_attachment]
 
     def index
       orders = visible_to_current_user(crm_scope.jrc_crm_sales_orders)
@@ -11,14 +11,30 @@ module Api::V1::Accounts::Crm
     end
 
     def show
-      company = serialize_selection_contact(@order.contact)
-      render json: serialize(@order).merge(
-        company: company && { id: company[:company_id], name: company[:company_name], tax_id: company[:tax_id] },
-        allowed_statuses: allowed_order_statuses(@order),
-        history: JrcCrm::AuditEvent.where(account_id: crm_scope.id, resource_type: 'JrcCrm::SalesOrder', resource_id: @order.id)
-          .order(created_at: :desc, id: :desc).limit(100).map { |event| { id: event.id, event_type: event.event_type, created_at: event.created_at, metadata: event.metadata } }
-      )
+      render json: order_details
     end
+
+    def approve
+      ensure_crm_admin!
+      unless params[:confirmed] == true
+        return render json: { errors: ['Confirme a aprovação deste pedido.'] }, status: :unprocessable_entity
+      end
+
+      @order.with_lock do
+        service = JrcCrm::OrderApprovalService.new(order: @order, actor: Current.user)
+        request = order_approval_request
+        next if @order.approved? && request&.approved?
+
+        unless approval_available?(request)
+          @order.errors.add(:base, 'Este pedido não possui uma aprovação pendente disponível.')
+          raise ActiveRecord::RecordInvalid, @order
+        end
+        request ||= service.request!
+        service.decide!(request: request, decision: 'approved')
+      end
+      render json: order_details
+    end
+
 
     def remove
       ensure_crm_admin!
@@ -153,6 +169,30 @@ module Api::V1::Accounts::Crm
     end
 
     private
+
+    def order_details
+      company = serialize_selection_contact(@order.contact)
+      request = order_approval_request
+      history = JrcCrm::AuditEvent.where(account_id: crm_scope.id, resource_type: 'JrcCrm::SalesOrder', resource_id: @order.id)
+        .order(created_at: :desc, id: :desc).limit(100).to_a
+      actors = crm_scope.users.where(id: history.map(&:actor_id)).pluck(:id, :name).to_h
+      serialize(@order).merge(
+        company: company && { id: company[:company_id], name: company[:company_name], tax_id: company[:tax_id] },
+        approval: { can_approve: crm_admin? && approval_available?(request), request_id: request&.id, status: request&.status },
+        allowed_statuses: allowed_order_statuses(@order),
+        history: history.map { |event| { id: event.id, event_type: event.event_type, created_at: event.created_at, metadata: event.metadata,
+          actor: event.actor_type == 'User' ? { id: event.actor_id, name: actors[event.actor_id] } : nil } }
+      )
+    end
+
+    def order_approval_request
+      @order.backoffice_requests.where(request_kind: 'approval').where("metadata ->> 'source' = ?", 'order_approval').first
+    end
+
+    def approval_available?(request)
+      @order.pending? && !@order.snapshot.key?('removal') &&
+        (request.nil? || JrcCrm::BackofficeRequest::ACTIVE_STATUSES.include?(request.status))
+    end
 
     def allowed_order_statuses(order)
       next_status = { 'draft' => 'pending', 'approved' => 'separating',
@@ -420,9 +460,12 @@ module Api::V1::Accounts::Crm
     end
 
     def serialize(order)
+      simple = JrcCrm::ProposalProfile.gopure?(crm_scope)
+      commercial_status = simple && JrcCrm::OrderWorkflowSyncService::QUALIFYING_STATUSES.include?(order.status) ? 'active' : order.status
       snap = order.snapshot || {}
       {
         id: order.id, order_number: order.order_number, status: order.status,
+        commercial_flow: simple ? 'simple' : 'standard', commercial_status: commercial_status,
         source_type: order.source_type, order_origin: order.order_origin, proposal_version: order.proposal_version,
         total_cents: order.total_cents, products_cents: order.products_cents,
         shipping_cents: order.shipping_cents, discount_cents: order.discount_cents,

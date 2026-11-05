@@ -76,7 +76,7 @@ it('retains selected ids through paging and filters and restores all rows on req
 it('requires an identified order, reason and checkbox before logical deletion', async () => {
   await mountPage();
   await wrapper.get('button[aria-label="Excluir pedido"]').trigger('click');
-  const dialog = wrapper.get('dialog');
+  const dialog = wrapper.get('dialog[open]');
   expect(dialog.text()).toContain('PED-001');
   expect(dialog.text()).toContain('Cliente 1');
   expect(
@@ -103,7 +103,7 @@ it('shows protected-order errors without losing selection or rows', async () => 
   await button('Excluir selecionados').trigger('click');
   await wrapper.get('[name="removal_reason"]').setValue('Revisão');
   await wrapper.get('[name="removal_confirmed"]').setValue(true);
-  await wrapper.get('dialog form').trigger('submit');
+  await wrapper.get('dialog[open] form').trigger('submit');
   await flushPromises();
   expect(wrapper.get('[role="alert"]').text()).toContain(
     'vinculado a contrato'
