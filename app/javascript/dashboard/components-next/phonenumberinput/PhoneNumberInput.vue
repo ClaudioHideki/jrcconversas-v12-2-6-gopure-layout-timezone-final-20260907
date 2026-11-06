@@ -4,7 +4,7 @@ import parsePhoneNumber from 'libphonenumber-js';
 import { useI18n } from 'vue-i18n';
 import countries from 'shared/constants/countries.js';
 import { useVuelidate } from '@vuelidate/core';
-import { required, minLength, numeric } from '@vuelidate/validators';
+import { requiredIf, minLength, numeric } from '@vuelidate/validators';
 import {
   getActiveCountryCode,
   getActiveDialCode,
@@ -48,9 +48,12 @@ const rules = {
     numeric,
   },
   activeDialCode: {
-    required,
+    required: requiredIf(() => Boolean(phoneNumber.value)),
     validDialCode: value => {
-      return countries.some(country => country.dial_code === value);
+      return (
+        !phoneNumber.value ||
+        countries.some(country => country.dial_code === value)
+      );
     },
   },
 };

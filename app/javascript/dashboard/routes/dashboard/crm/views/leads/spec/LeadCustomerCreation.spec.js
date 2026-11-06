@@ -22,7 +22,16 @@ vi.mock('dashboard/api/jrcCustomers', () => ({
   },
 }));
 
-it('runs the real lead, native contact and master company forms end to end with synthetic data', async () => {
+afterEach(() => vi.restoreAllMocks());
+
+const timeZones = ['UTC', 'America/Sao_Paulo'];
+it.each(timeZones)('creates a lead and customer in %s', async zone => {
+  const resolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
+  vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockImplementation(
+    function resolveOptions() {
+      return { ...resolvedOptions.call(this), timeZone: zone };
+    }
+  );
   sessionStorage.clear();
   const unrelatedDraft = JSON.stringify({
     version: 1,
@@ -32,10 +41,10 @@ it('runs the real lead, native contact and master company forms end to end with 
     'jrc:draft:account:1:user:7:crm:native_contact',
     unrelatedDraft
   );
-  HTMLDialogElement.prototype.showModal = function () {
+  HTMLDialogElement.prototype.showModal = function showModal() {
     this.setAttribute('open', '');
   };
-  HTMLDialogElement.prototype.close = function () {
+  HTMLDialogElement.prototype.close = function close() {
     this.removeAttribute('open');
   };
   const company = {
@@ -124,6 +133,8 @@ it('runs the real lead, native contact and master company forms end to end with 
   await form.findAll('input')[0].setValue('Pessoa');
   await form.findAll('input')[1].setValue('QA');
   await form.findAll('input')[2].setValue('pessoa@example.test');
+  await flushPromises();
+  expect(form.vm.isFormInvalid).toBe(false);
   await wrapper
     .findAll('button')
     .find(x => x.text() === 'Cadastrar nova empresa')
