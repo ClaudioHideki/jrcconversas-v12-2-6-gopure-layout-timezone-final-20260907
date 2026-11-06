@@ -118,3 +118,8 @@ export const customersAPI = (() => {
   api.show = id => axios.get(`${api.url}/${id}`);
   return api;
 })();
+
+salesOrdersAPI.deletionPreview = data =>
+  axios.post(`${salesOrdersAPI.url}/deletion_preview`, data);
+salesOrdersAPI.deleteWithDependencies = data =>
+  axios.post(`${salesOrdersAPI.url}/delete_with_dependencies`, data);

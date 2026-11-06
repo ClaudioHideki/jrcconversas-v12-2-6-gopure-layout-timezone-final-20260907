@@ -3,14 +3,14 @@ module JrcCrm
   # requested. Project creation is best-effort: lack of Projects permission is
   # reported back to Backoffice and never invalidates the commercial sale.
   class OrderImplementationProjectService
-    DEFAULT_TASKS = [
-      'Kickoff',
-      'Levantamento',
-      'Configuração',
-      'Integrações',
-      'Treinamento',
-      'Homologação',
-      'Go-live'
+    DEFAULT_TASKS = %w[
+      Kickoff
+      Levantamento
+      Configuração
+      Integrações
+      Treinamento
+      Homologação
+      Go-live
     ].freeze
 
     def initialize(order:, actor: nil)
@@ -20,8 +20,16 @@ module JrcCrm
     end
 
     def call
+      @order.with_lock { perform_locked }
+    rescue ActiveRecord::RecordNotFound
+      result(nil, 'O pedido não está mais disponível para implantação.')
+    end
+
+    def perform_locked
       return result(nil, nil) unless requested?
-      return result(nil, 'Projetos não está habilitado para esta conta.') unless JrcOperations::Access.ready? && JrcOperations::Access.enabled?(@account, 'projects')
+      return result(nil, 'Projetos não está habilitado para esta conta.') unless JrcOperations::Access.ready? && JrcOperations::Access.enabled?(
+        @account, 'projects'
+      )
       return result(nil, 'O pedido ainda aguarda aprovação.') unless OrderWorkflowSyncService::QUALIFYING_STATUSES.include?(@order.status)
       return result(nil, 'O contrato precisa estar assinado antes da implantação.') if
         (@order.contracts.exists? && !@order.contracts.where(signature_status: 'signed').exists?) ||
@@ -92,7 +100,7 @@ module JrcCrm
 
     def due_on
       parsed = Date.iso8601(snapshot[:activation_date].to_s) if snapshot[:activation_date].present?
-      parsed || Date.current + [snapshot[:activation_days].to_i, 30].max
+      parsed || (Date.current + [snapshot[:activation_days].to_i, 30].max)
     rescue ArgumentError
       Date.current + 30
     end

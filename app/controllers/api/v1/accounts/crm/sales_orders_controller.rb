@@ -2,6 +2,8 @@ module Api::V1::Accounts::Crm
   class SalesOrdersController < BaseController
     before_action :set_order, only: [:show, :update, :approve, :pdf, :upload_attachments, :download_attachment]
 
+    around_action :lock_order_documents, only: :upload_attachments
+
     def index
       response.set_header('X-Jrc-Commercial-Flow', JrcCrm::ProposalProfile.gopure?(crm_scope) ? 'simple' : 'operational')
       orders = visible_to_current_user(crm_scope.jrc_crm_sales_orders)
@@ -17,9 +19,7 @@ module Api::V1::Accounts::Crm
 
     def approve
       ensure_crm_admin!
-      unless params[:confirmed] == true
-        return render json: { errors: ['Confirme a aprovação deste pedido.'] }, status: :unprocessable_entity
-      end
+      return render json: { errors: ['Confirme a aprovação deste pedido.'] }, status: :unprocessable_entity unless params[:confirmed] == true
 
       @order.with_lock do
         service = JrcCrm::OrderApprovalService.new(order: @order, actor: Current.user)
@@ -36,6 +36,19 @@ module Api::V1::Accounts::Crm
       render json: order_details
     end
 
+    def deletion_preview
+      ensure_crm_admin!
+      render json: deletion_service.preview
+    rescue JrcCrm::OrderDeletionService::Conflict => e
+      render json: { errors: [e.message], code: 'DELETION_REVIEW_REQUIRED' }, status: :conflict
+    end
+
+    def delete_with_dependencies
+      ensure_crm_admin!
+      render json: deletion_service.execute(token: params[:preview_token], confirmed: params[:confirmed], confirmation: params[:confirmation])
+    rescue JrcCrm::OrderDeletionService::Conflict => e
+      render json: { errors: [e.message], code: 'DELETION_REVIEW_REQUIRED' }, status: :conflict
+    end
 
     def remove
       ensure_crm_admin!
@@ -43,6 +56,7 @@ module Api::V1::Accounts::Crm
       unless params[:confirmed] == true && ids.any? && ids.length <= 100
         return render json: { errors: ['Confirme explicitamente de 1 a 100 pedidos.'] }, status: :unprocessable_entity
       end
+
       orders = visible_to_current_user(crm_scope.jrc_crm_sales_orders).where(id: ids)
       raise ActiveRecord::RecordNotFound unless orders.count == ids.length
 
@@ -83,12 +97,12 @@ module Api::V1::Accounts::Crm
                   result = service.call
                   if service.created && params[:sales_order].present?
                     op_keys = %w[order_type activation_date cost_center financial_notes operation_owner_name
-                      customer_owner_name implementation_team priority operation_notes generate_contract
-                      send_to_implementation create_implementation_project create_follow_up follow_up_due_at
-                      tags checklist documents]
+                                 customer_owner_name implementation_team priority operation_notes generate_contract
+                                 send_to_implementation create_implementation_project create_follow_up follow_up_due_at
+                                 tags checklist documents]
                     result.update!(notes: order_params[:notes],
-                      status: order_params[:status] == 'draft' ? 'draft' : 'pending',
-                      snapshot: result.snapshot.merge(order_snapshot.to_h.slice(*op_keys)))
+                                   status: order_params[:status] == 'draft' ? 'draft' : 'pending',
+                                   snapshot: result.snapshot.merge(order_snapshot.to_h.slice(*op_keys)))
                   end
                   result
                 else
@@ -105,6 +119,7 @@ module Api::V1::Accounts::Crm
         if @order.snapshot['removal'].present? || params.dig(:sales_order, :snapshot)&.key?(:removal)
           raise JrcCrm::CommercialFinancials::InvalidTerms, 'O registro de exclusão é auditável e não pode ser alterado por esta ação.'
         end
+
         before_trace = order_trace(@order)
         attrs = order_params.to_h
         if attrs['status'].present? && attrs['status'] != @order.status && !allowed_order_statuses(@order).include?(attrs['status'])
@@ -120,8 +135,8 @@ module Api::V1::Accounts::Crm
         snapshot = (@order.snapshot || {}).deep_merge((attrs.delete('snapshot') || {}).to_h)
         submitted = params[:sales_order].key?(:items) ? submitted_items : @order.order_items.order(:id).map(&:attributes)
         legacy_operational_update = JrcCrm::LegacyOrderTerms.applicable?(@order) &&
-          !params[:sales_order].key?(:items) && !params[:sales_order].key?(:snapshot) &&
-          (attrs.keys & JrcCrm::OrderFinancials::STORED_FIELDS.map(&:to_s)).empty?
+                                    !params[:sales_order].key?(:items) && !params[:sales_order].key?(:snapshot) &&
+                                    (attrs.keys & JrcCrm::OrderFinancials::STORED_FIELDS.map(&:to_s)).empty?
         proposed = if legacy_operational_update
                      current
                    else
@@ -149,7 +164,8 @@ module Api::V1::Accounts::Crm
 
     def pdf
       bytes = JrcCrm::OrderPdfService.new(@order).call
-      send_data bytes, filename: "#{@order.order_number}.pdf", type: 'application/pdf', disposition: params[:download].present? ? 'attachment' : 'inline'
+      send_data bytes, filename: "#{@order.order_number}.pdf", type: 'application/pdf',
+                       disposition: params[:download].present? ? 'attachment' : 'inline'
     end
 
     def upload_attachments
@@ -159,6 +175,7 @@ module Api::V1::Accounts::Crm
       if @order.attachments.count + uploads.length > 10 || uploads.any? { |file| file.size > 20.megabytes }
         return render json: { message: 'Limite de 10 arquivos de ate 20 MB por pedido.' }, status: :unprocessable_entity
       end
+
       uploads.each { |file| @order.attachments.attach(file) }
       audit_order!(@order, 'order_attachment_uploaded', { filenames: uploads.map(&:original_filename) })
       render json: { attachments: attachment_rows(@order.reload) }, status: :created
@@ -171,18 +188,28 @@ module Api::V1::Accounts::Crm
 
     private
 
+    def deletion_service
+      JrcCrm::OrderDeletionService.new(account: crm_scope, actor: Current.user, ids: params[:ids], reason: params[:reason])
+    end
+
+    def lock_order_documents(&)
+      @order.with_lock(&)
+    end
+
     def order_details
       company = serialize_selection_contact(@order.contact)
       request = order_approval_request
       history = JrcCrm::AuditEvent.where(account_id: crm_scope.id, resource_type: 'JrcCrm::SalesOrder', resource_id: @order.id)
-        .order(created_at: :desc, id: :desc).limit(100).to_a
+                                  .order(created_at: :desc, id: :desc).limit(100).to_a
       actors = crm_scope.users.where(id: history.map(&:actor_id)).pluck(:id, :name).to_h
       serialize(@order).merge(
         company: company && { id: company[:company_id], name: company[:company_name], tax_id: company[:tax_id] },
         approval: { can_approve: crm_admin? && approval_available?(request), request_id: request&.id, status: request&.status },
         allowed_statuses: allowed_order_statuses(@order),
-        history: history.map { |event| { id: event.id, event_type: event.event_type, created_at: event.created_at, metadata: event.metadata,
-          actor: event.actor_type == 'User' ? { id: event.actor_id, name: actors[event.actor_id] } : nil } }
+        history: history.map do |event|
+          { id: event.id, event_type: event.event_type, created_at: event.created_at, metadata: event.metadata,
+            actor: event.actor_type == 'User' ? { id: event.actor_id, name: actors[event.actor_id] } : nil }
+        end
       )
     end
 
@@ -216,9 +243,7 @@ module Api::V1::Accounts::Crm
       owner_id = attrs.delete('owner_id')
       owner = owner_id.present? ? crm_scope.users.find(owner_id) : Current.user
       order_origin = attrs.delete('order_origin').presence || default_order_origin(attrs)
-      unless JrcCrm::SalesOrder::ORIGINS.include?(order_origin)
-        raise JrcCrm::CommercialFinancials::InvalidTerms, 'Origem do pedido invalida.'
-      end
+      raise JrcCrm::CommercialFinancials::InvalidTerms, 'Origem do pedido invalida.' unless JrcCrm::SalesOrder::ORIGINS.include?(order_origin)
       if order_origin == 'proposal_deal' && attrs['deal_id'].blank?
         raise JrcCrm::CommercialFinancials::InvalidTerms, 'Origem Proposta/Negocio exige um negocio vinculado.'
       end
@@ -237,7 +262,7 @@ module Api::V1::Accounts::Crm
                 snapshot: JrcCrm::OrderFinancials.snapshot_for(result, snapshot))
       )
       result[:items].each { |item| order.order_items.create!(item) }
-        JrcApprovals::CommercialGate.check!(resource: order.reload, user: Current.user, key: 'crm.order_price') unless order.draft?
+      JrcApprovals::CommercialGate.check!(resource: order.reload, user: Current.user, key: 'crm.order_price') unless order.draft?
       order
     end
 
@@ -330,8 +355,11 @@ module Api::V1::Accounts::Crm
           row['snapshot'] = { 'billing_model' => product.billing_model, 'setup_fee_cents' => product.setup_fee_cents,
                               'contract_term_months' => product.contract_term_months, 'unit_name' => product.sales_unit }
                             .merge((row['snapshot'] || {}).to_h)
-          row['snapshot']['requires_implementation'] = existing && existing.product_id == product.id ?
-            ActiveModel::Type::Boolean.new.cast(existing.snapshot['requires_implementation']) : product.requires_implementation
+          row['snapshot']['requires_implementation'] = if existing && existing.product_id == product.id
+                                                         ActiveModel::Type::Boolean.new.cast(existing.snapshot['requires_implementation'])
+                                                       else
+                                                         product.requires_implementation
+                                                       end
         end
         row
       end
@@ -347,7 +375,10 @@ module Api::V1::Accounts::Crm
                    visible_to_current_user(crm_scope.jrc_crm_proposals).includes(:deal, :owner, proposal_items: :product).find(params[:proposal_id])
                  end
       deal = proposal&.deal
-      deal ||= visible_to_current_user(crm_scope.jrc_crm_deals).includes(:stage, :pipeline, :owner, :contact, :contacts).find(params[:deal_id]) if params[:deal_id].present?
+      if params[:deal_id].present?
+        deal ||= visible_to_current_user(crm_scope.jrc_crm_deals).includes(:stage, :pipeline, :owner, :contact,
+                                                                           :contacts).find(params[:deal_id])
+      end
       contact = proposal&.customer_contact || deal&.contact || deal&.contacts&.first
       contact ||= crm_scope.contacts.find(params[:contact_id]) if params[:contact_id].present?
       { proposal: proposal, deal: deal, contact: contact }
@@ -374,7 +405,9 @@ module Api::V1::Accounts::Crm
                    .where("REGEXP_REPLACE(COALESCE(contacts.phone_number, ''), '[^0-9]', '', 'g') LIKE :digits OR REGEXP_REPLACE(COALESCE(companies.tax_id, ''), '[^0-9]', '', 'g') LIKE :digits", digits: digit_pattern)
         )
       end
-      scope.distinct.order(Arel.sql('contacts.last_activity_at DESC NULLS LAST, contacts.id DESC')).limit(20).map { |contact| serialize_selection_contact(contact) }
+      scope.distinct.order(Arel.sql('contacts.last_activity_at DESC NULLS LAST, contacts.id DESC')).limit(20).map do |contact|
+        serialize_selection_contact(contact)
+      end
     end
 
     def selection_deals(contact, selected_deal)
@@ -401,7 +434,8 @@ module Api::V1::Accounts::Crm
       scope = visible_to_current_user(crm_scope.jrc_crm_proposals)
       scope = deal ? scope.where(deal_id: deal.id) : scope.where(deal_id: nil, contact_id: contact.id)
       counts = scope.group(:status).count
-      eligible = scope.where(status: 'accepted').includes(:owner, :deal, { events: :user }, proposal_items: :product).order(accepted_at: :desc, id: :desc).limit(20)
+      eligible = scope.where(status: 'accepted').includes(:owner, :deal, { events: :user }, proposal_items: :product).order(accepted_at: :desc,
+                                                                                                                            id: :desc).limit(20)
       waiting = counts.slice('pending_approval', 'sent', 'viewed')
       waiting_count = waiting.values.sum
       message = if eligible.exists?
@@ -413,7 +447,8 @@ module Api::V1::Accounts::Crm
                 end
       attention = scope.where(status: %w[pending_approval sent viewed]).order(updated_at: :desc).first
       { eligible: eligible.map { |proposal| JrcCrm::ProposalSerializer.new(proposal).as_json },
-        state: { message: message, counts: counts, attention_proposal: attention && { id: attention.id, proposal_number: attention.proposal_number, status: attention.status } } }
+        state: { message: message, counts: counts,
+                 attention_proposal: attention && { id: attention.id, proposal_number: attention.proposal_number, status: attention.status } } }
     end
 
     def serialize_selection_contact(contact)
@@ -427,6 +462,7 @@ module Api::V1::Accounts::Crm
 
     def serialize_selection_deal(deal)
       return nil unless deal
+
       contact = deal.contact || deal.contacts.first
       { id: deal.id, title: deal.title, value_cents: deal.value_cents, status: deal.status,
         stage: deal.stage && { id: deal.stage_id, name: deal.stage.name }, company_id: deal.company_id,
@@ -454,8 +490,8 @@ module Api::V1::Accounts::Crm
 
     def audit_order!(order, event_type, metadata)
       JrcCrm::AuditEvent.create!(account_id: crm_scope.id, actor_type: 'User', actor_id: Current.user&.id,
-        event_type: event_type, resource_type: 'JrcCrm::SalesOrder', resource_id: order.id,
-        from_value: {}, to_value: {}, metadata: metadata.merge(source: 'crm_orders'))
+                                 event_type: event_type, resource_type: 'JrcCrm::SalesOrder', resource_id: order.id,
+                                 from_value: {}, to_value: {}, metadata: metadata.merge(source: 'crm_orders'))
     rescue StandardError => e
       Rails.logger.warn("JRC CRM order audit failed: #{e.message}")
     end
@@ -480,7 +516,9 @@ module Api::V1::Accounts::Crm
         business_unit: order.business_unit && { id: order.business_unit.id, name: order.business_unit.name, code: order.business_unit.code },
         deal: order.deal && { id: order.deal.id, title: order.deal.title },
         proposal: order.proposal && { id: order.proposal.id, proposal_number: order.proposal.proposal_number, version_number: order.proposal_version || order.proposal.version_number },
-        items: order.order_items.map { |i| { id: i.id, product_id: i.product_id, name: i.name, quantity: i.quantity, unit_cents: i.unit_cents, discount_cents: i.discount_cents, one_time_cents: i.one_time_cents, recurring_cents: i.recurring_cents, snapshot: i.snapshot } },
+        items: order.order_items.map do |i|
+          { id: i.id, product_id: i.product_id, name: i.name, quantity: i.quantity, unit_cents: i.unit_cents, discount_cents: i.discount_cents, one_time_cents: i.one_time_cents, recurring_cents: i.recurring_cents, snapshot: i.snapshot }
+        end,
         attachments: attachment_rows(order),
         created_at: order.created_at, updated_at: order.updated_at
       }

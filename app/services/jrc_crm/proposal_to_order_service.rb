@@ -3,7 +3,8 @@ module JrcCrm
     attr_reader :created
 
     def initialize(proposal:, actor:)
-      @proposal, @actor = proposal, actor
+      @proposal = proposal
+      @actor = actor
       @created = false
     end
 
@@ -20,9 +21,16 @@ module JrcCrm
            (@proposal.valid_until && @proposal.valid_until < Date.current)
           raise CommercialFinancials::InvalidTerms, 'Proposta expirada ou revogada não pode gerar pedido.'
         end
+
         JrcApprovals::CommercialGate.check!(resource: @proposal, user: @actor, key: 'crm.proposal_convert')
         existing = @proposal.sales_orders.where.not(status: 'canceled').order(:id).first
         next existing if existing
+
+        if @proposal.account.jrc_crm_audit_events.where(event_type: 'order_deletion_executed', to_value: 'deleted')
+                    .where("metadata ->> 'proposal_id' = ?", @proposal.id.to_s).exists?
+          raise CommercialFinancials::InvalidTerms,
+                'O pedido desta proposta foi excluído administrativamente. Crie uma nova versão para gerar outro pedido.'
+        end
 
         terms = @proposal.financial_summary
         snapshot = JrcCrm::ProposalSerializer.new(@proposal).as_json.merge(
@@ -57,6 +65,7 @@ module JrcCrm
     def order_origin
       return 'renewal' if @proposal.relationship_origin['source_contract_id'].present?
       return 'expansion' if @proposal.relationship_origin['relationship_resource_type'] == 'JrcRelationship::ExpansionSignal'
+
       'proposal_deal'
     end
 

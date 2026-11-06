@@ -1,5 +1,6 @@
 <script setup>
 /* eslint-disable vue/no-bare-strings-in-template */
+import OrderDeletionDialog from './OrderDeletionDialog.vue';
 import { calculateOrderMetrics } from './orderMetrics';
 import ApprovalGateBadge from 'dashboard/routes/dashboard/approvals/ApprovalGateBadge.vue';
 import { computed, onMounted, ref, watch } from 'vue';
@@ -79,6 +80,8 @@ const page = ref(1);
 const perPage = ref(10);
 const selectedIds = ref([]);
 const selectedOnly = ref(false);
+const deletionDialog = ref(null);
+
 const removalRows = ref([]);
 const removalDialog = ref(null);
 const removalReason = ref('');
@@ -423,6 +426,13 @@ const load = async () => {
     loading.value = false;
   }
 };
+const deletionCompleted = async data => {
+  selectedIds.value = selectedIds.value.filter(
+    id => !data.removed_ids.includes(id)
+  );
+  if (data.removed_ids.includes(selected.value?.id)) selected.value = null;
+  await load();
+};
 const close = () => {
   selected.value = null;
   const q = { ...route.query };
@@ -621,6 +631,19 @@ watch(
           }}
         </button>
         <button
+          v-if="isAdmin"
+          type="button"
+          :disabled="!selectedIds.length || selectedIds.length > 20"
+          class="min-h-11 rounded-xl border border-n-ruby-7 px-4 py-2 text-n-ruby-11 disabled:opacity-50"
+          @click="
+            deletionDialog.open(
+              rows.filter(row => selectedIds.includes(row.id))
+            )
+          "
+        >
+          {{ t('CRM.ORDER_DELETION.TITLE') }}
+        </button>
+        <button
           class="rounded-xl border bg-n-solid-2 px-4 py-2.5 font-semibold"
           @click="exportCsv"
         >
@@ -660,6 +683,7 @@ watch(
         {{ approvalError }}
       </p>
     </Dialog>
+    <OrderDeletionDialog ref="deletionDialog" @completed="deletionCompleted" />
     <Dialog
       ref="removalDialog"
       :title="t('CRM.ORDERS.REMOVE_SELECTED')"
@@ -1053,6 +1077,15 @@ watch(
                       @click.stop="downloadPdf(row, $event)"
                     >
                       <i class="i-lucide-file-down size-4" />
+                    </button>
+                    <button
+                      v-if="isAdmin"
+                      type="button"
+                      :aria-label="t('CRM.ORDER_DELETION.TITLE')"
+                      class="rounded-lg border border-n-ruby-7 p-2 text-n-ruby-11"
+                      @click.stop="deletionDialog.open([row])"
+                    >
+                      <i class="i-lucide-list-tree size-4" />
                     </button>
                     <button
                       v-if="isAdmin"
@@ -1542,6 +1575,14 @@ watch(
               {{ t('CRM.ORDERS.SIMPLE_FLOW_HELP') }}
             </p>
             <div class="mt-3 flex flex-wrap gap-2">
+              <button
+                v-if="isAdmin"
+                type="button"
+                class="min-h-11 rounded-lg border border-n-ruby-7 px-4 py-2 text-n-ruby-11"
+                @click="deletionDialog.open([selected])"
+              >
+                {{ t('CRM.ORDER_DELETION.TITLE') }}
+              </button>
               <button
                 v-if="isAdmin && selected.approval?.can_approve"
                 class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-n-brand px-4 py-2.5 font-semibold text-white sm:w-auto"

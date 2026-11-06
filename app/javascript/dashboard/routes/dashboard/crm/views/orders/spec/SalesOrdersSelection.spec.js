@@ -8,7 +8,12 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 vi.mock('dashboard/api/crm/commercialCycle', () => ({
-  salesOrdersAPI: { list: vi.fn(), remove: vi.fn() },
+  salesOrdersAPI: {
+    list: vi.fn(),
+    remove: vi.fn(),
+    deletionPreview: vi.fn(),
+    deleteWithDependencies: vi.fn(),
+  },
 }));
 vi.mock('dashboard/composables', () => ({ useAlert: vi.fn() }));
 const orders = Array.from({ length: 12 }, (_, index) => ({
@@ -117,4 +122,64 @@ it('does not expose deletion controls to an agent', async () => {
     false
   );
   expect(button('Excluir selecionados')).toBeUndefined();
+  expect(
+    wrapper.find('button[aria-label="Exclusão administrativa"]').exists()
+  ).toBe(false);
+});
+
+it('connects administrative deletion to the real order list and refreshes the resulting rows', async () => {
+  salesOrdersAPI.deletionPreview.mockResolvedValue({
+    data: {
+      token: 'signed-scope',
+      confirmation: 'EXCLUIR PED-001',
+      blocked: false,
+      issues: [],
+      counts: { delete: 1 },
+      rows: [
+        {
+          type: 'orders',
+          label: 'Pedido',
+          id: 1,
+          reference: 'PED-001',
+          action: 'delete',
+          reason: 'Duplicado QA',
+        },
+      ],
+    },
+  });
+  salesOrdersAPI.deleteWithDependencies.mockResolvedValue({
+    data: { removed_ids: [1], retained_ids: [], receipt_ids: [55] },
+  });
+  await mountPage();
+  await wrapper
+    .get('button[aria-label="Exclusão administrativa"]')
+    .trigger('click');
+  await wrapper.get('[name="deletion_reason"]').setValue('Duplicado QA');
+  await button('Analisar vínculos').trigger('click');
+  await flushPromises();
+  await wrapper
+    .get('[name="deletion_confirmation"]')
+    .setValue('EXCLUIR PED-001');
+  await wrapper.get('[name="deletion_confirmed"]').setValue(true);
+  salesOrdersAPI.list.mockResolvedValue({
+    data: orders.filter(order => order.id !== 1),
+  });
+  await button('Confirmar operação administrativa').trigger('click');
+  await flushPromises();
+  expect(salesOrdersAPI.deleteWithDependencies).toHaveBeenCalledWith({
+    ids: [1],
+    reason: 'Duplicado QA',
+    confirmed: true,
+    confirmation: 'EXCLUIR PED-001',
+    preview_token: 'signed-scope',
+  });
+  expect(
+    wrapper
+      .findAll('tbody tr')
+      .map(row => row.text())
+      .join()
+  ).not.toContain('PED-001');
+  expect(wrapper.get('[role="status"]').text()).toContain(
+    'Pedidos excluídos definitivamente: PED-001'
+  );
 });

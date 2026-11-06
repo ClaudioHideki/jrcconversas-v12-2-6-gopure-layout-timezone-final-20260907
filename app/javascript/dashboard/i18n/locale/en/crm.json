@@ -698,6 +698,27 @@
       "REGISTERED_LEADS": "Leads cadastrados",
       "REGISTERED_LEADS_HELP": "Total cadastrado, incluindo leads convertidos em negócios.",
       "SENT_DOCUMENTS_HELP": "Documentos enviados, inclusive em negócios ganhos/perdidos; reenvios não somam."
+    },
+    "ORDER_DELETION": {
+      "TITLE": "Exclusão administrativa",
+      "HELP": "Analise os vínculos antes de excluir. Registros efetivados, assinaturas, documentos e auditoria serão preservados. Até 20 pedidos por análise.",
+      "REASON": "Motivo obrigatório",
+      "PREVIEW": "Analisar vínculos e alcance",
+      "DELETE": "Excluir definitivamente",
+      "CANCEL": "Cancelar solicitações",
+      "PRESERVE": "Preservar",
+      "ACTION_DELETE": "Excluir definitivamente",
+      "ACTION_CANCEL": "Cancelar solicitação",
+      "ACTION_PRESERVE": "Preservar",
+      "CANCELLATION_REVIEW": "Será aberta revisão de cancelamento no Backoffice, sem estorno, distrato ou cancelamento fiscal automático. Pedidos preservados permanecem registrados:",
+      "TYPE_CONFIRMATION": "Para confirmar o alcance, digite exatamente:",
+      "CONFIRM_SCOPE": "Conferi a prévia e autorizo somente as exclusões e cancelamentos apresentados, com retenção dos registros indicados.",
+      "EXECUTE": "Confirmar operação administrativa",
+      "DONE": "Operação auditada. Comprovantes:",
+      "RESULT_REMOVED": "Pedidos excluídos definitivamente:",
+      "RESULT_RETAINED": "Pedidos preservados, aguardando revisão de cancelamento:",
+      "RESULT_REQUESTS": "Revisões no Backoffice:",
+      "ERROR": "Não foi possível concluir. Confira o resultado e gere uma nova prévia antes de tentar novamente."
     }
   }
 }
