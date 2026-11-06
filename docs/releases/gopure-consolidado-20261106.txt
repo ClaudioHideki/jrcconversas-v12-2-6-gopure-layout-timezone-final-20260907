@@ -1,0 +1,50 @@
+GoPure — consolidação de CRM/Kanban e exclusão administrativa — 06/11/2026
+
+Ordem preservada no histórico:
+1. 8d2d7662798206360416b94e790b245af3d147bd: base publicada de indicadores,
+   Cadastro Mestre e correção de telefone/DDI.
+2. 9afc33a5bbd874979c608ca5e5c303a4566c639d: Kanban, filtros, indicadores
+   e avanço do negócio no primeiro envio normal da proposta.
+3. d9e17573de985d5b647677139c310b7c71556e92: exclusão administrativa
+   com prévia, confirmação, isolamento, transação e auditoria.
+
+O terceiro checkpoint é filho direto do segundo. A consolidação não refaz
+nem substitui o código funcional desses checkpoints. Mantém GoPure/Campanhas,
+CRM, Cadastro Mestre, telefone/DDI, propostas/versões, PDFs, pedidos,
+aprovação comercial, indicadores e editor de mensagens/anexos/áudio.
+
+Comportamentos principais:
+- Primeiro envio normal avança apenas negócios abertos em etapas anteriores
+  para Proposta Enviada. Não regride Negociação nem altera Ganho, Perdido
+  ou Arquivado; reenvios e documentos históricos não duplicam a transição.
+- Filtros de pipeline, responsável e período são compartilhados entre quadro
+  e indicadores, mantendo as permissões existentes.
+- Exclusão administrativa requer administrador com acesso ao CRM, motivo,
+  prévia válida e confirmação explícita. Exclui apenas dependências elegíveis.
+- Pagamentos efetivados, contratos assinados, documentos fiscais, auditoria
+  e vínculos que exigem retenção são preservados. Abre revisão no Backoffice
+  quando necessário, sem simular estorno, distrato ou cancelamento fiscal.
+- A exclusão lógica anterior continua disponível.
+
+Validação local dos checkpoints:
+- Kanban/etapas: 139 exemplos backend, 101 frontend e build Vite aprovados.
+- Exclusão: regressão backend de 169 exemplos; rodada específica final de
+  23 exemplos (com sobreposição); 27 testes frontend; quatro combinações
+  desktop/celular e claro/escuro; build Vite de 5.512 módulos aprovado.
+- Checkpoints criados com hooks normais, sem bypass.
+- Nenhum pedido real foi excluído e nenhum dado de produção foi alterado.
+
+Validação para publicação:
+- Executar integralmente build-ghcr.yml no SHA desta branch consolidada.
+- O workflow mantém todas as etapas anteriores e inclui core_spec.rb das
+  alçadas, necessário à regressão dos locks e decisões preservadas.
+- Build e smoke test da imagem dependem da aprovação de todas as validações.
+- Publicar somente tag inédita e alias do SHA exato; conferir digest e rótulo
+  OCI de revisão; preservar todas as tags anteriores para rollback.
+- Esta entrega não executa deploy, altera Compose ou migra produção.
+
+Limites conhecidos:
+- O vínculo concreto do PED-2026-240715 depende de diagnóstico somente de
+  leitura. Ele não foi acessado nem excluído no desenvolvimento.
+- Estornos, cancelamentos fiscais e distratos externos não são simulados.
+- Avisos de estilo/complexidade e de tamanho de chunks não foram suprimidos.
