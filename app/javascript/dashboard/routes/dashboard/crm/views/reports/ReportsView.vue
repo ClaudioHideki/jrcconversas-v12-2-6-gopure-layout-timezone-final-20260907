@@ -135,7 +135,7 @@ const exportReport = () => {
       t,
       formatBRL
     ).flatMap(item => [
-      [t(`CRM.COMMERCIAL_SUMMARY.${item.key}`), item.value],
+      [t(`CRM.COMMERCIAL_SUMMARY.${item.titleKey || item.key}`), item.value],
       ...item.details,
     ]),
   ];

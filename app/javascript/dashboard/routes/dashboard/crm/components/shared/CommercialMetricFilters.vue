@@ -4,6 +4,9 @@ import { useStore } from 'vuex';
 import { useI18n } from 'vue-i18n';
 import { useAdmin } from 'dashboard/composables/useAdmin';
 
+const props = defineProps({
+  initialFilters: { type: Object, default: () => ({}) },
+});
 const emit = defineEmits(['change']);
 const store = useStore();
 const { t } = useI18n();
@@ -14,6 +17,7 @@ const filters = ref({
   pipeline_id: '',
   start_date: '',
   end_date: '',
+  ...props.initialFilters,
 });
 const pipelines = computed(
   () => store.getters['jrcCrm/pipelines/allPipelines'] || []

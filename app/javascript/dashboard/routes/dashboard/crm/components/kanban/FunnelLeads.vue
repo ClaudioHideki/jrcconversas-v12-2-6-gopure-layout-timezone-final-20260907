@@ -23,7 +23,7 @@ const load = async () => {
     const { data } = await leadsAPI.list({
       ...filters,
       funnel: true,
-      period: 'all',
+      period: filters.start_date || filters.end_date ? 'custom' : 'all',
     });
     if (request === generation) leads.value = data;
   } catch {

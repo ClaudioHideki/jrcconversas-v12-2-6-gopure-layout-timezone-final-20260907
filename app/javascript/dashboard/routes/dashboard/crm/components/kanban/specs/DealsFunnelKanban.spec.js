@@ -55,6 +55,11 @@ beforeEach(() => {
       { path: '/', component: Funnel },
       { path: '/leads', name: 'crm_leads', component: { template: '<div />' } },
       { path: '/deals', name: 'crm_deals', component: { template: '<div />' } },
+      {
+        path: '/summary',
+        name: 'crm_dashboard',
+        component: { template: '<div />' },
+      },
     ],
   });
 });
@@ -201,4 +206,101 @@ describe('funnel rendered journeys', () => {
       'etapa anterior foi mantida'
     );
   });
+});
+
+it('defaults to all pipelines, carries filters and keeps qualified leads after clearing', async () => {
+  leadsAPI.list.mockImplementation(async ({ status }) => ({
+    data: status ? [] : [{ id: 99, name: 'Qualified QA', status: 'qualified' }],
+  }));
+  pipelinesAPI.list.mockResolvedValue({
+    data: [
+      { id: 1, name: 'GoPure' },
+      { id: 2, name: 'Legacy' },
+    ],
+  });
+  stagesAPI.list.mockImplementation(async ({ pipeline_id }) => ({
+    data: [
+      {
+        id: pipeline_id * 10,
+        name: pipeline_id === 1 ? 'Novo Lead' : 'Lead',
+        pipeline_id,
+        pipeline_name: pipeline_id === 1 ? 'GoPure' : 'Legacy',
+      },
+    ],
+  }));
+  await render();
+  expect(
+    wrapper.findAll('select')[0].element.selectedOptions[0].textContent
+  ).toBe('Todos os Funis');
+  expect(
+    wrapper.findAll('select')[1].element.selectedOptions[0].textContent
+  ).toBe('Todos os Responsáveis');
+  expect(stagesAPI.list).toHaveBeenCalledWith({ pipeline_id: 1 });
+  expect(stagesAPI.list).toHaveBeenCalledWith({ pipeline_id: 2 });
+  expect(
+    wrapper
+      .findAllComponents({ name: 'KanbanColumn' })
+      .map(c => c.props('stage').name)
+  ).toEqual(['Novo Lead', 'Lead']);
+  expect(wrapper.text()).toContain('Legacy');
+  await wrapper.findAll('select')[0].setValue('1');
+  await wrapper.findAll('input[type=date]')[0].setValue('2026-11-01');
+  await flushPromises();
+  const summary = wrapper
+    .findAll('a')
+    .find(a => a.text().includes('Ver Visão Geral'));
+  expect(summary.attributes('href')).toContain('pipeline_id=1');
+  expect(summary.attributes('href')).toContain('start_date=2026-11-01');
+  await wrapper
+    .findAll('button')
+    .find(b => b.text() === 'Limpar Filtros')
+    .trigger('click');
+  await flushPromises();
+  expect(dealsAPI.list).toHaveBeenLastCalledWith(
+    expect.objectContaining({ pipeline_id: undefined, start_date: undefined })
+  );
+  expect(leadsAPI.list.mock.calls.at(-1)[0]).not.toHaveProperty('status');
+  expect(wrapper.text()).toContain('Qualified QA');
+});
+
+it('opens the board with the same summary filters without hiding qualified pre-sale leads', async () => {
+  leadsAPI.list.mockResolvedValue({
+    data: [{ id: 99, name: 'Qualified QA', status: 'qualified' }],
+  });
+  await router.push({
+    path: '/',
+    query: { pipeline_id: '1', owner_id: '7', start_date: '2026-11-01' },
+  });
+  await router.isReady();
+  wrapper = mount(Funnel, { global: { plugins: [store, router] } });
+  await flushPromises();
+  expect(dealsAPI.list).toHaveBeenCalledWith(
+    expect.objectContaining({
+      pipeline_id: '1',
+      owner_id: '7',
+      start_date: '2026-11-01',
+    })
+  );
+  expect(leadsAPI.list).toHaveBeenCalledWith(
+    expect.objectContaining({
+      owner_id: '7',
+      start_date: '2026-11-01',
+      funnel: true,
+      period: 'custom',
+    })
+  );
+  expect(leadsAPI.list.mock.calls.at(-1)[0]).not.toHaveProperty('pipeline_id');
+  expect(wrapper.text()).toContain('Qualified QA');
+});
+
+it('does not forward an owner from a shared administrator link when the viewer is an agent', async () => {
+  store.hotUpdate({ getters: { getCurrentRole: () => 'agent' } });
+  await router.push({ path: '/', query: { owner_id: '7' } });
+  await router.isReady();
+  wrapper = mount(Funnel, { global: { plugins: [store, router] } });
+  await flushPromises();
+  expect(dealsAPI.list).toHaveBeenLastCalledWith(
+    expect.objectContaining({ owner_id: undefined })
+  );
+  expect(leadsAPI.list.mock.calls.at(-1)[0].owner_id).toBeFalsy();
 });

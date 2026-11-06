@@ -43,8 +43,8 @@ module JrcCrm
       # Preserve provenance even if a former internal actor was deleted. Legacy
       # public events have the native public-controller description, not metadata.
       public_acceptances = JrcCrm::ProposalEvent.where(account_id: @account.id, event_type: 'accepted')
-                                               .where("metadata ->> 'acceptance_origin' = :origin OR description = :legacy",
-                                                      origin: 'public_link', legacy: 'Proposta aceita pelo cliente com evidência digital')
+                                                .where("metadata ->> 'acceptance_origin' = :origin OR description = :legacy",
+                                                       origin: 'public_link', legacy: 'Proposta aceita pelo cliente com evidência digital')
       signed = proposals.where(status: 'accepted', id: public_acceptances.select(:proposal_id))
                         .where.not(accepted_at: nil).where.not(accepted_by_name: [nil, '']).where.not(accepted_by_document: [nil, ''])
       {
@@ -68,7 +68,7 @@ module JrcCrm
 
     def metrics_scope(relation, owner_column: :owner_id)
       JrcCrm::CommercialMetricsScope.call(account: @account, actor: @actor, relation: relation, owner_id: @owner_id,
-                                         owner_column: owner_column, pipeline_id: @pipeline_id, start_date: @start_date, end_date: @end_date)
+                                          owner_column: owner_column, pipeline_id: @pipeline_id, start_date: @start_date, end_date: @end_date)
     end
 
     def count_leads
@@ -108,7 +108,7 @@ module JrcCrm
     def calculate_conversion_rate
       total_closed = count_won_deals + count_lost_deals
       return 0 if total_closed.zero?
-      
+
       ((count_won_deals.to_f / total_closed) * 100).round(2)
     end
 
@@ -121,8 +121,8 @@ module JrcCrm
 
     def overdue_activities_count
       activities = metrics_scope(@account.jrc_crm_activities, owner_column: :user_id).where(completed_at: nil).where(
-                                              'due_at < ?', Time.current
-                                            )
+        'due_at < ?', Time.current
+      )
       activities = activities.where(user_id: @owner_id) if @owner_id.present?
       activities.count
     end
@@ -137,10 +137,14 @@ module JrcCrm
       counts = base_deals.group(:stage_id).count
       values = base_deals.group(:stage_id).sum(:value_cents)
       maximum = [counts.values.max.to_i, 1].max
-      @account.jrc_crm_stages.where(pipeline_id: pipelines.select(:id)).active.ordered.map do |stage|
+      @account.jrc_crm_stages.where(pipeline_id: pipelines.select(:id)).active.includes(:pipeline)
+              .joins(:pipeline)
+              .order('jrc_crm_pipelines.position', 'jrc_crm_pipelines.id', 'jrc_crm_stages.position', 'jrc_crm_stages.id').map do |stage|
         {
           id: stage.id,
           name: stage.name,
+          pipeline_id: stage.pipeline_id,
+          pipeline_name: stage.pipeline.name,
           deals_count: counts[stage.id].to_i,
           value_cents: values[stage.id].to_i,
           percentage: ((counts[stage.id].to_f / maximum) * 100).round

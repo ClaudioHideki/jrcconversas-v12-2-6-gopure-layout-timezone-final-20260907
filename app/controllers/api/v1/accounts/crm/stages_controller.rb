@@ -6,7 +6,7 @@ module Api
           before_action :set_stage, only: [:show, :update, :destroy]
 
           def index
-            stages = crm_scope.jrc_crm_stages.where(pipeline_id: params[:pipeline_id]).order(:position)
+            stages = crm_scope.jrc_crm_stages.where(pipeline_id: params[:pipeline_id]).includes(:pipeline).order(:position)
             render json: stages.map { |stage| JrcCrm::StageSerializer.new(stage).as_json }
           end
 
@@ -17,7 +17,7 @@ module Api
           def create
             ensure_crm_admin!
             stage = crm_scope.jrc_crm_stages.new(stage_params)
-            
+
             if stage.save
               render json: JrcCrm::StageSerializer.new(stage).as_json, status: :created
             else

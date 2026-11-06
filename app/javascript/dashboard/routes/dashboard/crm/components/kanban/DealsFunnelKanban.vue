@@ -3,6 +3,12 @@
 import { ref, computed, onMounted } from 'vue';
 import { useStore } from 'vuex';
 import { useI18n } from 'vue-i18n';
+import { useRoute } from 'vue-router';
+import { useAdmin } from 'dashboard/composables/useAdmin';
+import {
+  commercialFilterQuery,
+  commercialFiltersFromQuery,
+} from '../../helpers/commercialFilterQuery';
 import { lostReasonsAPI } from 'dashboard/api/crm';
 import FunnelLeads from './FunnelLeads.vue';
 import KanbanColumn from './KanbanColumn.vue';
@@ -13,6 +19,8 @@ import CrmValueDisplay from '../shared/CrmValueDisplay.vue';
 
 const store = useStore();
 const { t } = useI18n();
+const route = useRoute();
+const { isAdmin } = useAdmin();
 const lostReasons = ref([]);
 const pendingLostMove = ref(null);
 const lostReasonId = ref('');
@@ -20,13 +28,20 @@ const initializing = ref(true);
 const actionError = ref(null);
 
 // Filters state
+const queryFilters = commercialFiltersFromQuery(route?.query);
 const filters = ref({
-  pipeline_id: null,
-  owner_id: null,
+  ...queryFilters,
+  pipeline_id: queryFilters.pipeline_id || null,
+  owner_id: queryFilters.owner_id || null,
   search: '',
 });
+const summaryLink = computed(() => ({
+  name: 'crm_dashboard',
+  query: commercialFilterQuery(filters.value),
+}));
 
 const loadKanbanData = async () => {
+  if (!isAdmin.value) filters.value.owner_id = null;
   await store.dispatch('jrcCrm/deals/fetchKanbanData', filters.value);
 };
 
@@ -36,8 +51,6 @@ const initialize = async () => {
   try {
     await store.dispatch('jrcCrm/pipelines/fetchPipelines');
     if (store.getters['jrcCrm/pipelines/error']) return;
-    filters.value.pipeline_id =
-      store.getters['jrcCrm/pipelines/allPipelines'][0]?.id || null;
     await loadKanbanData();
   } finally {
     initializing.value = false;
@@ -140,7 +153,7 @@ const { onDragStart, onDragOver, onDrop, onDragEnd } = useDragAndDrop({
       <CrmPageHeader
         eyebrow="Pipeline comercial"
         title="Funil de oportunidades"
-        description="Arraste os cards entre as etapas para atualizar o andamento."
+        :description="t('CRM.FUNNEL.BOARD_HELP')"
         icon="i-lucide-columns-3"
         tone="iris"
       >
@@ -164,6 +177,12 @@ const { onDragStart, onDragOver, onDrop, onDragEnd } = useDragAndDrop({
           </span>
         </template>
         <template #actions>
+          <RouterLink
+            :to="summaryLink"
+            class="rounded-xl border border-n-weak px-4 py-2.5 text-sm font-semibold text-n-slate-12"
+          >
+            {{ t('CRM.FUNNEL.SUMMARY_LINK') }}
+          </RouterLink>
           <RouterLink
             :to="{ name: 'crm_deals', query: { new: '1' } }"
             class="rounded-xl bg-n-teal-9 px-4 py-2.5 text-sm font-semibold text-white shadow-md"
@@ -226,6 +245,7 @@ const { onDragStart, onDragOver, onDrop, onDragEnd } = useDragAndDrop({
         :key="column.stage.id"
         :stage="column.stage"
         :deals="column.deals"
+        :show-pipeline="!filters.pipeline_id"
         @drag-start="onDragStart"
         @drag-end="onDragEnd"
         @drag-over="onDragOver"

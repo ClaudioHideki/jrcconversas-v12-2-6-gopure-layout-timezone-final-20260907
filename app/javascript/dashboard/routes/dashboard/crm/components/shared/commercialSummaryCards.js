@@ -6,6 +6,8 @@ export const commercialSummaryCards = (summary, t, formatBRL) => {
   return [
     {
       key: 'LEADS',
+      titleKey: 'REGISTERED_LEADS',
+      helpKey: 'REGISTERED_LEADS_HELP',
       value: leadCount,
       details: [
         'new',
@@ -29,7 +31,12 @@ export const commercialSummaryCards = (summary, t, formatBRL) => {
         formatBRL(summary.deals?.[s]?.value_cents || 0),
       ]),
     },
-    { key: 'SENT', value: summary.proposals_sent_count || 0, details: [] },
+    {
+      key: 'SENT',
+      helpKey: 'SENT_DOCUMENTS_HELP',
+      value: summary.proposals_sent_count || 0,
+      details: [],
+    },
     {
       key: 'ORDERS',
       value: summary.orders?.active_count || 0,

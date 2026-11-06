@@ -1,12 +1,23 @@
 <script setup>
 /* eslint-disable vue/no-bare-strings-in-template, @intlify/vue-i18n/no-raw-text */
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
+import { useRoute } from 'vue-router';
+import {
+  commercialFilterQuery,
+  commercialFiltersFromQuery,
+} from '../../helpers/commercialFilterQuery';
 import CommercialMetricFilters from '../../components/shared/CommercialMetricFilters.vue';
 import { useStore } from 'vuex';
 import CommercialSummaryCards from '../../components/shared/CommercialSummaryCards.vue';
 import { useCrmMetrics } from '../../composables/useCrmMetrics';
 
 const store = useStore();
+const route = useRoute();
+const activeFilters = ref(commercialFiltersFromQuery(route?.query));
+const funnelLink = computed(() => ({
+  name: 'crm_funnel',
+  query: commercialFilterQuery(activeFilters.value),
+}));
 const { formatBRL } = useCrmMetrics();
 
 const metrics = computed(() => store.getters['jrcCrm/dashboard/metrics'] || {});
@@ -44,8 +55,10 @@ const stageWidth = stage => {
   return `${Math.max(10, (count / maxStageCount.value) * 100)}%`;
 };
 
-const loadMetrics = filters =>
-  store.dispatch('jrcCrm/dashboard/fetchMetrics', filters);
+const loadMetrics = filters => {
+  activeFilters.value = filters;
+  return store.dispatch('jrcCrm/dashboard/fetchMetrics', filters);
+};
 </script>
 
 <template>
@@ -53,7 +66,10 @@ const loadMetrics = filters =>
     class="h-full overflow-y-auto bg-gradient-to-br from-n-blue-2 via-n-background to-n-violet-2 p-4 sm:p-6"
   >
     <div class="mx-auto max-w-[1720px] space-y-5">
-      <CommercialMetricFilters @change="loadMetrics" />
+      <CommercialMetricFilters
+        :initial-filters="activeFilters"
+        @change="loadMetrics"
+      />
       <section
         class="flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-white/70 bg-n-solid-2/80 p-5 shadow-sm backdrop-blur"
       >
@@ -88,7 +104,7 @@ const loadMetrics = filters =>
             <i class="i-lucide-briefcase-business mr-1 size-4" /> Minha carteira
           </RouterLink>
           <RouterLink
-            :to="{ name: 'crm_funnel' }"
+            :to="funnelLink"
             class="rounded-xl bg-[#087cf0] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(8,124,240,.24)]"
           >
             <i class="i-lucide-filter mr-1 size-4" /> Abrir funil
@@ -116,14 +132,14 @@ const loadMetrics = filters =>
             <div class="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h3 class="text-lg font-bold text-n-slate-12">
-                  Funil de vendas
+                  {{ $t('CRM.FUNNEL.DEAL_STAGES_TITLE') }}
                 </h3>
                 <p class="mt-1 text-xs text-n-slate-11">
-                  Quantidade e valor por etapa do pipeline.
+                  {{ $t('CRM.FUNNEL.DEAL_STAGES_HELP') }}
                 </p>
               </div>
               <RouterLink
-                :to="{ name: 'crm_funnel' }"
+                :to="funnelLink"
                 class="text-sm font-semibold text-[#087cf0]"
               >
                 Ver Kanban →
@@ -155,6 +171,11 @@ const loadMetrics = filters =>
                       :style="{ width: stageWidth(stage) }"
                     />
                   </div>
+                  <span
+                    v-if="stage.pipeline_name"
+                    class="mt-1 block truncate text-xs text-n-slate-11"
+                    >{{ stage.pipeline_name }}</span
+                  >
                 </div>
                 <span
                   class="text-right text-sm font-semibold text-n-slate-12"

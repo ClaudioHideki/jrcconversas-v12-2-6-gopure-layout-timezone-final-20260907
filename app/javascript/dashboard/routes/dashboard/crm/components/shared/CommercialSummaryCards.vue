@@ -22,14 +22,14 @@ const cards = computed(() =>
       class="min-w-0 rounded-2xl border border-n-weak bg-n-solid-2 p-4 shadow-sm"
     >
       <h3 class="text-sm font-semibold text-n-slate-11">
-        {{ t(`CRM.COMMERCIAL_SUMMARY.${card.key}`) }}
+        {{ t(`CRM.COMMERCIAL_SUMMARY.${card.titleKey || card.key}`) }}
       </h3>
       <strong
         class="mt-3 block break-words text-xl font-bold text-n-slate-12"
         >{{ card.value }}</strong
       >
       <p class="mt-2 text-xs text-n-slate-11">
-        {{ t(`CRM.COMMERCIAL_SUMMARY.${card.key}_HELP`) }}
+        {{ t(`CRM.COMMERCIAL_SUMMARY.${card.helpKey || `${card.key}_HELP`}`) }}
       </p>
       <dl
         v-if="card.details.length"

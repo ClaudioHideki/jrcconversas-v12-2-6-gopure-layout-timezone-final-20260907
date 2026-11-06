@@ -91,7 +91,11 @@
       "LEAD_TYPE": "Lead",
       "DEAL_TYPE": "Negócios",
       "OPEN_VALUE": "em negócios abertos",
-      "SENT_BADGE": "Propostas enviadas: {count}"
+      "SENT_BADGE": "Propostas enviadas: {count}",
+      "DEAL_STAGES_TITLE": "Etapas dos negócios",
+      "DEAL_STAGES_HELP": "Situação atual dos negócios por funil. Leads ainda não convertidos ficam no resumo de leads.",
+      "BOARD_HELP": "Leads acima; negócios nas etapas abaixo. O primeiro envio de proposta avança o negócio aberto.",
+      "SUMMARY_LINK": "Ver Visão Geral"
     },
     "SIDEBAR": "CRM",
     "TITLE": "CRM",
@@ -690,7 +694,10 @@
       "DEAL_WON": "Ganhos",
       "DEAL_LOST": "Perdidos",
       "OWNER_REVENUE": "Receita de pedidos aprovados/ativos por responsável no período selecionado.",
-      "OWNER_WON": "Valor de negócios ganhos por responsável no período selecionado."
+      "OWNER_WON": "Valor de negócios ganhos por responsável no período selecionado.",
+      "REGISTERED_LEADS": "Leads cadastrados",
+      "REGISTERED_LEADS_HELP": "Total cadastrado, incluindo leads convertidos em negócios.",
+      "SENT_DOCUMENTS_HELP": "Documentos enviados, inclusive em negócios ganhos/perdidos; reenvios não somam."
     }
   }
 }

@@ -19,6 +19,8 @@ it('keeps active revenue separate from deal wins and public signatures in the UI
   const cards = wrapper.findAll('article');
   expect(cards).toHaveLength(6);
   expect(cards[0].text()).toContain('Qualificados');
+  expect(cards[0].find('h3').text()).toBe('Leads cadastrados');
+  expect(cards[0].find('strong').text()).toBe('6');
   expect(cards[4].text().replaceAll('\u00a0', ' ')).toContain('R$ 120,00');
   expect(cards[5].text().replaceAll('\u00a0', ' ')).toContain('R$ 300,00');
   expect(wrapper.text()).not.toContain('MRR');

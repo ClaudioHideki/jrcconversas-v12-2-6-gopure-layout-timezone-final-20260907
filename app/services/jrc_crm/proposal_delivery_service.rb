@@ -32,7 +32,9 @@ module JrcCrm
 
       approvals = [@proposal.approval_status, @proposal.commercial_approval_status,
                    @proposal.financial_approval_status, @proposal.technical_approval_status]
-      raise ArgumentError, 'Conclua as aprovações internas antes do envio.' unless approvals.all? { |state| %w[approved not_required].include?(state) }
+      raise ArgumentError, 'Conclua as aprovações internas antes do envio.' unless approvals.all? do |state|
+        %w[approved not_required].include?(state)
+      end
       if JrcCrm::ProposalApprovalRequirements.new(@proposal).required? && @proposal.approval_status != 'approved'
         raise ArgumentError, 'Os descontos ou requisitos técnicos exigem aprovação interna antes do envio.'
       end
@@ -46,21 +48,19 @@ module JrcCrm
                                                      delivery: @delivery, public_url: public_url)
         @target.authorize!
       end
-      if gate[:mode] == 'enforcement' && @idempotency_key.blank?
-        raise JrcApprovals::Error, 'IDEMPOTENCY_KEY_REQUIRED'
-      end
+      raise JrcApprovals::Error, 'IDEMPOTENCY_KEY_REQUIRED' if gate[:mode] == 'enforcement' && @idempotency_key.blank?
 
       if @idempotency_key
         JrcApprovals::Ledger.key!(@idempotency_key)
         document = @proposal.attributes.except('updated_at', 'lock_version', 'status', 'sent_at',
                                                'last_sent_channel', 'last_sent_message_id', 'last_sent_conversation_id', 'viewed_at', 'last_viewed_at', 'viewed_count')
                             .transform_values do |value|
-            case value
-            when Time, ActiveSupport::TimeWithZone then value.getutc.iso8601(6)
-            when DateTime then value.new_offset(0).iso8601(6)
-            else value
-            end
+          case value
+          when Time, ActiveSupport::TimeWithZone then value.getutc.iso8601(6)
+          when DateTime then value.new_offset(0).iso8601(6)
+          else value
           end
+        end
         digest_payload = { 'terms' => @proposal.financial_items,
                            'document' => document,
                            'channel' => @channel, 'actor_id' => @actor&.id, 'base_url' => @base_url }
@@ -94,6 +94,7 @@ module JrcCrm
                   end
       message = build_message(conversation, pdf_bytes)
 
+      first_delivery = @proposal.sent_at.nil? && !@historical
       status = @proposal.status.in?(%w[accepted rejected canceled]) ? @proposal.status : 'sent'
       unless @historical
         @proposal.update!(
@@ -104,11 +105,14 @@ module JrcCrm
           last_sent_conversation_id: conversation.id
         )
       end
+      pipeline_transition = JrcCrm::ProposalPipelineService.new(proposal: @proposal, actor: @actor).call if first_delivery
+      description = "#{@historical ? 'Documento histórico reenviado, sem vigência e sem aceite' : 'Proposta enviada'} por #{channel_label(conversation)} na conversa ##{conversation.display_id}"
+      description += ". #{pipeline_transition[:warning]}" if pipeline_transition&.dig(:warning)
       sent_event = @proposal.events.create!(
         account_id: @proposal.account_id,
         event_type: @historical ? 'historical_resent' : 'sent',
         user_id: @actor&.id,
-        description: "#{@historical ? 'Documento histórico reenviado, sem vigência e sem aceite' : 'Proposta enviada'} por #{channel_label(conversation)} na conversa ##{conversation.display_id}",
+        description: description,
         metadata: {
           financial_anchor_on: anchor_on.iso8601,
           historical: @historical,
@@ -118,7 +122,8 @@ module JrcCrm
           inbox_id: conversation.inbox_id,
           recipient_contact_id: conversation.contact_id,
           public_url: public_url,
-          delivery_key: @idempotency_key, delivery_digest: @delivery_digest
+          delivery_key: @idempotency_key, delivery_digest: @delivery_digest,
+          pipeline_transition: pipeline_transition
         }
       )
       sent_event.document.attach(message.attachments.first.file.blob)

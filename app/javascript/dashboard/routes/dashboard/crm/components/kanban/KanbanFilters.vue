@@ -31,10 +31,9 @@ const onFilterChange = () => {
 
 const clearFilters = () => {
   localFilters.value = {
-    pipeline_id: pipelines.value[0]?.id || null,
+    pipeline_id: null,
     owner_id: null,
     search: '',
-    status: 'open',
     overdueOnly: false,
     noNextActivity: false,
     start_date: '',

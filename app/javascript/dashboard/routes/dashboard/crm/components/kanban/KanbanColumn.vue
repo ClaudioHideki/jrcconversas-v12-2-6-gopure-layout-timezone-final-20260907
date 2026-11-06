@@ -7,6 +7,7 @@ import CrmValueDisplay from '../shared/CrmValueDisplay.vue';
 const props = defineProps({
   stage: { type: Object, required: true },
   deals: { type: Array, required: true },
+  showPipeline: { type: Boolean, default: false },
 });
 
 defineEmits(['dragStart', 'dragEnd', 'dragOver', 'drop']);
@@ -56,6 +57,13 @@ const stageAccent = computed(() => {
           >{{ dealCount }}</span
         >
       </div>
+      <p
+        v-if="showPipeline && stage.pipeline_name"
+        class="mb-2 truncate text-xs text-n-slate-11"
+        :title="stage.pipeline_name"
+      >
+        {{ stage.pipeline_name }}
+      </p>
       <div class="text-xs text-n-slate-10 flex flex-col gap-1">
         <div class="flex justify-between">
           <span>Total:</span>

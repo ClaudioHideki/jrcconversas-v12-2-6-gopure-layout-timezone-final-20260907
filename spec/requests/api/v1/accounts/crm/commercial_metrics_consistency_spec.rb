@@ -13,7 +13,7 @@ RSpec.describe 'Commercial indicators use the funnel visibility and creation per
     account.enable_features!('jrc_crm')
     [50_000, 434_450, 818_095].each_with_index do |value, index|
       create(:jrc_crm_deal, account: account, pipeline: pipeline, stage: won_stage,
-             owner: index.zero? ? agent : other_agent, status: 'won', value_cents: value, created_at: 60.days.ago)
+                            owner: index.zero? ? agent : other_agent, status: 'won', value_cents: value, created_at: 60.days.ago)
     end
   end
 
@@ -60,8 +60,8 @@ RSpec.describe 'Commercial indicators use the funnel visibility and creation per
 
   it 'classifies a new opportunity created directly in a won stage without rewriting existing history' do
     post "#{url}/deals", params: { deal: { title: 'Venda criada na etapa ganha', pipeline_id: pipeline.id,
-                                         stage_id: won_stage.id, value_cents: 12_345 } },
-                        headers: admin.create_new_auth_token, as: :json
+                                           stage_id: won_stage.id, value_cents: 12_345 } },
+                         headers: admin.create_new_auth_token, as: :json
     expect(response).to have_http_status(:created)
     record = account.jrc_crm_deals.find_by!(title: 'Venda criada na etapa ganha')
     expect(record).to have_attributes(status: 'won', stage_id: won_stage.id)
@@ -85,11 +85,29 @@ RSpec.describe 'Commercial indicators use the funnel visibility and creation per
     allowed_unit = account.jrc_crm_business_units.create!(name: 'Unidade A', code: 'metrics-a', company_id: allowed_company.id)
     forbidden_unit = account.jrc_crm_business_units.create!(name: 'Unidade B', code: 'metrics-b', company_id: forbidden_company.id)
     JrcCrm::UserBusinessUnit.create!(account: account, user: admin, scope: 'COMPANY', company_id: allowed_company.id, structure_managed: true)
-    create(:jrc_crm_deal, account: account, pipeline: pipeline, stage: won_stage, owner: agent, metadata: { business_unit_id: allowed_unit.id }, value_cents: 25_000)
-    create(:jrc_crm_deal, account: account, pipeline: pipeline, stage: won_stage, owner: other_agent, metadata: { business_unit_id: forbidden_unit.id }, value_cents: 100_000)
+    create(:jrc_crm_deal, account: account, pipeline: pipeline, stage: won_stage, owner: agent, metadata: { business_unit_id: allowed_unit.id },
+                          value_cents: 25_000)
+    create(:jrc_crm_deal, account: account, pipeline: pipeline, stage: won_stage, owner: other_agent,
+                          metadata: { business_unit_id: forbidden_unit.id }, value_cents: 100_000)
     get "#{url}/dashboard", params: { period: 'all' }, headers: admin.create_new_auth_token
     expect(response.parsed_body).to include('closed_won_count' => 1, 'won_revenue_cents' => 25_000)
     get "#{url}/reports", params: { period: 'all' }, headers: admin.create_new_auth_token
     expect(response.parsed_body.fetch('summary')).to include('closed_won_count' => 1, 'won_revenue_cents' => 25_000)
+  end
+
+  it 'identifies identically named or legacy stages by pipeline without deleting an empty Lead stage' do
+    pipeline.update!(name: 'GoPure', position: 1)
+    legacy = create(:jrc_crm_pipeline, account: account, name: 'Legacy', key: 'legacy', position: 2)
+    lead_stage = create(:jrc_crm_stage, account: account, pipeline: legacy, name: 'Lead', position: 1)
+    headers = admin.create_new_auth_token
+    get "#{url}/dashboard", params: { period: 'all' }, headers: headers
+    stages = response.parsed_body.fetch('funnel_stages')
+    expect(stages.find { |row| row['id'] == lead_stage.id }).to include('name' => 'Lead', 'pipeline_id' => legacy.id,
+                                                                        'pipeline_name' => 'Legacy', 'deals_count' => 0)
+    get "#{url}/stages", params: { pipeline_id: legacy.id }, headers: headers
+    expect(response.parsed_body.find { |row| row['id'] == lead_stage.id }).to include('pipeline_id' => legacy.id, 'pipeline_name' => 'Legacy')
+    get "#{url}/dashboard", params: { period: 'all', pipeline_id: pipeline.id }, headers: headers
+    expect(response.parsed_body.fetch('funnel_stages').map { |row| row['id'] }).not_to include(lead_stage.id)
+    expect(lead_stage.reload).to be_persisted
   end
 end

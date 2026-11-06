@@ -4,10 +4,12 @@ module JrcCrm
       @stage = stage
     end
 
-    def as_json(options = {})
+    def as_json(_options = {})
       {
         id: @stage.id,
         name: @stage.name,
+        pipeline_id: @stage.pipeline_id,
+        pipeline_name: @stage.pipeline.name,
         key: @stage.key,
         position: @stage.position,
         color: @stage.color,
