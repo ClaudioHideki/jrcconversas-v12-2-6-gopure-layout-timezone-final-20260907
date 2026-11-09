@@ -4,35 +4,21 @@ import { createI18n } from 'vue-i18n';
 import messages from 'dashboard/i18n/locale/en/crm.json';
 import CrmLayout from '../CrmLayout.vue';
 
-const mocks = vi.hoisted(() => ({ route: null, resize: null }));
+const mocks = vi.hoisted(() => ({ route: null, store: null }));
 vi.mock('vue-router', () => ({ useRoute: () => mocks.route }));
-vi.mock('vuex', () => ({
-  useStore: () => ({ getters: { getCurrentRole: 'administrator' } }),
-}));
-vi.mock('@vueuse/core', () => ({
-  useResizeObserver: (_element, callback) => {
-    mocks.resize = callback;
-  },
-}));
+vi.mock('vuex', () => ({ useStore: () => mocks.store }));
 
 describe('CRM module navigation', () => {
   let wrapper;
-  let scroll;
   beforeEach(() => {
     mocks.route = reactive({
       name: 'crm_dashboard',
+      fullPath: '/app/accounts/1/crm/dashboard',
       params: { accountId: '1' },
     });
-    scroll = vi.fn();
-    Element.prototype.scrollBy = scroll;
-    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(
-      function bounds() {
-        return this.getAttribute('aria-current') === 'page'
-          ? { left: 900, right: 1050 }
-          : { left: 0, right: 600 };
-      }
-    );
+    mocks.store = reactive({ getters: { getCurrentRole: 'administrator' } });
     wrapper = mount(CrmLayout, {
+      attachTo: document.body,
       global: {
         plugins: [
           createI18n({
@@ -42,9 +28,14 @@ describe('CRM module navigation', () => {
           }),
         ],
         stubs: {
+          VDropdown: {
+            name: 'VDropdown',
+            props: ['shown'],
+            template: '<div><slot /><slot v-if="shown" name="popper" /></div>',
+          },
           RouterLink: {
             props: ['to'],
-            template: '<a :href="to.name"><slot /></a>',
+            template: '<a :href="to.name" @click.prevent><slot /></a>',
           },
           RouterView: true,
         },
@@ -52,47 +43,86 @@ describe('CRM module navigation', () => {
     });
   });
   afterEach(() => {
+    const element = wrapper.element;
     wrapper.unmount();
-    delete Element.prototype.scrollBy;
-    vi.restoreAllMocks();
+    element.remove();
   });
 
-  it('reveals the active tab on entry, route changes and resize', async () => {
+  it('keeps five primary links and highlights the group of the current nested destination', async () => {
+    expect(
+      wrapper.findAll('nav > a').map(link => link.attributes('href'))
+    ).toEqual([
+      'crm_dashboard',
+      'crm_indicators',
+      'crm_leads',
+      'crm_deals',
+      'crm_funnel',
+    ]);
+    expect(wrapper.findAll('nav ul')).toHaveLength(0);
+    await wrapper.get('[data-crm-group="commercial"]').trigger('click');
+    expect(
+      wrapper
+        .findAll('#crm-nav-commercial a')
+        .map(link => link.attributes('href'))
+    ).toEqual([
+      'crm_wallet',
+      'crm_products',
+      'crm_proposals',
+      'crm_orders',
+      'crm_contracts',
+    ]);
+    mocks.route.name = 'crm_orders';
+    mocks.route.fullPath = '/app/accounts/1/crm/orders';
     await flushPromises();
-    expect(scroll).toHaveBeenCalledWith({ left: 450 });
+    expect(
+      wrapper.get('[data-crm-group="commercial"]').attributes('data-active')
+    ).toBe('true');
+    expect(wrapper.findAll('nav ul')).toHaveLength(0);
+    await wrapper.get('[data-crm-group="commercial"]').trigger('click');
     expect(wrapper.get('[aria-current="page"]').attributes('href')).toBe(
-      'crm_dashboard'
+      'crm_orders'
     );
-    mocks.route.name = 'crm_settings';
-    await flushPromises();
-    expect(wrapper.get('[aria-current="page"]').attributes('href')).toBe(
-      'crm_settings'
-    );
-    expect(scroll.mock.instances.at(-1)).toBe(wrapper.get('nav > div').element);
-    const before = scroll.mock.calls.length;
-    await mocks.resize();
-    expect(scroll.mock.calls.length).toBe(before + 1);
-    expect(scroll.mock.calls.every(([options]) => !('top' in options))).toBe(
-      true
-    );
+    await wrapper
+      .get('#crm-nav-commercial a[href="crm_orders"]')
+      .trigger('click');
+    expect(wrapper.findAll('nav ul')).toHaveLength(0);
   });
 
-  it('provides overflow controls and updates them after horizontal scrolling', async () => {
-    const list = wrapper.get('nav > div').element;
-    Object.defineProperties(list, {
-      clientWidth: { configurable: true, value: 600 },
-      scrollWidth: { configurable: true, value: 1800 },
-      scrollLeft: { configurable: true, writable: true, value: 0 },
-    });
-    await mocks.resize();
-    const buttons = wrapper.findAll('nav button');
-    expect(buttons[0].element.disabled).toBe(true);
-    expect(buttons[1].element.disabled).toBe(false);
-    await buttons[1].trigger('click');
-    expect(list.scrollBy).toHaveBeenCalledWith({ left: 450 });
-    list.scrollLeft = 1200;
-    await wrapper.get('nav > div').trigger('scroll');
-    expect(buttons[0].element.disabled).toBe(false);
-    expect(buttons[1].element.disabled).toBe(true);
+  it('opens one group at a time and returns focus to the trigger on Escape', async () => {
+    const commercial = wrapper.get('[data-crm-group="commercial"]');
+    const planning = wrapper.get('[data-crm-group="planning"]');
+    await commercial.trigger('click');
+    await planning.trigger('keydown', { key: 'ArrowDown' });
+    expect(commercial.attributes('aria-expanded')).toBe('false');
+    expect(planning.attributes('aria-expanded')).toBe('true');
+    // A delayed hide from the previous dropdown must not close the new group.
+    wrapper
+      .findAllComponents({ name: 'VDropdown' })[0]
+      ?.vm.$emit('update:shown', false);
+    await flushPromises();
+    expect(planning.attributes('aria-expanded')).toBe('true');
+    expect(wrapper.findAll('#crm-nav-planning a')).toHaveLength(4);
+    await wrapper
+      .get('#crm-nav-planning')
+      .trigger('keydown', { key: 'Escape' });
+    expect(planning.attributes('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(planning.element);
+  });
+
+  it('preserves Backoffice access and hides administrator-only links from agents', async () => {
+    const management = wrapper.get('[data-crm-group="management"]');
+    await management.trigger('click');
+    expect(
+      wrapper
+        .findAll('#crm-nav-management a')
+        .map(link => link.attributes('href'))
+    ).toEqual(['crm_backoffice', 'crm_management', 'crm_settings']);
+    mocks.store.getters.getCurrentRole = 'agent';
+    await flushPromises();
+    expect(
+      wrapper
+        .findAll('#crm-nav-management a')
+        .map(link => link.attributes('href'))
+    ).toEqual(['crm_backoffice']);
   });
 });

@@ -1,10 +1,9 @@
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
+import { Dropdown } from 'floating-vue';
 import { useStore } from 'vuex';
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
-import { useResizeObserver } from '@vueuse/core';
-import Button from 'dashboard/components-next/button/Button.vue';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import { useCrmTheme } from './useCrmTheme';
 
@@ -13,9 +12,8 @@ const isFunnel = computed(() => route.name === 'crm_funnel');
 const store = useStore();
 const { t } = useI18n();
 const { crmControlClasses } = useCrmTheme();
-const tabList = ref(null);
-const canScrollBack = ref(false);
-const canScrollForward = ref(false);
+const navigationRef = ref(null);
+const openGroup = ref(null);
 /* eslint-disable vue/no-bare-strings-in-template, @intlify/vue-i18n/no-raw-text, @intlify/vue-i18n/no-dynamic-keys */
 const navigation = [
   {
@@ -125,8 +123,55 @@ const visibleNavigation = computed(() =>
   )
 );
 
-const activeTabClass = item => {
-  if (route.name !== item.name)
+const primaryNavigation = computed(() => visibleNavigation.value.slice(0, 5));
+const navigationGroups = computed(() =>
+  [
+    {
+      id: 'commercial',
+      label: t('CRM.NAVIGATION.COMMERCIAL'),
+      icon: 'i-lucide-briefcase-business',
+      tone: 'green',
+      routes: [
+        'crm_wallet',
+        'crm_products',
+        'crm_proposals',
+        'crm_orders',
+        'crm_contracts',
+      ],
+    },
+    {
+      id: 'planning',
+      label: t('CRM.NAVIGATION.PLANNING'),
+      icon: 'i-lucide-calendar-check-2',
+      tone: 'orange',
+      routes: [
+        'crm_activities',
+        'crm_calendar',
+        'crm_goals',
+        'crm_commissions',
+      ],
+    },
+    {
+      id: 'management',
+      label: t('CRM.NAVIGATION.MANAGEMENT'),
+      icon: 'i-lucide-settings',
+      tone: 'violet',
+      routes: ['crm_backoffice', 'crm_management', 'crm_settings'],
+    },
+  ]
+    .map(group => ({
+      ...group,
+      items: visibleNavigation.value.filter(item =>
+        group.routes.includes(item.name)
+      ),
+    }))
+    .filter(group => group.items.length)
+);
+const isGroupActive = group =>
+  group.items.some(item => item.name === route.name);
+
+const activeTabClass = (item, active = route.name === item.name) => {
+  if (!active)
     return {
       blue: 'border-n-blue-6 bg-n-blue-2 text-n-blue-11 hover:bg-n-blue-3',
       cyan: 'border-n-teal-6 bg-n-teal-2 text-n-teal-11 hover:bg-n-teal-3',
@@ -147,39 +192,26 @@ const activeTabClass = item => {
   return `${tones[item.tone] || tones.blue} border-transparent text-white shadow-sm`;
 };
 
-const updateOverflow = () => {
-  const element = tabList.value;
-  if (!element) return;
-  const offset = Math.abs(element.scrollLeft);
-  canScrollBack.value = offset > 1;
-  canScrollForward.value =
-    element.scrollWidth - element.clientWidth - offset > 1;
+const setGroupShown = (id, shown) => {
+  if (shown || openGroup.value === id) openGroup.value = shown ? id : null;
 };
-const revealActiveTab = async () => {
-  await nextTick();
-  const element = tabList.value;
-  const activeTab = element?.querySelector('[aria-current="page"]');
-  if (activeTab) {
-    const listBounds = element.getBoundingClientRect();
-    const tabBounds = activeTab.getBoundingClientRect();
-    const left =
-      tabBounds.left < listBounds.left
-        ? tabBounds.left - listBounds.left
-        : Math.max(0, tabBounds.right - listBounds.right);
-    if (left) element.scrollBy({ left });
+const closeGroup = (id, restoreFocus = false) => {
+  setGroupShown(id, false);
+  if (restoreFocus) {
+    navigationRef.value.querySelector(`[data-crm-group="${id}"]`).focus();
   }
-  updateOverflow();
 };
-const scrollTabs = direction => {
-  const element = tabList.value;
-  const rtl = getComputedStyle(element).direction === 'rtl';
-  element.scrollBy({
-    left: direction * (rtl ? -1 : 1) * element.clientWidth * 0.75,
-  });
+const focusGroup = async id => {
+  await nextTick();
+  if (openGroup.value !== id) return;
+  document.getElementById(`crm-nav-${id}`)?.querySelector('a')?.focus();
 };
-watch(() => route.name, revealActiveTab);
-useResizeObserver(tabList, revealActiveTab);
-onMounted(revealActiveTab);
+watch(
+  () => route.fullPath,
+  () => {
+    openGroup.value = null;
+  }
+);
 </script>
 
 <template>
@@ -219,53 +251,74 @@ onMounted(revealActiveTab);
         </RouterLink>
       </div>
       <nav
-        class="relative flex min-w-0 items-center gap-2 pb-1"
+        ref="navigationRef"
+        class="relative flex min-w-0 flex-wrap items-center gap-2 pb-2"
         :aria-label="t('CRM.NAVIGATION.LABEL')"
       >
-        <Button
-          v-show="canScrollBack || canScrollForward"
-          variant="outline"
-          color="slate"
-          icon="i-lucide-chevron-left"
-          class="shrink-0 rtl:rotate-180"
-          :disabled="!canScrollBack"
-          :aria-label="t('CRM.NAVIGATION.PREVIOUS')"
-          @click="scrollTabs(-1)"
-        />
-        <div
-          ref="tabList"
-          class="flex min-w-0 flex-1 gap-2 overflow-x-auto py-1"
-          @scroll="updateOverflow"
+        <RouterLink
+          v-for="item in primaryNavigation"
+          :key="item.name"
+          :to="{ name: item.name }"
+          :aria-current="route.name === item.name ? 'page' : undefined"
+          class="jrc-crm-tab flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border px-3 py-2 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-n-blue-8"
+          :class="activeTabClass(item)"
         >
-          <RouterLink
-            v-for="item in visibleNavigation"
-            :key="item.name"
-            :to="{ name: item.name }"
-            :aria-current="route.name === item.name ? 'page' : undefined"
-            class="jrc-crm-tab flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border px-3 py-1.5 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-n-blue-8"
-            :class="[
-              activeTabClass(item) ||
-                'border-n-weak bg-n-solid-2 text-n-slate-11 hover:bg-n-alpha-2 hover:text-n-slate-12',
-            ]"
+          <Icon :icon="item.icon" class="size-4" />
+          {{ item.label }}
+        </RouterLink>
+        <Dropdown
+          v-for="group in navigationGroups"
+          :key="group.id"
+          class="shrink-0"
+          :shown="openGroup === group.id"
+          :triggers="[]"
+          placement="bottom-start"
+          strategy="fixed"
+          :overflow-padding="12"
+          no-auto-focus
+          popper-class="[&_.v-popper\_\_inner]:!rounded-xl [&_.v-popper\_\_inner]:!border-n-weak [&_.v-popper\_\_inner]:!bg-n-solid-2 [&_.v-popper\_\_arrow-container]:hidden"
+          @update:shown="setGroupShown(group.id, $event)"
+          @apply-show="focusGroup(group.id)"
+        >
+          <button
+            type="button"
+            :data-crm-group="group.id"
+            :data-active="isGroupActive(group) || undefined"
+            :aria-expanded="openGroup === group.id"
+            :aria-controls="`crm-nav-${group.id}`"
+            class="jrc-crm-tab flex items-center gap-2 whitespace-nowrap rounded-xl border px-3 py-2 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-n-blue-8"
+            :class="activeTabClass(group, isGroupActive(group))"
+            @click="setGroupShown(group.id, openGroup !== group.id)"
+            @keydown.down.prevent="setGroupShown(group.id, true)"
+            @keydown.esc.stop.prevent="closeGroup(group.id, true)"
           >
-            <span
-              class="grid size-6 place-content-center rounded-lg bg-n-alpha-1 text-current"
+            <Icon :icon="group.icon" class="size-4" />
+            {{ group.label }}
+            <Icon icon="i-lucide-chevron-down" class="size-3.5" />
+          </button>
+          <template #popper>
+            <ul
+              :id="`crm-nav-${group.id}`"
+              :aria-label="group.label"
+              class="m-0 flex w-56 max-w-[calc(100vw-24px)] list-none flex-col gap-1 p-2"
+              :class="crmControlClasses"
+              @keydown.esc.stop.prevent="closeGroup(group.id, true)"
             >
-              <Icon :icon="item.icon" class="size-4" />
-            </span>
-            {{ item.label }}
-          </RouterLink>
-        </div>
-        <Button
-          v-show="canScrollBack || canScrollForward"
-          variant="outline"
-          color="slate"
-          icon="i-lucide-chevron-right"
-          class="shrink-0 rtl:rotate-180"
-          :disabled="!canScrollForward"
-          :aria-label="t('CRM.NAVIGATION.NEXT')"
-          @click="scrollTabs(1)"
-        />
+              <li v-for="item in group.items" :key="item.name">
+                <RouterLink
+                  :to="{ name: item.name }"
+                  :aria-current="route.name === item.name ? 'page' : undefined"
+                  class="flex min-h-10 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-n-blue-8"
+                  :class="activeTabClass(item)"
+                  @click="closeGroup(group.id)"
+                >
+                  <Icon :icon="item.icon" class="size-4" />
+                  {{ item.label }}
+                </RouterLink>
+              </li>
+            </ul>
+          </template>
+        </Dropdown>
       </nav>
     </header>
     <main

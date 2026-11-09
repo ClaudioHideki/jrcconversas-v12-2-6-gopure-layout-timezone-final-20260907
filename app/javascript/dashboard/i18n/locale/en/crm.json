@@ -68,6 +68,9 @@
     },
     "NAVIGATION": {
       "LABEL": "CRM modules",
+      "COMMERCIAL": "Comercial",
+      "PLANNING": "Planejamento",
+      "MANAGEMENT": "Gestão",
       "PREVIOUS": "Previous CRM tabs",
       "NEXT": "Next CRM tabs"
     },
