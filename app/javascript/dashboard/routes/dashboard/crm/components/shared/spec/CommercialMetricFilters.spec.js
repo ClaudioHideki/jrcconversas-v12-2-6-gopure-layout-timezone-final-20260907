@@ -6,6 +6,85 @@ import CrmDashboardView from '../../../views/dashboard/CrmDashboardView.vue';
 import KanbanColumn from '../../kanban/KanbanColumn.vue';
 import CrmValueDisplay from '../CrmValueDisplay.vue';
 
+it('reconciles qualification and sent-document rows with summary counters without adding document values to deal totals', async () => {
+  const summary = {
+    leads: { qualified: 4 },
+    proposals_sent_count: 3,
+    deals: { open: { count: 1, value_cents: 12345 } },
+  };
+  const store = createStore({
+    getters: {
+      'jrcCrm/dashboard/isLoading': () => false,
+      'jrcCrm/dashboard/metrics': () => ({
+        commercial_summary: summary,
+        pipeline_value_cents: 12345,
+        funnel_stages: [
+          {
+            id: 1,
+            key: 'qualification',
+            name: 'Qualificação',
+            pipeline_id: 1,
+            deals_count: 0,
+            value_cents: 0,
+          },
+          {
+            id: 2,
+            key: 'proposal_sent',
+            name: 'Proposta Enviada',
+            pipeline_id: 1,
+            deals_count: 0,
+            value_cents: 0,
+          },
+          {
+            id: 3,
+            key: 'negotiation',
+            name: 'Negociação',
+            pipeline_id: 1,
+            deals_count: 1,
+            value_cents: 12345,
+          },
+        ],
+        funnel_records: {
+          qualified_leads: Array.from({ length: 4 }, (_, id) => ({
+            id,
+            name: `Lead ${id}`,
+          })),
+          sent_proposals: Array.from({ length: 3 }, (_, id) => ({
+            id,
+            pipeline_id: 1,
+            total_cents: 999999,
+          })),
+        },
+      }),
+    },
+  });
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/', name: 'crm_dashboard', component: CrmDashboardView },
+      {
+        path: '/funnel',
+        name: 'crm_funnel',
+        component: { template: '<div />' },
+      },
+    ],
+  });
+  await router.push('/');
+  await router.isReady();
+  const wrapper = shallowMount(CrmDashboardView, {
+    global: { plugins: [store, router] },
+  });
+  const stages = wrapper
+    .findAll('article')
+    .find(article => article.text().includes('Etapas comerciais'));
+  expect(stages.text()).toContain('4 leads');
+  expect(stages.text()).toContain('3 propostas');
+  expect(stages.text()).toContain('1 negócio');
+  expect(stages.text()).toContain('123,45');
+  expect(stages.text()).not.toContain('9.999,99');
+  wrapper.unmount();
+});
+
 it('renders zero expected revenue for a stage with zero probability', () => {
   const wrapper = shallowMount(KanbanColumn, {
     props: {

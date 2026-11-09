@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 
-import { dealsAPI, stagesAPI } from '../../../api/crm';
+import { dealsAPI, stagesAPI, funnelRecordsAPI } from '../../../api/crm';
 
 export default {
   namespaced: true,
@@ -12,6 +12,7 @@ export default {
     isLoading: false,
     pagination: {},
     kanbanColumns: [],
+    funnelRecords: { qualified_leads: [], sent_proposals: [] },
     error: null,
     kanbanRequest: 0,
   },
@@ -39,6 +40,7 @@ export default {
 
     isLoading: state => state.isLoading,
     error: state => state.error,
+    funnelRecords: state => state.funnelRecords,
   },
 
   mutations: {
@@ -115,6 +117,9 @@ export default {
 
     SET_KANBAN_COLUMNS(state, payload) {
       state.kanbanColumns = Array.isArray(payload) ? payload : [];
+    },
+    SET_FUNNEL_RECORDS(state, payload) {
+      state.funnelRecords = payload;
     },
     START_KANBAN_REQUEST(state) {
       state.kanbanRequest += 1;
@@ -200,28 +205,45 @@ export default {
       commit('SET_ERROR', null);
       commit('SET_KANBAN_COLUMNS', []);
       commit('SET_DEALS', []);
+      commit('SET_FUNNEL_RECORDS', { qualified_leads: [], sent_proposals: [] });
       try {
-        const [stagesResponses, dealsResponse] = await Promise.all([
-          Promise.all(
-            pipelineIds.map(id => stagesAPI.list({ pipeline_id: id }))
-          ),
-          dealsAPI.list({
-            pipeline_id: pipelineId || undefined,
-            owner_id: filters.owner_id || undefined,
-            search: filters.search,
-            start_date: filters.start_date || undefined,
-            end_date: filters.end_date || undefined,
-          }),
-        ]);
+        const [stagesResponses, dealsResponse, recordsResponse] =
+          await Promise.all([
+            Promise.all(
+              pipelineIds.map(id => stagesAPI.list({ pipeline_id: id }))
+            ),
+            dealsAPI.list({
+              pipeline_id: pipelineId || undefined,
+              owner_id: filters.owner_id || undefined,
+              search: filters.search,
+              start_date: filters.start_date || undefined,
+              end_date: filters.end_date || undefined,
+            }),
+            funnelRecordsAPI.list({
+              pipeline_id: pipelineId || undefined,
+              owner_id: filters.owner_id || undefined,
+              search: filters.search,
+              start_date: filters.start_date || undefined,
+              end_date: filters.end_date || undefined,
+              period: filters.start_date || filters.end_date ? 'custom' : 'all',
+            }),
+          ]);
         if (request !== state.kanbanRequest) return;
         const stages = stagesResponses.flatMap(
           response => response.data?.payload || response.data
         );
         const deals = dealsResponse.data?.payload || dealsResponse.data;
-        if (!Array.isArray(deals) || stages.some(stage => !stage?.id)) {
+        const records = recordsResponse.data;
+        if (
+          !Array.isArray(deals) ||
+          stages.some(stage => !stage?.id) ||
+          !Array.isArray(records?.qualified_leads) ||
+          !Array.isArray(records?.sent_proposals)
+        ) {
           throw new Error('Invalid funnel response');
         }
         commit('SET_KANBAN_COLUMNS', stages);
+        commit('SET_FUNNEL_RECORDS', records);
         commit(
           'SET_DEALS',
           deals.filter(

@@ -2,6 +2,7 @@ export { default as leadsAPI } from './leads';
 export { default as dealsAPI } from './deals';
 export { default as pipelinesAPI } from './pipelines';
 export { default as stagesAPI } from './stages';
+export { default as funnelRecordsAPI } from './funnelRecords';
 export { default as activitiesAPI } from './activities';
 export { default as followUpsAPI } from './followUps';
 export { default as productsAPI } from './products';

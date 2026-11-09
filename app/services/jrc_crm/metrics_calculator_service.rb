@@ -29,6 +29,9 @@ module JrcCrm
         overdue_activities_count: overdue_activities_count,
         stalled_deals_count: stalled_deals_count,
         funnel_stages: funnel_stages,
+        funnel_records: JrcCrm::FunnelRecordsService.new(account: @account, actor: @actor,
+                                                         filters: { owner_id: @owner_id, pipeline_id: @pipeline_id,
+                                                                    start_date: @start_date, end_date: @end_date }).call,
         commercial_summary: commercial_summary
       }
     end
@@ -143,6 +146,9 @@ module JrcCrm
         {
           id: stage.id,
           name: stage.name,
+          key: stage.key,
+          is_won: stage.is_won,
+          is_lost: stage.is_lost,
           pipeline_id: stage.pipeline_id,
           pipeline_name: stage.pipeline.name,
           deals_count: counts[stage.id].to_i,

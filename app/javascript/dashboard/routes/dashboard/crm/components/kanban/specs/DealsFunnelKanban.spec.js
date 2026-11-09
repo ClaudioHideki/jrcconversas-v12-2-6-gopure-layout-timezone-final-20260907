@@ -2,6 +2,8 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { createStore } from 'vuex';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import Funnel from '../DealsFunnelKanban.vue';
+import FunnelLeads from '../FunnelLeads.vue';
+import KanbanFilters from '../KanbanFilters.vue';
 import deals from 'dashboard/store/crm/modules/deals';
 import pipelines from 'dashboard/store/crm/modules/pipelines';
 import {
@@ -10,6 +12,7 @@ import {
   pipelinesAPI,
   lostReasonsAPI,
   leadsAPI,
+  funnelRecordsAPI,
 } from 'dashboard/api/crm';
 
 vi.mock('dashboard/api/crm', () => ({
@@ -18,11 +21,15 @@ vi.mock('dashboard/api/crm', () => ({
   pipelinesAPI: { list: vi.fn() },
   lostReasonsAPI: { list: vi.fn() },
   leadsAPI: { list: vi.fn() },
+  funnelRecordsAPI: { list: vi.fn() },
 }));
 let wrapper;
 let store;
 let router;
 beforeEach(() => {
+  funnelRecordsAPI.list.mockResolvedValue({
+    data: { qualified_leads: [], sent_proposals: [] },
+  });
   leadsAPI.list.mockResolvedValue({ data: [] });
   pipelinesAPI.list.mockResolvedValue({ data: [{ id: 1, name: 'Comercial' }] });
   stagesAPI.list.mockResolvedValue({
@@ -56,6 +63,11 @@ beforeEach(() => {
       { path: '/leads', name: 'crm_leads', component: { template: '<div />' } },
       { path: '/deals', name: 'crm_deals', component: { template: '<div />' } },
       {
+        path: '/proposals',
+        name: 'crm_proposals',
+        component: { template: '<div />' },
+      },
+      {
         path: '/summary',
         name: 'crm_dashboard',
         component: { template: '<div />' },
@@ -72,17 +84,107 @@ const render = async () => {
 };
 
 describe('funnel rendered journeys', () => {
+  it('lists qualified leads and sent proposals in matching columns, preserving current deal stages and proposal statuses', async () => {
+    stagesAPI.list.mockResolvedValue({
+      data: [
+        { id: 10, pipeline_id: 1, key: 'qualification', name: 'Qualificação' },
+        {
+          id: 11,
+          pipeline_id: 1,
+          key: 'proposal_sent',
+          name: 'Proposta Enviada',
+        },
+        { id: 12, pipeline_id: 1, key: 'negotiation', name: 'Negociação' },
+        { id: 13, pipeline_id: 1, is_won: true, name: 'Ganho' },
+        { id: 14, pipeline_id: 1, is_lost: true, name: 'Perdido' },
+      ],
+    });
+    funnelRecordsAPI.list.mockResolvedValue({
+      data: {
+        qualified_leads: Array.from({ length: 4 }, (_, i) => ({
+          id: 99 + i,
+          name: `Qualified ${i}`,
+          status: 'qualified',
+        })),
+        sent_proposals: ['sent', 'accepted', 'canceled'].map((status, i) => ({
+          id: 200 + i,
+          title: `Document ${i}`,
+          status,
+          pipeline_id: 1,
+          version_number: 1,
+          total_cents: 999999,
+        })),
+      },
+    });
+    dealsAPI.list.mockResolvedValue({
+      data: [
+        {
+          id: 1,
+          stage_id: 12,
+          title: 'Manual negotiation',
+          status: 'open',
+          value_cents: 10000,
+        },
+        {
+          id: 2,
+          stage_id: 13,
+          title: 'Closed won deal',
+          status: 'won',
+          value_cents: 20000,
+        },
+        {
+          id: 3,
+          stage_id: 14,
+          title: 'Closed lost deal',
+          status: 'lost',
+          value_cents: 30000,
+        },
+      ],
+    });
+    await render();
+    const cols = wrapper.findAllComponents({ name: 'KanbanColumn' });
+    expect(cols[0].text()).toContain('4 leads');
+    expect(cols[1].text()).toContain('3 propostas');
+    expect(cols[1].text()).toContain('Aceita');
+    expect(cols[1].text()).toContain('Cancelada');
+    expect(cols[2].text()).toContain('Manual negotiation');
+    expect(cols[2].text()).not.toContain('Closed');
+    expect(cols[3].text()).toContain('Closed won deal');
+    expect(cols[4].text()).toContain('Closed lost deal');
+    const proposalLink = cols[1].get('a[href="/proposals?proposalId=201"]');
+    expect(proposalLink.attributes('draggable')).toBe('false');
+    await proposalLink.trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.query.proposalId).toBe('201');
+    expect(dealsAPI.moveStage).not.toHaveBeenCalled();
+  });
   it('shows qualified leads separately and never routes them through deal drag/drop', async () => {
+    funnelRecordsAPI.list.mockResolvedValue({
+      data: {
+        qualified_leads: [
+          { id: 99, name: 'Qualified synthetic person', status: 'qualified' },
+        ],
+        sent_proposals: [],
+      },
+    });
     leadsAPI.list.mockResolvedValue({
       data: [
         { id: 99, name: 'Qualified synthetic person', status: 'qualified' },
       ],
     });
     await render();
+    expect(wrapper.find('a[href="/leads?leadId=99"]').isVisible()).toBe(true);
+    const leadsToggle = wrapper.findComponent(FunnelLeads).get('button');
+    expect(leadsToggle.attributes('aria-expanded')).toBe('false');
+    expect(leadsToggle.text()).toContain('Qualificados 1');
+    await leadsToggle.trigger('click');
     expect(wrapper.text()).toContain('Qualified synthetic person');
-    const link = wrapper.find('a[href="/leads?leadId=99"]');
+    const link = wrapper
+      .findAllComponents({ name: 'KanbanColumn' })
+      .find(column => column.props('leads').length)
+      .get('a[href="/leads?leadId=99"]');
     expect(link.exists()).toBe(true);
-    expect(link.attributes('draggable')).toBeUndefined();
+    expect(link.attributes('draggable')).toBe('false');
     expect(dealsAPI.moveStage).not.toHaveBeenCalled();
     await link.trigger('click');
     await flushPromises();
@@ -119,6 +221,10 @@ describe('funnel rendered journeys', () => {
     expect(dealsAPI.list).toHaveBeenLastCalledWith(
       expect.objectContaining({ search: 'Venda' })
     );
+    await wrapper
+      .findComponent(KanbanFilters)
+      .get('button[aria-expanded]')
+      .trigger('click');
     await wrapper.findAll('select')[1].setValue('7');
     await flushPromises();
     expect(dealsAPI.list).toHaveBeenLastCalledWith(
@@ -209,6 +315,12 @@ describe('funnel rendered journeys', () => {
 });
 
 it('defaults to all pipelines, carries filters and keeps qualified leads after clearing', async () => {
+  funnelRecordsAPI.list.mockResolvedValue({
+    data: {
+      qualified_leads: [{ id: 99, name: 'Qualified QA', status: 'qualified' }],
+      sent_proposals: [],
+    },
+  });
   leadsAPI.list.mockImplementation(async ({ status }) => ({
     data: status ? [] : [{ id: 99, name: 'Qualified QA', status: 'qualified' }],
   }));
@@ -241,9 +353,13 @@ it('defaults to all pipelines, carries filters and keeps qualified leads after c
     wrapper
       .findAllComponents({ name: 'KanbanColumn' })
       .map(c => c.props('stage').name)
-  ).toEqual(['Novo Lead', 'Lead']);
+  ).toEqual(['Novo Lead', 'Lead', 'Qualificação']);
   expect(wrapper.text()).toContain('Legacy');
   await wrapper.findAll('select')[0].setValue('1');
+  await wrapper
+    .findComponent(KanbanFilters)
+    .get('button[aria-expanded]')
+    .trigger('click');
   await wrapper.findAll('input[type=date]')[0].setValue('2026-11-01');
   await flushPromises();
   const summary = wrapper
@@ -260,10 +376,17 @@ it('defaults to all pipelines, carries filters and keeps qualified leads after c
     expect.objectContaining({ pipeline_id: undefined, start_date: undefined })
   );
   expect(leadsAPI.list.mock.calls.at(-1)[0]).not.toHaveProperty('status');
+  await wrapper.findComponent(FunnelLeads).get('button').trigger('click');
   expect(wrapper.text()).toContain('Qualified QA');
 });
 
 it('opens the board with the same summary filters without hiding qualified pre-sale leads', async () => {
+  funnelRecordsAPI.list.mockResolvedValue({
+    data: {
+      qualified_leads: [{ id: 99, name: 'Qualified QA', status: 'qualified' }],
+      sent_proposals: [],
+    },
+  });
   leadsAPI.list.mockResolvedValue({
     data: [{ id: 99, name: 'Qualified QA', status: 'qualified' }],
   });
@@ -290,6 +413,20 @@ it('opens the board with the same summary filters without hiding qualified pre-s
     })
   );
   expect(leadsAPI.list.mock.calls.at(-1)[0]).not.toHaveProperty('pipeline_id');
+  const filterToggle = wrapper
+    .findComponent(KanbanFilters)
+    .get('button[aria-expanded]');
+  expect(filterToggle.text()).toContain('2');
+  const requestsBeforeToggle = dealsAPI.list.mock.calls.length;
+  await filterToggle.trigger('click');
+  expect(wrapper.findAll('input[type=date]')[0].element.value).toBe(
+    '2026-11-01'
+  );
+  await filterToggle.trigger('click');
+  expect(filterToggle.attributes('aria-expanded')).toBe('false');
+  expect(filterToggle.text()).toContain('2');
+  expect(dealsAPI.list.mock.calls).toHaveLength(requestsBeforeToggle);
+  await wrapper.findComponent(FunnelLeads).get('button').trigger('click');
   expect(wrapper.text()).toContain('Qualified QA');
 });
 

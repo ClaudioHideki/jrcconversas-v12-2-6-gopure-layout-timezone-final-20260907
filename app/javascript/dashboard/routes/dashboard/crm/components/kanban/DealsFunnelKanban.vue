@@ -5,6 +5,7 @@ import { useStore } from 'vuex';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import { useAdmin } from 'dashboard/composables/useAdmin';
+import { projectFunnelStages } from '../../helpers/funnelStages';
 import {
   commercialFilterQuery,
   commercialFiltersFromQuery,
@@ -14,7 +15,6 @@ import FunnelLeads from './FunnelLeads.vue';
 import KanbanColumn from './KanbanColumn.vue';
 import KanbanFilters from './KanbanFilters.vue';
 import { useDragAndDrop } from '../../composables/useDragAndDrop';
-import CrmPageHeader from '../shared/CrmPageHeader.vue';
 import CrmValueDisplay from '../shared/CrmValueDisplay.vue';
 
 const store = useStore();
@@ -62,9 +62,30 @@ onMounted(() => {
 });
 
 // Columns = stages from selected pipeline
-const columns = computed(() => {
-  return store.getters['jrcCrm/deals/dealsByStage'] || [];
-});
+const funnelRecords = computed(
+  () => store.getters['jrcCrm/deals/funnelRecords']
+);
+const columns = computed(() =>
+  projectFunnelStages(
+    (store.getters['jrcCrm/deals/dealsByStage'] || []).map(
+      ({ stage, deals }) => ({
+        ...stage,
+        deals,
+        deals_count: deals.length,
+      })
+    ),
+    funnelRecords.value,
+    {
+      qualification: t('CRM.FUNNEL.QUALIFICATION'),
+      proposal_sent: t('CRM.FUNNEL.PROPOSAL_SENT'),
+    }
+  ).map(stage => ({
+    stage,
+    deals: stage.deals || [],
+    leads: stage.leads,
+    proposals: stage.proposals,
+  }))
+);
 const loading = computed(
   () => initializing.value || store.getters['jrcCrm/deals/isLoading']
 );
@@ -78,6 +99,16 @@ const hasPipelines = computed(
 );
 const dealCount = computed(() =>
   columns.value.reduce((total, column) => total + column.deals.length, 0)
+);
+const recordCount = computed(() =>
+  columns.value.reduce(
+    (total, column) =>
+      total +
+      column.deals.length +
+      column.leads.length +
+      column.proposals.length,
+    0
+  )
 );
 const pipelineValue = computed(() =>
   columns.value.reduce(
@@ -148,59 +179,60 @@ const { onDragStart, onDragOver, onDrop, onDragEnd } = useDragAndDrop({
 </script>
 
 <template>
-  <div class="flex h-full min-h-[420px] flex-col overflow-auto bg-n-surface-1">
-    <div class="shrink-0 space-y-5 p-4 pb-0 sm:p-6 sm:pb-0">
-      <CrmPageHeader
-        eyebrow="Pipeline comercial"
-        title="Funil de oportunidades"
-        :description="t('CRM.FUNNEL.BOARD_HELP')"
-        icon="i-lucide-columns-3"
-        tone="iris"
-      >
-        <template #meta>
-          <span
-            class="inline-flex rounded-full bg-n-iris-3 px-3 py-1 text-xs font-semibold text-n-iris-11"
-            >Funil comercial</span
+  <div
+    class="flex h-full min-h-0 min-w-0 flex-col overflow-y-auto bg-n-surface-1 lg:overflow-hidden"
+  >
+    <div class="shrink-0 space-y-2 px-3 pt-3 sm:px-4">
+      <header class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          <h2
+            class="text-lg font-bold text-n-slate-12"
+            :title="t('CRM.FUNNEL.BOARD_HELP')"
           >
+            {{ t('CRM.FUNNEL.TITLE') }}
+          </h2>
           <span
-            class="inline-flex items-center gap-1 rounded-full bg-n-blue-3 px-3 py-1 text-xs font-semibold text-n-blue-11"
+            class="inline-flex items-center gap-1 text-xs font-semibold text-n-blue-11"
           >
             <i class="i-lucide-chart-no-axes-column-increasing size-3" />
             {{ dealCount }} {{ t('CRM.FUNNEL.DEAL_TYPE') }}
           </span>
           <span
-            class="inline-flex items-center gap-1 rounded-full bg-n-teal-3 px-3 py-1 text-xs font-semibold text-n-teal-11"
+            class="inline-flex items-center gap-1 text-xs font-semibold text-n-teal-11"
           >
             <i class="i-lucide-circle-dollar-sign size-3" />
             <CrmValueDisplay :cents="pipelineValue" />
             {{ t('CRM.FUNNEL.OPEN_VALUE') }}
           </span>
-        </template>
-        <template #actions>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
           <RouterLink
             :to="summaryLink"
-            class="rounded-xl border border-n-weak px-4 py-2.5 text-sm font-semibold text-n-slate-12"
+            class="rounded-lg border border-n-weak px-3 py-2 text-sm font-semibold text-n-slate-12"
           >
             {{ t('CRM.FUNNEL.SUMMARY_LINK') }}
           </RouterLink>
           <RouterLink
             :to="{ name: 'crm_deals', query: { new: '1' } }"
-            class="rounded-xl bg-n-teal-9 px-4 py-2.5 text-sm font-semibold text-white shadow-md"
+            class="rounded-lg bg-n-teal-9 px-3 py-2 text-sm font-semibold text-white shadow-sm"
           >
             <i
               class="i-lucide-plus mr-1 inline-block h-4 w-4 align-text-bottom"
             />
-            Nova oportunidade
+            {{ t('CRM.FUNNEL.NEW_OPPORTUNITY') }}
           </RouterLink>
-        </template>
-      </CrmPageHeader>
-      <div
-        class="overflow-hidden rounded-2xl border border-n-weak bg-n-solid-2 shadow-sm"
-      >
+        </div>
+      </header>
+      <div class="rounded-xl border border-n-weak bg-n-solid-2">
         <KanbanFilters v-model:filters="filters" @change="loadKanbanData" />
       </div>
     </div>
-    <FunnelLeads :filters="filters" />
+    <FunnelLeads
+      v-if="!error"
+      :filters="filters"
+      :qualified-records="funnelRecords?.qualified_leads"
+      :qualified-loading="loading"
+    />
     <div
       v-if="loading"
       class="m-6 rounded-2xl border border-n-weak bg-n-solid-2 p-8 text-center text-n-slate-10 shadow-sm"
@@ -227,7 +259,7 @@ const { onDragStart, onDragOver, onDrop, onDragEnd } = useDragAndDrop({
       }}
     </div>
     <p
-      v-else-if="!dealCount"
+      v-else-if="!recordCount"
       role="status"
       class="mx-6 mt-4 text-sm text-n-slate-11"
     >
@@ -238,13 +270,18 @@ const { onDragStart, onDragOver, onDrop, onDragEnd } = useDragAndDrop({
     </p>
     <div
       v-if="!loading && !error && columns.length"
-      class="flex min-h-[300px] flex-1 gap-4 overflow-x-auto p-4 sm:p-6"
+      role="region"
+      :aria-label="t('CRM.FUNNEL.DEAL_STAGES_TITLE')"
+      tabindex="0"
+      class="flex min-h-[320px] flex-1 gap-3 overflow-x-auto p-3 sm:px-4 lg:min-h-0"
     >
       <KanbanColumn
         v-for="column in columns"
         :key="column.stage.id"
         :stage="column.stage"
         :deals="column.deals"
+        :leads="column.leads"
+        :proposals="column.proposals"
         :show-pipeline="!filters.pipeline_id"
         @drag-start="onDragStart"
         @drag-end="onDragEnd"

@@ -604,6 +604,7 @@ Rails.application.routes.draw do
           namespace :crm do
             resource :dashboard, only: :show, controller: :dashboards
             resources :reports, only: :index
+            resources :funnel_records, only: :index
             resources :leads, only: [:index, :show, :create, :update, :destroy] do
               get :for_contact, on: :collection
               post :from_contact, on: :collection

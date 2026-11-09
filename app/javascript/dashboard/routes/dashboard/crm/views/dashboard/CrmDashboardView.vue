@@ -10,6 +10,7 @@ import CommercialMetricFilters from '../../components/shared/CommercialMetricFil
 import { useStore } from 'vuex';
 import CommercialSummaryCards from '../../components/shared/CommercialSummaryCards.vue';
 import { useCrmMetrics } from '../../composables/useCrmMetrics';
+import { projectFunnelStages } from '../../helpers/funnelStages';
 
 const store = useStore();
 const route = useRoute();
@@ -22,7 +23,13 @@ const { formatBRL } = useCrmMetrics();
 
 const metrics = computed(() => store.getters['jrcCrm/dashboard/metrics'] || {});
 const isLoading = computed(() => store.getters['jrcCrm/dashboard/isLoading']);
-const stages = computed(() => metrics.value.funnel_stages || []);
+const stages = computed(() =>
+  projectFunnelStages(
+    metrics.value.funnel_stages || [],
+    metrics.value.funnel_records,
+    { qualification: 'Qualificação', proposal_sent: 'Proposta Enviada' }
+  )
+);
 const pipelineValue = computed(() =>
   Number(metrics.value.pipeline_value_cents ?? 0)
 );
@@ -31,7 +38,7 @@ const weightedValue = computed(() =>
 );
 const wonRevenue = computed(() => Number(metrics.value.won_revenue_cents || 0));
 const maxStageCount = computed(() =>
-  Math.max(...stages.value.map(stage => Number(stage.deals_count || 0)), 1)
+  Math.max(...stages.value.map(stage => stage.records_count), 1)
 );
 const totalFunnelDeals = computed(() =>
   stages.value.reduce((sum, stage) => sum + Number(stage.deals_count || 0), 0)
@@ -51,7 +58,7 @@ const stagePalette = [
 ];
 
 const stageWidth = stage => {
-  const count = Number(stage.deals_count || 0);
+  const count = stage.records_count;
   return `${Math.max(10, (count / maxStageCount.value) * 100)}%`;
 };
 
@@ -177,10 +184,27 @@ const loadMetrics = filters => {
                     >{{ stage.pipeline_name }}</span
                   >
                 </div>
-                <span
-                  class="text-right text-sm font-semibold text-n-slate-12"
-                  >{{ stage.deals_count }}</span
-                >
+                <span class="text-right text-sm font-semibold text-n-slate-12"
+                  >{{ stage.records_count }}
+                  <span
+                    v-if="stage.leads_count || stage.proposals_count"
+                    class="mt-1 block text-xs font-normal text-n-slate-11"
+                  >
+                    {{
+                      $t('CRM.FUNNEL.DEALS_COUNT', {
+                        count: stage.deals_count || 0,
+                      })
+                    }}
+                    <span v-if="stage.leads_count" class="block">{{
+                      $t('CRM.FUNNEL.LEADS_COUNT', { count: stage.leads_count })
+                    }}</span>
+                    <span v-if="stage.proposals_count" class="block">{{
+                      $t('CRM.FUNNEL.PROPOSALS_COUNT', {
+                        count: stage.proposals_count,
+                      })
+                    }}</span>
+                  </span>
+                </span>
                 <span
                   class="text-right text-sm font-semibold text-n-slate-12"
                   >{{ formatBRL(stage.value_cents || 0) }}</span
@@ -193,8 +217,10 @@ const loadMetrics = filters => {
                   >Total nas etapas</span
                 >
                 <span class="font-bold text-n-slate-12"
-                  >{{ totalFunnelDeals }} oportunidades ·
-                  {{ formatBRL(totalFunnelValue) }}</span
+                  >{{
+                    $t('CRM.FUNNEL.DEALS_COUNT', { count: totalFunnelDeals })
+                  }}
+                  · {{ formatBRL(totalFunnelValue) }}</span
                 >
               </div>
             </div>

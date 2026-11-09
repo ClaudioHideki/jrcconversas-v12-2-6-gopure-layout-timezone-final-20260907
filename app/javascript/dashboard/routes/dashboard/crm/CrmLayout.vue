@@ -9,6 +9,7 @@ import Icon from 'dashboard/components-next/icon/Icon.vue';
 import { useCrmTheme } from './useCrmTheme';
 
 const route = useRoute();
+const compactHeader = computed(() => route.name === 'crm_funnel');
 const store = useStore();
 const { t } = useI18n();
 const { crmControlClasses } = useCrmTheme();
@@ -184,44 +185,50 @@ onMounted(revealActiveTab);
 <template>
   <div
     class="jrc-crm-shell flex h-full min-w-0 flex-1 flex-col bg-n-background text-n-slate-12"
-    :class="crmControlClasses"
+    :class="[crmControlClasses, { 'min-h-0': compactHeader }]"
   >
     <header
-      class="jrc-crm-top relative shrink-0 border-b border-n-weak bg-n-solid-2 px-4 pt-4 sm:px-6"
+      class="jrc-crm-top relative shrink-0 border-b border-n-weak bg-n-solid-2 px-4 sm:px-6"
+      :class="compactHeader ? 'pt-2' : 'pt-4'"
     >
       <div
         aria-hidden="true"
         class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_70%_-20%,rgba(139,92,246,.13),transparent_38%),radial-gradient(circle_at_45%_-30%,rgba(8,124,240,.12),transparent_35%)]"
       />
       <div
-        class="relative mb-4 flex flex-wrap items-center justify-between gap-4"
+        class="relative flex flex-wrap items-center justify-between"
+        :class="compactHeader ? 'mb-1 gap-2' : 'mb-4 gap-4'"
       >
         <div class="flex min-w-0 items-center gap-3">
           <span
-            class="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0d8cff] to-[#075fc8] text-white shadow-[0_10px_28px_rgba(8,124,240,0.28)]"
+            class="flex shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0d8cff] to-[#075fc8] text-white shadow-[0_10px_28px_rgba(8,124,240,0.28)]"
+            :class="compactHeader ? 'size-8' : 'size-11'"
           >
             <i class="i-lucide-chart-no-axes-combined size-5" />
           </span>
           <div class="min-w-0">
             <h1
-              class="truncate text-xl font-bold tracking-tight text-n-slate-12"
+              class="truncate font-bold tracking-tight text-n-slate-12"
+              :class="compactHeader ? 'text-base' : 'text-xl'"
             >
               CRM Comercial
             </h1>
-            <p class="truncate text-xs text-n-slate-11">
+            <p v-if="!compactHeader" class="truncate text-xs text-n-slate-11">
               Conversas, oportunidades e relacionamento em um só lugar
             </p>
           </div>
         </div>
         <RouterLink
           :to="{ name: 'crm_leads', query: { new: '1' } }"
-          class="inline-flex shrink-0 items-center gap-2 rounded-xl bg-n-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 focus-visible:ring-2 focus-visible:ring-n-blue-8"
+          class="inline-flex shrink-0 items-center gap-2 rounded-xl bg-n-brand text-sm font-semibold text-white shadow-sm transition hover:brightness-110 focus-visible:ring-2 focus-visible:ring-n-blue-8"
+          :class="compactHeader ? 'px-3 py-2' : 'px-4 py-2.5'"
         >
           <i class="i-lucide-plus size-4" /> Novo lead
         </RouterLink>
       </div>
       <nav
-        class="relative flex min-w-0 items-center gap-2 pb-3"
+        class="relative flex min-w-0 items-center gap-2"
+        :class="compactHeader ? 'pb-1' : 'pb-3'"
         :aria-label="t('CRM.NAVIGATION.LABEL')"
       >
         <Button
@@ -244,11 +251,12 @@ onMounted(revealActiveTab);
             :key="item.name"
             :to="{ name: item.name }"
             :aria-current="route.name === item.name ? 'page' : undefined"
-            class="jrc-crm-tab flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border px-3 py-2.5 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-n-blue-8"
-            :class="
+            class="jrc-crm-tab flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border px-3 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-n-blue-8"
+            :class="[
+              compactHeader ? 'py-1.5' : 'py-2.5',
               activeTabClass(item) ||
-              'border-n-weak bg-n-solid-2 text-n-slate-11 hover:bg-n-alpha-2 hover:text-n-slate-12'
-            "
+                'border-n-weak bg-n-solid-2 text-n-slate-11 hover:bg-n-alpha-2 hover:text-n-slate-12',
+            ]"
           >
             <span
               class="grid size-6 place-content-center rounded-lg bg-n-alpha-1 text-current"
@@ -270,7 +278,10 @@ onMounted(revealActiveTab);
         />
       </nav>
     </header>
-    <main class="min-h-0 flex-1 overflow-auto">
+    <main
+      class="min-h-0 flex-1"
+      :class="compactHeader ? 'overflow-hidden' : 'overflow-auto'"
+    >
       <RouterView :key="route.params.accountId" />
     </main>
   </div>

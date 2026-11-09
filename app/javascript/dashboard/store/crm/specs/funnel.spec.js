@@ -1,16 +1,25 @@
 import { createStore } from 'vuex';
 import deals from '../modules/deals';
 import pipelines from '../modules/pipelines';
-import { dealsAPI, stagesAPI, pipelinesAPI } from 'dashboard/api/crm';
+import {
+  dealsAPI,
+  stagesAPI,
+  pipelinesAPI,
+  funnelRecordsAPI,
+} from 'dashboard/api/crm';
 
 vi.mock('dashboard/api/crm', () => ({
   dealsAPI: { list: vi.fn(), moveStage: vi.fn() },
   stagesAPI: { list: vi.fn() },
   pipelinesAPI: { list: vi.fn() },
+  funnelRecordsAPI: { list: vi.fn() },
 }));
 
 let store;
 beforeEach(() => {
+  funnelRecordsAPI.list.mockResolvedValue({
+    data: { qualified_leads: [], sent_proposals: [] },
+  });
   store = createStore({
     modules: {
       jrcCrm: {
@@ -33,6 +42,24 @@ beforeEach(() => {
 const load = filters => store.dispatch('jrcCrm/deals/fetchKanbanData', filters);
 
 describe('existing CRM funnel data contract', () => {
+  it('fetches matching lead/document filters and exposes read failures rather than zero counters', async () => {
+    await load({ pipeline_id: 2, owner_id: 3, start_date: '2026-11-01' });
+    expect(funnelRecordsAPI.list).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pipeline_id: 2,
+        owner_id: 3,
+        start_date: '2026-11-01',
+        period: 'custom',
+      })
+    );
+    funnelRecordsAPI.list.mockRejectedValueOnce({ response: { status: 403 } });
+    await load({ pipeline_id: 2 });
+    expect(store.getters['jrcCrm/deals/error']).toBeTruthy();
+    expect(store.getters['jrcCrm/deals/funnelRecords']).toEqual({
+      qualified_leads: [],
+      sent_proposals: [],
+    });
+  });
   it('loads stages from every pipeline when All pipelines is selected', async () => {
     await load({ pipeline_id: null });
     expect(stagesAPI.list).toHaveBeenCalledTimes(2);

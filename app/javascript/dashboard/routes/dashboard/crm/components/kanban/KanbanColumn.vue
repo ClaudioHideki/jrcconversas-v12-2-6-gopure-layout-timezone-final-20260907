@@ -1,18 +1,26 @@
 <script setup>
 /* eslint-disable vue/no-bare-strings-in-template, @intlify/vue-i18n/no-raw-text */
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import KanbanCard from './KanbanCard.vue';
+import FunnelRecordCard from './FunnelRecordCard.vue';
 import CrmValueDisplay from '../shared/CrmValueDisplay.vue';
 
 const props = defineProps({
   stage: { type: Object, required: true },
   deals: { type: Array, required: true },
   showPipeline: { type: Boolean, default: false },
+  leads: { type: Array, default: () => [] },
+  proposals: { type: Array, default: () => [] },
 });
 
 defineEmits(['dragStart', 'dragEnd', 'dragOver', 'drop']);
 
 const dealCount = computed(() => props.deals.length);
+const { t } = useI18n();
+const recordCount = computed(
+  () => dealCount.value + props.leads.length + props.proposals.length
+);
 const financialSum = computed(() =>
   props.deals.reduce((sum, deal) => sum + (deal.value_cents || 0), 0)
 );
@@ -40,12 +48,12 @@ const stageAccent = computed(() => {
 <template>
   <div
     class="flex min-w-[320px] max-w-[320px] flex-col overflow-hidden rounded-2xl border border-n-weak bg-n-alpha-1 shadow-sm"
-    @dragover="$emit('dragOver', $event)"
-    @drop="$emit('drop', $event)"
+    @dragover="!stage.virtual && $emit('dragOver', $event)"
+    @drop="!stage.virtual && $emit('drop', $event)"
   >
-    <div class="border-b border-n-weak bg-n-solid-2 p-4">
-      <div class="-mx-4 -mt-4 mb-4 h-1.5" :class="stageAccent" />
-      <div class="flex justify-between items-center mb-2">
+    <div class="shrink-0 border-b border-n-weak bg-n-solid-2 p-3">
+      <div class="-mx-3 -mt-3 mb-2 h-1" :class="stageAccent" />
+      <div class="mb-1 flex items-center justify-between gap-2">
         <h3
           class="font-bold text-n-slate-12 text-sm truncate"
           :title="stage.name"
@@ -54,19 +62,38 @@ const stageAccent = computed(() => {
         </h3>
         <span
           class="rounded-full bg-n-alpha-3 px-2.5 py-1 text-xs font-bold text-n-slate-11"
-          >{{ dealCount }}</span
+          >{{ recordCount }}</span
         >
       </div>
       <p
         v-if="showPipeline && stage.pipeline_name"
-        class="mb-2 truncate text-xs text-n-slate-11"
+        class="mb-1 truncate text-xs text-n-slate-11"
         :title="stage.pipeline_name"
       >
         {{ stage.pipeline_name }}
       </p>
+      <p
+        v-if="leads.length || proposals.length"
+        class="mb-2 text-xs text-n-slate-11"
+      >
+        {{ t('CRM.FUNNEL.DEALS_COUNT', { count: dealCount }) }}
+        <span v-if="leads.length">
+          · {{ t('CRM.FUNNEL.LEADS_COUNT', { count: leads.length }) }}</span
+        >
+        <span v-if="proposals.length">
+          ·
+          {{
+            t('CRM.FUNNEL.PROPOSALS_COUNT', { count: proposals.length })
+          }}</span
+        >
+      </p>
       <div class="text-xs text-n-slate-10 flex flex-col gap-1">
         <div class="flex justify-between">
-          <span>Total:</span>
+          <span>{{
+            leads.length || proposals.length
+              ? t('CRM.FUNNEL.DEALS_VALUE')
+              : 'Total:'
+          }}</span>
           <CrmValueDisplay
             :cents="financialSum"
             class="font-medium text-n-slate-11"
@@ -89,7 +116,19 @@ const stageAccent = computed(() => {
       </div>
     </div>
 
-    <div class="min-h-[150px] flex-1 overflow-y-auto p-3">
+    <div class="min-h-0 flex-1 overflow-y-auto p-3">
+      <FunnelRecordCard
+        v-for="lead in leads"
+        :key="`lead-${lead.id}`"
+        :record="lead"
+        kind="lead"
+      />
+      <FunnelRecordCard
+        v-for="proposal in proposals"
+        :key="`proposal-${proposal.id}`"
+        :record="proposal"
+        kind="proposal"
+      />
       <KanbanCard
         v-for="deal in deals"
         :key="deal.id"
@@ -99,7 +138,7 @@ const stageAccent = computed(() => {
         @dragend="$emit('dragEnd', $event)"
       />
       <div
-        v-if="!deals.length"
+        v-if="!recordCount"
         class="mt-2 rounded-xl border-2 border-dashed border-n-weak bg-n-solid-2 p-6 text-center text-xs text-n-slate-9"
       >
         Nenhum negócio nesta etapa
