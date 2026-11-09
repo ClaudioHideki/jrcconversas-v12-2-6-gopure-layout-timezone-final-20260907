@@ -22,10 +22,10 @@ const toneClasses = {
 </script>
 
 <template>
-  <header class="flex flex-wrap items-start justify-between gap-4">
+  <header class="flex flex-wrap items-start justify-between gap-2">
     <div class="flex min-w-0 items-start gap-3">
       <span
-        class="mt-0.5 flex size-12 shrink-0 items-center justify-center rounded-2xl ring-1 shadow-sm"
+        class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-2xl ring-1 shadow-sm"
         :class="toneClasses[tone]"
       >
         <i class="size-5" :class="icon" />
@@ -37,13 +37,13 @@ const toneClasses = {
         >
           {{ eyebrow }}
         </p>
-        <h2 class="text-2xl font-bold tracking-tight text-n-slate-12">
+        <h2 class="text-lg font-bold tracking-tight text-n-slate-12">
           {{ title }}
         </h2>
-        <p v-if="description" class="mt-1 text-sm text-n-slate-10">
+        <p v-if="description" class="mt-0.5 text-xs text-n-slate-10">
           {{ description }}
         </p>
-        <div v-if="$slots.meta" class="mt-2 flex flex-wrap items-center gap-2">
+        <div v-if="$slots.meta" class="mt-1 flex flex-wrap items-center gap-2">
           <slot name="meta" />
         </div>
       </div>

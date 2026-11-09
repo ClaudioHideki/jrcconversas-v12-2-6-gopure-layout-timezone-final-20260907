@@ -144,14 +144,14 @@ describe('funnel rendered journeys', () => {
     await render();
     const cols = wrapper.findAllComponents({ name: 'KanbanColumn' });
     expect(cols[0].text()).toContain('4 leads');
-    expect(cols[1].text()).toContain('3 propostas');
-    expect(cols[1].text()).toContain('Aceita');
-    expect(cols[1].text()).toContain('Cancelada');
-    expect(cols[2].text()).toContain('Manual negotiation');
-    expect(cols[2].text()).not.toContain('Closed');
+    expect(cols[1].text()).toContain('Manual negotiation');
+    expect(cols[1].text()).not.toContain('Closed');
+    expect(cols[2].text()).toContain('3 propostas');
+    expect(cols[2].text()).toContain('Aceita');
+    expect(cols[2].text()).toContain('Cancelada');
     expect(cols[3].text()).toContain('Closed won deal');
     expect(cols[4].text()).toContain('Closed lost deal');
-    const proposalLink = cols[1].get('a[href="/proposals?proposalId=201"]');
+    const proposalLink = cols[2].get('a[href="/proposals?proposalId=201"]');
     expect(proposalLink.attributes('draggable')).toBe('false');
     await proposalLink.trigger('click');
     await flushPromises();
@@ -353,7 +353,7 @@ it('defaults to all pipelines, carries filters and keeps qualified leads after c
     wrapper
       .findAllComponents({ name: 'KanbanColumn' })
       .map(c => c.props('stage').name)
-  ).toEqual(['Novo Lead', 'Lead', 'Qualificação']);
+  ).toEqual(['Qualificação']);
   expect(wrapper.text()).toContain('Legacy');
   await wrapper.findAll('select')[0].setValue('1');
   await wrapper
@@ -440,4 +440,124 @@ it('does not forward an owner from a shared administrator link when the viewer i
     expect.objectContaining({ owner_id: undefined })
   );
   expect(leadsAPI.list.mock.calls.at(-1)[0].owner_id).toBeFalsy();
+});
+it('groups pipelines into one Negotiation and one Sent column, then resolves a real drag within the original pipeline', async () => {
+  pipelinesAPI.list.mockResolvedValue({
+    data: [
+      { id: 1, name: 'GoPure' },
+      { id: 2, name: 'Operadora' },
+    ],
+  });
+  stagesAPI.list.mockImplementation(async ({ pipeline_id: id }) => ({
+    data: [
+      {
+        id: id * 10,
+        pipeline_id: id,
+        pipeline_name: id === 1 ? 'GoPure' : 'Operadora',
+        key: 'new_lead',
+        name: 'Novo Lead',
+        probability: 10,
+      },
+      {
+        id: id * 10 + 1,
+        pipeline_id: id,
+        key: 'negotiation',
+        name: 'Negociação',
+        probability: 70,
+      },
+      {
+        id: id * 10 + 2,
+        pipeline_id: id,
+        key: 'proposal_sent',
+        name: 'Proposta Enviada',
+        probability: 60,
+      },
+      {
+        id: id * 10 + 3,
+        pipeline_id: id,
+        is_won: true,
+        name: 'Ganho',
+        probability: 100,
+      },
+    ],
+  }));
+  const records = [
+    {
+      id: 1,
+      pipeline_id: 1,
+      stage_id: 10,
+      title: 'Open in entry',
+      status: 'open',
+      value_cents: 1000,
+    },
+    {
+      id: 2,
+      pipeline_id: 2,
+      stage_id: 20,
+      title: 'Open in second pipeline',
+      status: 'open',
+      value_cents: 2000,
+    },
+    {
+      id: 3,
+      pipeline_id: 1,
+      stage_id: 13,
+      title: 'Already won',
+      status: 'won',
+      value_cents: 9000,
+    },
+  ];
+  dealsAPI.list.mockImplementation(async () => ({
+    data: structuredClone(records),
+  }));
+  funnelRecordsAPI.list.mockResolvedValue({
+    data: {
+      qualified_leads: [],
+      sent_proposals: [
+        {
+          id: 70,
+          pipeline_id: 1,
+          title: 'First sent document',
+          status: 'accepted',
+        },
+        {
+          id: 71,
+          pipeline_id: 2,
+          title: 'Second sent document',
+          status: 'sent',
+        },
+      ],
+    },
+  });
+  dealsAPI.moveStage.mockImplementation(async (id, { stage_id }) => {
+    const record = records.find(row => row.id === id);
+    record.stage_id = stage_id;
+    record.status = 'won';
+  });
+  await render();
+  const columns = wrapper.findAllComponents({ name: 'KanbanColumn' });
+  expect(columns.map(column => column.props('stage').role)).toEqual([
+    'negotiation',
+    'proposal_sent',
+    'won',
+  ]);
+  expect(
+    columns[0].props('deals').map(deal => [deal.id, deal.stage_id])
+  ).toEqual([
+    [1, 10],
+    [2, 20],
+  ]);
+  expect(columns[1].props('proposals').map(proposal => proposal.id)).toEqual([
+    70, 71,
+  ]);
+  expect(columns[2].text()).toContain('Already won');
+  expect(dealsAPI.moveStage).not.toHaveBeenCalled();
+  columns[0].vm.$emit('dragStart', { dataTransfer: null }, records[1]);
+  columns[2].vm.$emit('drop', { preventDefault: vi.fn() });
+  await flushPromises();
+  expect(dealsAPI.moveStage).toHaveBeenCalledWith(2, {
+    stage_id: 23,
+    lost_reason_id: null,
+  });
+  expect(records[0].stage_id).toBe(10);
 });

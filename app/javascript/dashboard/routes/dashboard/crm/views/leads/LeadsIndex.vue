@@ -213,7 +213,7 @@ onMounted(async () => {
           ><i class="i-lucide-user-round-plus size-5"
         /></span>
         <div>
-          <h2 class="text-xl font-bold text-n-slate-12">Leads</h2>
+          <h2 class="text-lg font-bold text-n-slate-12">Leads</h2>
           <p class="text-sm text-n-slate-11">
             Potenciais clientes em qualificação
           </p>
@@ -227,58 +227,64 @@ onMounted(async () => {
         <i class="i-lucide-plus mr-2 inline size-4" />Novo lead
       </button>
     </header>
-    <section class="mb-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
-      <article
-        v-for="item in leadSummary"
-        :key="item.label"
-        class="flex min-w-0 items-center gap-2 rounded-xl border border-n-weak bg-n-solid-2 p-3 shadow-sm"
+    <div class="mb-2 flex flex-wrap items-center gap-2">
+      <section
+        class="grid min-w-[280px] flex-1 grid-cols-2 gap-2 lg:grid-cols-4"
       >
-        <div class="flex min-w-0 flex-1 items-center gap-2">
-          <span
-            class="grid size-8 shrink-0 place-content-center rounded-lg"
-            :class="
-              item.tone === 'blue'
-                ? 'bg-n-blue-3 text-n-blue-11'
-                : item.tone === 'amber'
-                  ? 'bg-n-amber-3 text-n-amber-11'
-                  : item.tone === 'violet'
-                    ? 'bg-n-iris-3 text-n-iris-11'
-                    : 'bg-n-teal-3 text-n-teal-11'
-            "
-            ><i class="size-4" :class="item.icon" /></span
-          ><span class="min-w-0 text-xs font-semibold text-n-slate-11">{{
-            item.label
-          }}</span>
-        </div>
-        <strong class="shrink-0 text-xl tabular-nums text-n-slate-12">{{
-          item.value
-        }}</strong>
-      </article>
-    </section>
+        <article
+          v-for="item in leadSummary"
+          :key="item.label"
+          class="flex min-w-0 items-center gap-2 rounded-xl border border-n-weak bg-n-solid-2 p-2 shadow-sm"
+        >
+          <div class="flex min-w-0 flex-1 items-center gap-2">
+            <span
+              class="grid size-6 shrink-0 place-content-center rounded-lg"
+              :class="
+                item.tone === 'blue'
+                  ? 'bg-n-blue-3 text-n-blue-11'
+                  : item.tone === 'amber'
+                    ? 'bg-n-amber-3 text-n-amber-11'
+                    : item.tone === 'violet'
+                      ? 'bg-n-iris-3 text-n-iris-11'
+                      : 'bg-n-teal-3 text-n-teal-11'
+              "
+              ><i class="size-4" :class="item.icon" /></span
+            ><span class="min-w-0 text-xs font-semibold text-n-slate-11">{{
+              item.label
+            }}</span>
+          </div>
+          <strong class="shrink-0 text-lg tabular-nums text-n-slate-12">{{
+            item.value
+          }}</strong>
+        </article>
+      </section>
 
-    <div class="mb-3 flex justify-end">
-      <div
-        class="flex rounded-xl border border-n-weak bg-n-solid-2 p-1 shadow-sm"
-      >
-        <button
-          type="button"
-          class="rounded-lg px-3 py-2 text-xs font-semibold"
-          :class="
-            viewMode === 'list' ? 'bg-n-brand text-white' : 'text-n-slate-11'
-          "
-          @click="viewMode = 'list'"
+      <div class="flex justify-end">
+        <div
+          class="flex rounded-xl border border-n-weak bg-n-solid-2 p-1 shadow-sm"
         >
-          <i class="i-lucide-list mr-1 size-4" />Lista</button
-        ><button
-          type="button"
-          class="rounded-lg px-3 py-2 text-xs font-semibold"
-          :class="
-            viewMode === 'kanban' ? 'bg-n-iris-9 text-white' : 'text-n-slate-11'
-          "
-          @click="viewMode = 'kanban'"
-        >
-          <i class="i-lucide-columns-3 mr-1 size-4" />Kanban
-        </button>
+          <button
+            type="button"
+            class="rounded-lg px-3 py-2 text-xs font-semibold"
+            :class="
+              viewMode === 'list' ? 'bg-n-brand text-white' : 'text-n-slate-11'
+            "
+            @click="viewMode = 'list'"
+          >
+            <i class="i-lucide-list mr-1 size-4" />Lista</button
+          ><button
+            type="button"
+            class="rounded-lg px-3 py-2 text-xs font-semibold"
+            :class="
+              viewMode === 'kanban'
+                ? 'bg-n-iris-9 text-white'
+                : 'text-n-slate-11'
+            "
+            @click="viewMode = 'kanban'"
+          >
+            <i class="i-lucide-columns-3 mr-1 size-4" />Kanban
+          </button>
+        </div>
       </div>
     </div>
 

@@ -27,7 +27,10 @@ const financialSum = computed(() =>
 const weightedSum = computed(() =>
   props.deals.reduce(
     (sum, deal) =>
-      sum + ((deal.value_cents || 0) * (props.stage.probability ?? 100)) / 100,
+      sum +
+      ((deal.value_cents || 0) *
+        (deal.source_probability ?? props.stage.probability ?? 100)) /
+        100,
     0
   )
 );

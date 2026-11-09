@@ -26,13 +26,22 @@ const ownerInitials = computed(() => {
 
 <template>
   <div
-    class="mb-3 cursor-grab rounded-2xl border border-n-weak bg-n-solid-2 p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-n-brand hover:shadow-md"
+    class="mb-3 cursor-grab rounded-2xl border border-n-weak bg-n-solid-2 p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-n-brand hover:shadow-md"
     @click="openDeal"
   >
     <span
       class="mb-2 inline-block rounded bg-n-teal-3 px-1.5 text-xs text-n-teal-11"
       >{{ t('CRM.FUNNEL.DEAL_TYPE') }}</span
     >
+    <p v-if="deal.pipeline_name" class="mb-1 text-xs text-n-slate-11">
+      {{ deal.pipeline_name }}
+    </p>
+    <p
+      v-if="deal.status === 'open' && deal.source_stage_name"
+      class="mb-1 text-xs text-n-slate-11"
+    >
+      {{ t('CRM.FUNNEL.SOURCE_STAGE', { name: deal.source_stage_name }) }}
+    </p>
     <div class="flex justify-between items-start mb-1">
       <h4
         class="font-semibold text-sm text-n-slate-12 line-clamp-2 leading-tight"

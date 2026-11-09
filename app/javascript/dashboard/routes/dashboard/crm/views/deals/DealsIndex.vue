@@ -503,18 +503,18 @@ onMounted(async () => {
     :class="
       props.creationOnly
         ? 'contents'
-        : 'flex h-full flex-col bg-n-surface-1 p-6'
+        : 'flex h-full flex-col bg-n-surface-1 p-3 sm:p-4'
     "
   >
     <template v-if="!props.creationOnly">
-      <div class="mb-6 flex items-center justify-between gap-3">
+      <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div class="flex items-center gap-3">
           <span
-            class="flex size-11 items-center justify-center rounded-2xl bg-n-blue-3 text-n-blue-11"
+            class="flex size-8 items-center justify-center rounded-2xl bg-n-blue-3 text-n-blue-11"
             ><i class="i-lucide-handshake size-5"
           /></span>
           <div>
-            <h2 class="text-2xl font-bold text-n-slate-12">Negócios</h2>
+            <h2 class="text-lg font-bold text-n-slate-12">Negócios</h2>
             <p class="text-sm text-n-slate-9">
               Oportunidades comerciais em andamento
             </p>

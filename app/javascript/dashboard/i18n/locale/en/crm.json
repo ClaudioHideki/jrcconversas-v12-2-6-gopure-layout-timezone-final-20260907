@@ -109,9 +109,12 @@
       "OPEN_VALUE": "em negócios abertos",
       "SENT_BADGE": "Propostas enviadas: {count}",
       "DEAL_STAGES_TITLE": "Etapas comerciais",
-      "DEAL_STAGES_HELP": "Leads qualificados e documentos enviados aparecem identificados. Valores e totais financeiros consideram apenas os negócios, sem duplicar propostas.",
-      "BOARD_HELP": "Leads acima; negócios nas etapas abaixo. O primeiro envio de proposta avança o negócio aberto.",
-      "SUMMARY_LINK": "Ver Visão Geral"
+      "DEAL_STAGES_HELP": "Negociação reúne os negócios abertos. Leads e propostas são identificados e não duplicam os valores dos negócios.",
+      "BOARD_HELP": "Negociação reúne todos os negócios abertos. A etapa cadastrada e o funil aparecem no cartão; os dados salvos não são reclassificados.",
+      "SUMMARY_LINK": "Ver Visão Geral",
+      "NEGOTIATION": "Negociação",
+      "SOURCE_STAGE": "Etapa cadastrada: {name}",
+      "TARGET_PIPELINE_MISSING": "Este funil não possui uma etapa de destino compatível. Abra o negócio para alterar sua etapa."
     },
     "SIDEBAR": "CRM",
     "TITLE": "CRM",
@@ -735,6 +738,7 @@
       "RESULT_RETAINED": "Pedidos preservados, aguardando revisão de cancelamento:",
       "RESULT_REQUESTS": "Revisões no Backoffice:",
       "ERROR": "Não foi possível concluir. Confira o resultado e gere uma nova prévia antes de tentar novamente."
-    }
+    },
+    "DETAILS": "Detalhes"
   }
 }

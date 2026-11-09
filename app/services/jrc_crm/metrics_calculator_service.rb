@@ -147,6 +147,9 @@ module JrcCrm
       pipelines = pipelines.where(id: @pipeline_id) if @pipeline_id.present?
       counts = base_deals.group(:stage_id).count
       values = base_deals.group(:stage_id).sum(:value_cents)
+      open = base_deals.where(status: 'open')
+      open_counts = open.group(:stage_id).count
+      open_values = open.group(:stage_id).sum(:value_cents)
       maximum = [counts.values.max.to_i, 1].max
       @account.jrc_crm_stages.where(pipeline_id: pipelines.select(:id)).active.includes(:pipeline)
               .joins(:pipeline)
@@ -160,6 +163,8 @@ module JrcCrm
           pipeline_id: stage.pipeline_id,
           pipeline_name: stage.pipeline.name,
           deals_count: counts[stage.id].to_i,
+          open_deals_count: open_counts[stage.id].to_i,
+          open_value_cents: open_values[stage.id].to_i,
           value_cents: values[stage.id].to_i,
           percentage: ((counts[stage.id].to_f / maximum) * 100).round
         }

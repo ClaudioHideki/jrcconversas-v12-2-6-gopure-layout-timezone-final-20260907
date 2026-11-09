@@ -76,6 +76,18 @@ RSpec.describe 'Commercial funnel records match the summary without changing dea
     expect(response.parsed_body.fetch('sent_proposals').first['pipeline_id']).to be_nil
   end
 
+  it 'provides open aggregates independently of stored stage order while retaining closed values' do
+    won = create(:jrc_crm_won_stage, account: account, pipeline: pipeline)
+    closed = create(:jrc_crm_deal, account: account, pipeline: pipeline, stage: won, owner: agent, value_cents: 40_000)
+    original = [deal, closed].map { |row| row.slice(:id, :stage_id, :status, :value_cents) }
+    get "#{base}/dashboard", params: { period: 'all' }, headers: admin.create_new_auth_token
+    rows = response.parsed_body.fetch('funnel_stages')
+    expect(rows.find { |row| row['id'] == stage.id }).to include('open_deals_count' => 1, 'open_value_cents' => 12_345)
+    expect(rows.find { |row| row['id'] == won.id }).to include('deals_count' => 1, 'value_cents' => 40_000,
+                                                           'open_deals_count' => 0, 'open_value_cents' => 0)
+    expect([deal, closed].map { |row| row.reload.slice(:id, :stage_id, :status, :value_cents) }).to eq(original)
+  end
+
   it 'does not expose records when CRM access is disabled' do
     account.disable_features!('jrc_crm')
     get "#{base}/funnel_records", params: { period: 'all' }, headers: admin.create_new_auth_token

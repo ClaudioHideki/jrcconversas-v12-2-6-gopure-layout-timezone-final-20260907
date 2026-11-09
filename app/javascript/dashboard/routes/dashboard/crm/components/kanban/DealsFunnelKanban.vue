@@ -5,7 +5,10 @@ import { useStore } from 'vuex';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import { useAdmin } from 'dashboard/composables/useAdmin';
-import { projectFunnelStages } from '../../helpers/funnelStages';
+import {
+  projectCommercialBoard,
+  resolveBoardTarget,
+} from '../../helpers/funnelStages';
 import {
   commercialFilterQuery,
   commercialFiltersFromQuery,
@@ -66,16 +69,21 @@ const funnelRecords = computed(
   () => store.getters['jrcCrm/deals/funnelRecords']
 );
 const columns = computed(() =>
-  projectFunnelStages(
+  projectCommercialBoard(
     (store.getters['jrcCrm/deals/dealsByStage'] || []).map(
       ({ stage, deals }) => ({
         ...stage,
         deals,
         deals_count: deals.length,
+        value_cents: deals.reduce(
+          (sum, deal) => sum + Number(deal.value_cents || 0),
+          0
+        ),
       })
     ),
     funnelRecords.value,
     {
+      negotiation: t('CRM.FUNNEL.NEGOTIATION'),
       qualification: t('CRM.FUNNEL.QUALIFICATION'),
       proposal_sent: t('CRM.FUNNEL.PROPOSAL_SENT'),
     }
@@ -155,9 +163,20 @@ const confirmLostMove = async () => {
 // Drag and drop
 const { onDragStart, onDragOver, onDrop, onDragEnd } = useDragAndDrop({
   onMove: async ({ dealId, fromStageId, toStageId }) => {
-    const targetStage = columns.value.find(
-      column => Number(column.stage.id) === Number(toStageId)
+    const column = columns.value.find(
+      row => String(row.stage.id) === String(toStageId)
     )?.stage;
+    const deal = store.getters['jrcCrm/deals/allDeals'].find(
+      row => row.id === dealId
+    );
+    const stages = store.state.jrcCrm.deals.kanbanColumns;
+    const targetStage =
+      column && deal && resolveBoardTarget(column, deal, stages);
+    if (!targetStage) {
+      actionError.value = t('CRM.FUNNEL.TARGET_PIPELINE_MISSING');
+      return;
+    }
+    if (String(targetStage.id) === String(fromStageId)) return;
     if (targetStage?.is_lost) {
       try {
         const { data } = await lostReasonsAPI.list();
@@ -169,11 +188,11 @@ const { onDragStart, onDragOver, onDrop, onDragEnd } = useDragAndDrop({
       pendingLostMove.value = {
         dealId,
         fromStageId,
-        toStageId,
+        toStageId: targetStage.id,
       };
       return;
     }
-    await performMove({ dealId, fromStageId, toStageId });
+    await performMove({ dealId, fromStageId, toStageId: targetStage.id });
   },
 });
 </script>

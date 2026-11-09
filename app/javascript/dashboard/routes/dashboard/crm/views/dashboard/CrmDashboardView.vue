@@ -10,7 +10,7 @@ import CommercialMetricFilters from '../../components/shared/CommercialMetricFil
 import { useStore } from 'vuex';
 import CommercialSummaryCards from '../../components/shared/CommercialSummaryCards.vue';
 import { useCrmMetrics } from '../../composables/useCrmMetrics';
-import { projectFunnelStages } from '../../helpers/funnelStages';
+import { projectCommercialBoard } from '../../helpers/funnelStages';
 
 const store = useStore();
 const route = useRoute();
@@ -24,10 +24,14 @@ const { formatBRL } = useCrmMetrics();
 const metrics = computed(() => store.getters['jrcCrm/dashboard/metrics'] || {});
 const isLoading = computed(() => store.getters['jrcCrm/dashboard/isLoading']);
 const stages = computed(() =>
-  projectFunnelStages(
+  projectCommercialBoard(
     metrics.value.funnel_stages || [],
     metrics.value.funnel_records,
-    { qualification: 'Qualificação', proposal_sent: 'Proposta Enviada' }
+    {
+      qualification: 'Qualificação',
+      negotiation: 'Negociação',
+      proposal_sent: 'Proposta Enviada',
+    }
   )
 );
 const pipelineValue = computed(() =>
@@ -70,54 +74,30 @@ const loadMetrics = filters => {
 
 <template>
   <div
-    class="h-full overflow-y-auto bg-gradient-to-br from-n-blue-2 via-n-background to-n-violet-2 p-4 sm:p-6"
+    class="h-full overflow-y-auto bg-gradient-to-br from-n-blue-2 via-n-background to-n-violet-2 p-3 sm:p-4"
   >
-    <div class="mx-auto max-w-[1720px] space-y-5">
+    <div class="mx-auto max-w-[1720px] space-y-3">
       <CommercialMetricFilters
         :initial-filters="activeFilters"
         @change="loadMetrics"
       />
-      <section
-        class="flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-white/70 bg-n-solid-2/80 p-5 shadow-sm backdrop-blur"
-      >
-        <div>
-          <div class="mb-2 flex items-center gap-2">
-            <span
-              class="grid size-9 place-content-center rounded-xl bg-[#087cf0] text-white shadow-[0_8px_20px_rgba(8,124,240,.20)]"
-            >
-              <i class="i-lucide-chart-no-axes-combined size-5" />
-            </span>
-            <div>
-              <h2 class="text-2xl font-bold text-n-slate-12">
-                Central de vendas
-              </h2>
-              <p class="text-sm text-n-slate-11">
-                Acompanhe o desempenho comercial e avance nas oportunidades.
-              </p>
-            </div>
-          </div>
-          <span
-            class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"
-          >
-            <i class="i-lucide-database size-3.5" /> Dados reais do CRM
-          </span>
-        </div>
-
+      <header class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-lg font-bold text-n-slate-12">Central de vendas</h2>
         <div class="flex flex-wrap gap-2">
           <RouterLink
             :to="{ name: 'crm_wallet' }"
-            class="rounded-xl bg-[#17345f] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_18px_rgba(23,52,95,.20)]"
+            class="rounded-lg border border-n-weak bg-n-solid-2 px-3 py-2 text-sm font-semibold text-n-slate-12"
           >
             <i class="i-lucide-briefcase-business mr-1 size-4" /> Minha carteira
           </RouterLink>
           <RouterLink
             :to="funnelLink"
-            class="rounded-xl bg-[#087cf0] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(8,124,240,.24)]"
+            class="rounded-lg bg-n-brand px-3 py-2 text-sm font-semibold text-white"
           >
             <i class="i-lucide-filter mr-1 size-4" /> Abrir funil
           </RouterLink>
         </div>
-      </section>
+      </header>
 
       <div
         v-if="isLoading"
@@ -132,22 +112,22 @@ const loadMetrics = filters => {
       <template v-else>
         <CommercialSummaryCards :summary="metrics.commercial_summary" />
 
-        <section class="grid gap-5 xl:grid-cols-[1.12fr_.88fr]">
+        <section class="grid gap-3 xl:grid-cols-[1.12fr_.88fr]">
           <article
-            class="rounded-2xl border border-n-weak bg-n-solid-2 p-5 shadow-sm"
+            class="rounded-2xl border border-n-weak bg-n-solid-2 p-3 shadow-sm"
           >
             <div class="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h3 class="text-lg font-bold text-n-slate-12">
                   {{ $t('CRM.FUNNEL.DEAL_STAGES_TITLE') }}
                 </h3>
-                <p class="mt-1 text-xs text-n-slate-11">
+                <p class="sr-only">
                   {{ $t('CRM.FUNNEL.DEAL_STAGES_HELP') }}
                 </p>
               </div>
               <RouterLink
                 :to="funnelLink"
-                class="text-sm font-semibold text-[#087cf0]"
+                class="shrink-0 whitespace-nowrap text-sm font-semibold text-[#087cf0]"
               >
                 Ver Kanban →
               </RouterLink>
@@ -157,9 +137,9 @@ const loadMetrics = filters => {
               <div
                 v-for="(stage, index) in stages"
                 :key="stage.id"
-                class="grid grid-cols-[minmax(170px,1fr)_72px_130px] items-center gap-3 rounded-xl border border-n-weak bg-n-slate-2 p-3"
+                class="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_72px_130px] items-center gap-3 rounded-xl border border-n-weak bg-n-slate-2 p-3"
               >
-                <div class="min-w-0">
+                <div class="col-span-2 min-w-0 sm:col-span-1">
                   <div class="mb-1.5 flex items-center gap-2">
                     <span
                       class="grid size-7 place-content-center rounded-lg bg-gradient-to-br text-white"
@@ -230,7 +210,7 @@ const loadMetrics = filters => {
           </article>
 
           <article
-            class="rounded-2xl border border-n-weak bg-n-solid-2 p-5 shadow-sm"
+            class="rounded-2xl border border-n-weak bg-n-solid-2 p-3 shadow-sm"
           >
             <div class="flex items-start justify-between gap-3">
               <div>
@@ -330,9 +310,9 @@ const loadMetrics = filters => {
           </article>
         </section>
 
-        <section class="grid gap-5 xl:grid-cols-[1fr_.8fr]">
+        <section class="grid gap-3 xl:grid-cols-[1fr_.8fr]">
           <article
-            class="rounded-2xl border border-n-weak bg-n-solid-2 p-5 shadow-sm"
+            class="rounded-2xl border border-n-weak bg-n-solid-2 p-3 shadow-sm"
           >
             <div class="flex items-center justify-between gap-3">
               <div>
@@ -376,7 +356,7 @@ const loadMetrics = filters => {
           </article>
 
           <article
-            class="rounded-2xl border border-n-weak bg-n-solid-2 p-5 shadow-sm"
+            class="rounded-2xl border border-n-weak bg-n-solid-2 p-3 shadow-sm"
           >
             <h3 class="font-bold text-n-slate-12">Ações rápidas</h3>
             <p class="mt-1 text-xs text-n-slate-11">

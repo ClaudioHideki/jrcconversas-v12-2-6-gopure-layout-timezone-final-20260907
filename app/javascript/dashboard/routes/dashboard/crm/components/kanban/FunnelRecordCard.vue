@@ -49,6 +49,9 @@ const status = computed(
         status
       }}</span>
     </div>
+    <p v-if="record.pipeline_name" class="mb-1 text-xs text-n-slate-11">
+      {{ record.pipeline_name }}
+    </p>
     <strong class="block break-words text-sm">{{
       record.name || record.title
     }}</strong>

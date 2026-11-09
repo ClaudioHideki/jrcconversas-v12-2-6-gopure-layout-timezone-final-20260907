@@ -7,6 +7,7 @@ import { useStore } from 'vuex';
 import { pipelinesAPI, reportsAPI } from 'dashboard/api/crm';
 import { useAlert } from 'dashboard/composables';
 import { useAdmin } from 'dashboard/composables/useAdmin';
+import { projectCommercialBoard } from '../../helpers/funnelStages';
 import CommercialSummaryCards from '../../components/shared/CommercialSummaryCards.vue';
 import { useCrmMetrics } from '../../composables/useCrmMetrics';
 
@@ -20,6 +21,14 @@ const period = ref('all');
 const ownerId = ref('');
 const pipelineId = ref('');
 const pipelines = ref([]);
+const activeFilterCount = computed(
+  () =>
+    [
+      isAdmin.value && ownerId.value,
+      pipelineId.value,
+      period.value !== 'all',
+    ].filter(Boolean).length
+);
 const agents = computed(() => store.getters['agents/getAgents'] || []);
 const report = ref({
   summary: {},
@@ -84,13 +93,19 @@ const sourceGradient = computed(() => {
   return `conic-gradient(${stops.join(',')})`;
 });
 
-const maxFunnelCount = computed(() =>
-  Math.max(
-    ...(report.value.summary.funnel_stages || []).map(item =>
-      Number(item.deals_count || 0)
-    ),
-    1
+const stages = computed(() =>
+  projectCommercialBoard(
+    report.value.summary.funnel_stages || [],
+    report.value.summary.funnel_records,
+    {
+      qualification: t('CRM.FUNNEL.QUALIFICATION'),
+      negotiation: t('CRM.FUNNEL.NEGOTIATION'),
+      proposal_sent: t('CRM.FUNNEL.PROPOSAL_SENT'),
+    }
   )
+);
+const maxFunnelCount = computed(() =>
+  Math.max(...stages.value.map(stage => stage.records_count), 1)
 );
 const maxOwnerRevenue = computed(() =>
   Math.max(
@@ -102,7 +117,7 @@ const maxOwnerRevenue = computed(() =>
 );
 
 const funnelWidth = stage =>
-  `${Math.max(12, (Number(stage.deals_count || 0) / maxFunnelCount.value) * 100)}%`;
+  `${Math.max(12, (Number(stage.records_count || 0) / maxFunnelCount.value) * 100)}%`;
 
 const sourceLabel = value =>
   String(value || 'Não informado')
@@ -183,11 +198,11 @@ onMounted(async () => {
 
 <template>
   <div
-    class="h-full overflow-y-auto bg-gradient-to-br from-n-blue-2 via-n-background to-n-violet-2 p-4 sm:p-6"
+    class="h-full overflow-y-auto bg-gradient-to-br from-n-blue-2 via-n-background to-n-violet-2 p-3 sm:p-4"
   >
-    <div class="mx-auto max-w-[1720px] space-y-5">
+    <div class="mx-auto max-w-[1720px] space-y-3">
       <header
-        class="rounded-2xl border border-n-weak bg-n-solid-2/85 p-5 shadow-sm backdrop-blur"
+        class="rounded-2xl border border-n-weak bg-n-solid-2/85 p-3 shadow-sm backdrop-blur"
       >
         <div class="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -197,7 +212,7 @@ onMounted(async () => {
                 ><i class="i-lucide-chart-no-axes-combined size-5"
               /></span>
               <div>
-                <h2 class="text-2xl font-bold text-n-slate-12">
+                <h2 class="text-lg font-bold text-n-slate-12">
                   Indicadores do CRM
                 </h2>
                 <p class="text-sm text-n-slate-11">
@@ -216,85 +231,104 @@ onMounted(async () => {
           </button>
         </div>
 
-        <div
-          class="mt-5 flex flex-wrap items-end gap-3 rounded-xl border border-n-weak bg-n-slate-2 p-3"
-        >
-          <label
-            v-if="isAdmin"
-            class="min-w-48 flex-1 text-[11px] font-semibold uppercase tracking-wide text-n-slate-11"
+        <details class="mt-2">
+          <summary
+            class="cursor-pointer py-1 text-sm font-semibold text-n-slate-12"
           >
-            Responsável
-            <select
-              v-model="ownerId"
-              class="mt-1 h-10 w-full rounded-xl border border-n-weak bg-n-solid-2 px-3 text-sm font-medium normal-case text-n-slate-12"
-              @change="load"
-            >
-              <option value="">Todos os responsáveis</option>
-              <option v-for="agent in agents" :key="agent.id" :value="agent.id">
-                {{ agent.name }}
-              </option>
-            </select>
-          </label>
-
-          <label
-            class="min-w-48 flex-1 text-[11px] font-semibold uppercase tracking-wide text-n-slate-11"
-          >
-            Funil
-            <select
-              v-model="pipelineId"
-              class="mt-1 h-10 w-full rounded-xl border border-n-weak bg-n-solid-2 px-3 text-sm font-medium normal-case text-n-slate-12"
-              @change="load"
-            >
-              <option value="">Todos os funis</option>
-              <option
-                v-for="pipeline in pipelines"
-                :key="pipeline.id"
-                :value="pipeline.id"
-              >
-                {{ pipeline.name }}
-              </option>
-            </select>
-          </label>
-
-          <div class="min-w-72 flex-1">
+            {{ $t('CRM.METRICS.FILTERS') }}
             <span
-              class="text-[11px] font-semibold uppercase tracking-wide text-n-slate-11"
-              >Período</span
+              v-if="activeFilterCount"
+              class="ml-1 rounded bg-n-blue-3 px-1 text-xs text-n-blue-11"
+              :aria-label="
+                $t('CRM.FUNNEL.ACTIVE_FILTERS', { count: activeFilterCount })
+              "
+              >{{ activeFilterCount }}</span
             >
-            <div
-              class="mt-1 flex h-10 rounded-xl border border-n-weak bg-n-solid-2 p-1"
+          </summary>
+          <div
+            class="mt-2 flex flex-wrap items-end gap-2 rounded-xl border border-n-weak bg-n-slate-2 p-3"
+          >
+            <label
+              v-if="isAdmin"
+              class="min-w-48 flex-1 text-[11px] font-semibold uppercase tracking-wide text-n-slate-11"
             >
-              <button
-                v-for="option in ['all', '30', '90', 'year']"
-                :key="option"
-                type="button"
-                class="flex-1 rounded-lg px-3 text-xs font-semibold transition"
-                :class="
-                  period === option
-                    ? 'bg-[#087cf0] text-white shadow-sm'
-                    : 'text-n-slate-11 hover:bg-n-slate-2'
-                "
-                @click="
-                  period = option;
-                  load();
-                "
+              Responsável
+              <select
+                v-model="ownerId"
+                class="!mb-0 mt-1 h-10 w-full rounded-xl border border-n-weak bg-n-solid-2 px-3 text-sm font-medium normal-case text-n-slate-12"
+                @change="load"
               >
-                {{
-                  option === 'all'
-                    ? $t('CRM.METRICS.ALL_TIME')
-                    : option === '30'
-                      ? 'Últimos 30 dias'
-                      : option === '90'
-                        ? 'Últimos 90 dias'
-                        : 'Este ano'
-                }}
-              </button>
+                <option value="">Todos os responsáveis</option>
+                <option
+                  v-for="agent in agents"
+                  :key="agent.id"
+                  :value="agent.id"
+                >
+                  {{ agent.name }}
+                </option>
+              </select>
+            </label>
+
+            <label
+              class="min-w-48 flex-1 text-[11px] font-semibold uppercase tracking-wide text-n-slate-11"
+            >
+              Funil
+              <select
+                v-model="pipelineId"
+                class="!mb-0 mt-1 h-10 w-full rounded-xl border border-n-weak bg-n-solid-2 px-3 text-sm font-medium normal-case text-n-slate-12"
+                @change="load"
+              >
+                <option value="">Todos os funis</option>
+                <option
+                  v-for="pipeline in pipelines"
+                  :key="pipeline.id"
+                  :value="pipeline.id"
+                >
+                  {{ pipeline.name }}
+                </option>
+              </select>
+            </label>
+
+            <div class="min-w-72 flex-1">
+              <span
+                class="text-[11px] font-semibold uppercase tracking-wide text-n-slate-11"
+                >Período</span
+              >
+              <div
+                class="mt-1 flex h-10 rounded-xl border border-n-weak bg-n-solid-2 p-1"
+              >
+                <button
+                  v-for="option in ['all', '30', '90', 'year']"
+                  :key="option"
+                  type="button"
+                  class="min-w-0 flex-1 rounded-lg px-2 text-xs font-semibold leading-tight transition"
+                  :class="
+                    period === option
+                      ? 'bg-[#087cf0] text-white shadow-sm'
+                      : 'text-n-slate-11 hover:bg-n-slate-2'
+                  "
+                  @click="
+                    period = option;
+                    load();
+                  "
+                >
+                  {{
+                    option === 'all'
+                      ? $t('CRM.METRICS.ALL_TIME')
+                      : option === '30'
+                        ? 'Últimos 30 dias'
+                        : option === '90'
+                          ? 'Últimos 90 dias'
+                          : 'Este ano'
+                  }}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-        <p class="mt-3 text-xs text-n-slate-11">
-          {{ $t('CRM.METRICS.SCOPE_HELP') }}
-        </p>
+          <p class="mb-0 mt-2 text-xs text-n-slate-11">
+            {{ $t('CRM.METRICS.SCOPE_HELP') }}
+          </p>
+        </details>
       </header>
 
       <div
@@ -308,15 +342,15 @@ onMounted(async () => {
       <template v-else>
         <CommercialSummaryCards :summary="report.summary.commercial_summary" />
 
-        <section class="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
+        <section class="grid gap-3 xl:grid-cols-[1.1fr_.9fr]">
           <article
-            class="rounded-2xl border border-n-weak bg-n-solid-2 p-5 shadow-sm"
+            class="rounded-2xl border border-n-weak bg-n-solid-2 p-3 shadow-sm"
           >
             <div class="flex items-center justify-between gap-3">
               <div>
                 <h3 class="font-bold text-n-slate-12">Distribuição do funil</h3>
-                <p class="mt-1 text-xs text-n-slate-11">
-                  Negócios e valores por etapa.
+                <p class="sr-only">
+                  {{ $t('CRM.FUNNEL.DEAL_STAGES_HELP') }}
                 </p>
               </div>
               <RouterLink
@@ -327,16 +361,13 @@ onMounted(async () => {
               </RouterLink>
             </div>
 
-            <div
-              v-if="report.summary.funnel_stages?.length"
-              class="mt-5 space-y-3"
-            >
+            <div v-if="stages.length" class="mt-5 space-y-3">
               <div
-                v-for="(stage, index) in report.summary.funnel_stages"
+                v-for="(stage, index) in stages"
                 :key="stage.id"
-                class="grid grid-cols-[minmax(150px,1fr)_88px_135px] items-center gap-3 text-sm"
+                class="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_88px_135px] items-center gap-3 text-sm"
               >
-                <div class="min-w-0">
+                <div class="col-span-2 min-w-0 sm:col-span-1">
                   <div class="mb-1.5 flex items-center justify-between gap-2">
                     <span class="truncate font-semibold text-n-slate-12">{{
                       stage.name
@@ -350,9 +381,27 @@ onMounted(async () => {
                     />
                   </div>
                 </div>
-                <strong class="text-right text-n-slate-12">{{
-                  stage.deals_count
-                }}</strong>
+                <div class="text-right text-n-slate-12">
+                  <strong>{{ stage.records_count }}</strong>
+                  <p
+                    v-if="stage.leads_count"
+                    class="mt-1 text-xs text-n-slate-11"
+                  >
+                    {{
+                      $t('CRM.FUNNEL.LEADS_COUNT', { count: stage.leads_count })
+                    }}
+                  </p>
+                  <p
+                    v-if="stage.proposals_count"
+                    class="mt-1 text-xs text-n-slate-11"
+                  >
+                    {{
+                      $t('CRM.FUNNEL.PROPOSALS_COUNT', {
+                        count: stage.proposals_count,
+                      })
+                    }}
+                  </p>
+                </div>
                 <strong class="text-right text-n-slate-12">{{
                   formatBRL(stage.value_cents || 0)
                 }}</strong>
@@ -364,7 +413,7 @@ onMounted(async () => {
           </article>
 
           <article
-            class="rounded-2xl border border-n-weak bg-n-solid-2 p-5 shadow-sm"
+            class="rounded-2xl border border-n-weak bg-n-solid-2 p-3 shadow-sm"
           >
             <div>
               <h3 class="font-bold text-n-slate-12">Origem dos leads</h3>
@@ -422,9 +471,9 @@ onMounted(async () => {
           </article>
         </section>
 
-        <section class="grid gap-5 xl:grid-cols-3">
+        <section class="grid gap-3 xl:grid-cols-3">
           <article
-            class="rounded-2xl border border-n-weak bg-n-solid-2 p-5 shadow-sm"
+            class="rounded-2xl border border-n-weak bg-n-solid-2 p-3 shadow-sm"
           >
             <h3 class="font-bold text-n-slate-12">Ciclo dos leads</h3>
             <div
@@ -453,7 +502,7 @@ onMounted(async () => {
           </article>
 
           <article
-            class="rounded-2xl border border-n-weak bg-n-solid-2 p-5 shadow-sm"
+            class="rounded-2xl border border-n-weak bg-n-solid-2 p-3 shadow-sm"
           >
             <h3 class="font-bold text-n-slate-12">Produtividade</h3>
             <div class="mt-4 grid grid-cols-3 gap-3 text-center">
@@ -491,7 +540,7 @@ onMounted(async () => {
           </article>
 
           <article
-            class="rounded-2xl border border-n-weak bg-n-solid-2 p-5 shadow-sm"
+            class="rounded-2xl border border-n-weak bg-n-solid-2 p-3 shadow-sm"
           >
             <h3 class="font-bold text-n-slate-12">Resultados dos negócios</h3>
             <div v-if="report.deals_by_status.length" class="mt-4 space-y-2">
@@ -512,9 +561,9 @@ onMounted(async () => {
           </article>
         </section>
 
-        <section class="grid gap-5 xl:grid-cols-[1.3fr_.7fr]">
+        <section class="grid gap-3 xl:grid-cols-[1.3fr_.7fr]">
           <article
-            class="rounded-2xl border border-n-weak bg-n-solid-2 p-5 shadow-sm"
+            class="rounded-2xl border border-n-weak bg-n-solid-2 p-3 shadow-sm"
           >
             <div class="flex items-center justify-between gap-3">
               <div>
@@ -563,7 +612,7 @@ onMounted(async () => {
           </article>
 
           <article
-            class="rounded-2xl border border-n-weak bg-n-solid-2 p-5 shadow-sm"
+            class="rounded-2xl border border-n-weak bg-n-solid-2 p-3 shadow-sm"
           >
             <h3 class="font-bold text-n-slate-12">Propostas</h3>
             <div

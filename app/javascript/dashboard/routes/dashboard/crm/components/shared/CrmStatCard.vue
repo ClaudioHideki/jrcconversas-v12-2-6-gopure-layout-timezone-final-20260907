@@ -42,7 +42,7 @@ const toneClasses = {
 
 <template>
   <article
-    class="relative overflow-hidden rounded-2xl border border-n-weak bg-n-solid-2 p-4 shadow-sm"
+    class="relative overflow-hidden rounded-2xl border border-n-weak bg-n-solid-2 p-3 shadow-sm"
   >
     <span
       class="absolute inset-x-0 top-0 h-1"
@@ -52,7 +52,7 @@ const toneClasses = {
       <div class="min-w-0">
         <p class="text-sm font-semibold text-n-slate-11">{{ label }}</p>
         <p
-          class="mt-2 truncate text-2xl font-bold tabular-nums"
+          class="mt-1 break-words text-lg font-bold tabular-nums"
           :class="toneClasses[tone].icon.split(' ')[1]"
         >
           {{ value }}
@@ -62,10 +62,10 @@ const toneClasses = {
         </p>
       </div>
       <span
-        class="flex size-10 shrink-0 items-center justify-center rounded-2xl"
+        class="flex size-8 shrink-0 items-center justify-center rounded-2xl"
         :class="toneClasses[tone].icon"
       >
-        <i class="size-5" :class="icon" />
+        <i class="size-4" :class="icon" />
       </span>
     </div>
   </article>
