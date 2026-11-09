@@ -31,17 +31,15 @@ RSpec.describe 'Commercial funnel records match the summary without changing dea
     expect(response).to have_http_status(:ok)
     records = response.parsed_body
     expect(records.fetch('qualified_leads').length).to eq(4)
-    expect(records.fetch('sent_proposals').map { |row| row.fetch('id') }).to contain_exactly(sent.id, accepted.id, canceled.id)
-    expect(records.fetch('sent_proposals').map { |row| row.fetch('status') }).to match_array(%w[sent accepted canceled])
-    expect(records.fetch('sent_proposals').map { |row| row.fetch('pipeline_id') }.uniq).to eq([pipeline.id])
+    expect(records.fetch('sent_proposals').map { |row| row.values_at('id', 'status', 'pipeline_id') }).to contain_exactly(
+      [sent.id, 'sent', pipeline.id], [accepted.id, 'accepted', pipeline.id], [canceled.id, 'canceled', pipeline.id]
+    )
     expect(records.to_json).not_to include('public_token', 'accepted_by_document', 'accepted_from_ip')
 
     get "#{base}/dashboard", params: { period: 'all' }, headers: admin.create_new_auth_token
     metrics = response.parsed_body
-    expect(metrics.fetch('funnel_records')).to eq(records)
-    expect(metrics.dig('commercial_summary', 'leads', 'qualified')).to eq(4)
-    expect(metrics.dig('commercial_summary', 'proposals_sent_count')).to eq(3)
-    expect(metrics.fetch('pipeline_value_cents')).to eq(12_345)
+    expect([metrics.fetch('funnel_records'), metrics.dig('commercial_summary', 'leads', 'qualified'),
+            metrics.dig('commercial_summary', 'proposals_sent_count'), metrics.fetch('pipeline_value_cents')]).to eq([records, 4, 3, 12_345])
     expect([deal, won_deal, lost_deal].map { |row| row.reload.slice(:id, :stage_id, :status, :value_cents) }).to eq(before_stages)
     expect(JrcCrm::AuditEvent.count).to eq(before_events)
   end

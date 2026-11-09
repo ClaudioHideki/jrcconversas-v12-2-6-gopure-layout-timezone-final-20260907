@@ -12,6 +12,12 @@ module JrcCrm
     end
 
     def call
+      metrics.merge(funnel_records: funnel_records)
+    end
+
+    private
+
+    def metrics
       {
         total_leads: count_leads,
         leads_count: count_leads,
@@ -29,14 +35,16 @@ module JrcCrm
         overdue_activities_count: overdue_activities_count,
         stalled_deals_count: stalled_deals_count,
         funnel_stages: funnel_stages,
-        funnel_records: JrcCrm::FunnelRecordsService.new(account: @account, actor: @actor,
-                                                         filters: { owner_id: @owner_id, pipeline_id: @pipeline_id,
-                                                                    start_date: @start_date, end_date: @end_date }).call,
         commercial_summary: commercial_summary
       }
     end
 
-    private
+    def funnel_records
+      JrcCrm::FunnelRecordsService.new(
+        account: @account, actor: @actor,
+        filters: { owner_id: @owner_id, pipeline_id: @pipeline_id, start_date: @start_date, end_date: @end_date }
+      ).call
+    end
 
     def commercial_summary
       leads = metrics_scope(@account.jrc_crm_leads)
