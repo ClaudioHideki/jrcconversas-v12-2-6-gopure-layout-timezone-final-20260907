@@ -5,25 +5,37 @@ import MentionBox from '../mentions/MentionBox.vue';
 export default {
   components: { MentionBox },
   props: {
+    reviewBeforeInsert: { type: Boolean, default: false },
     searchKey: {
       type: String,
       default: '',
     },
   },
-  emits: ['replace'],
+  emits: ['replace', 'review'],
   computed: {
     ...mapGetters({
       cannedMessages: 'getCannedResponses',
+      accountId: 'getCurrentAccountId',
     }),
     items() {
-      return this.cannedMessages.map(cannedMessage => ({
-        label: cannedMessage.short_code,
-        key: cannedMessage.short_code,
-        description: cannedMessage.content,
-      }));
+      return this.cannedMessages
+        .filter(
+          row =>
+            !this.reviewBeforeInsert ||
+            String(row.account_id) === String(this.accountId)
+        )
+        .map(cannedMessage => ({
+          id: cannedMessage.id,
+          label: cannedMessage.short_code,
+          key: cannedMessage.short_code,
+          description: cannedMessage.content,
+        }));
     },
   },
   watch: {
+    accountId() {
+      this.fetchCannedResponses();
+    },
     searchKey() {
       this.fetchCannedResponses();
     },
@@ -36,7 +48,8 @@ export default {
       this.$store.dispatch('getCannedResponse', { searchKey: this.searchKey });
     },
     handleMentionClick(item = {}) {
-      this.$emit('replace', item.description);
+      if (this.reviewBeforeInsert) this.$emit('review', item.id);
+      else this.$emit('replace', item.description);
     },
   },
 };

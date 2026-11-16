@@ -85,6 +85,7 @@ const props = defineProps({
   updateSelectionWith: { type: String, default: '' },
   enableVariables: { type: Boolean, default: false },
   enableCannedResponses: { type: Boolean, default: true },
+  reviewCannedResponses: { type: Boolean, default: false },
   enableCaptainTools: { type: Boolean, default: false },
   variables: { type: Object, default: () => ({}) },
   signature: { type: String, default: '' },
@@ -110,6 +111,7 @@ const emit = defineEmits([
   'input',
   'update:modelValue',
   'executeCopilotAction',
+  'reviewCannedResponse',
 ]);
 
 const { t } = useI18n();
@@ -664,7 +666,11 @@ async function insertNodeIntoEditor(node, from = 0, to = 0) {
   scrollCursorIntoView(editorView);
 }
 
-function insertContentIntoEditor(content, defaultFrom = 0) {
+function insertContentIntoEditor(
+  content,
+  defaultFrom = 0,
+  defaultTo = undefined
+) {
   const from = defaultFrom || editorView.state.selection.from || 0;
   // Use the editor's current schema to ensure compatibility with buildMessageSchema
   const currentSchema = editorView.state.schema;
@@ -675,7 +681,7 @@ function insertContentIntoEditor(content, defaultFrom = 0) {
     sanitizedContent
   );
 
-  insertNodeIntoEditor(node, from, undefined);
+  return insertNodeIntoEditor(node, from, defaultTo);
 }
 
 /**
@@ -709,6 +715,22 @@ function insertSpecialContent(type, content) {
   };
 
   useTrack(event_map[type]);
+}
+
+async function insertReviewedCannedResponse(content) {
+  if (!editorView || props.disabled || props.isPrivate) return false;
+  const { from, to } = editorView.state.selection;
+  await insertContentIntoEditor(content, from, to);
+  useTrack(CONVERSATION_EVENTS.INSERTED_A_CANNED_RESPONSE);
+  return true;
+}
+
+function reviewCannedResponse(id) {
+  if (!editorView || !range.value || props.disabled) return;
+  const { from, to } = range.value;
+  editorView.dispatch(editorView.state.tr.delete(from, to));
+  showCannedMenu.value = false;
+  emit('reviewCannedResponse', id);
 }
 
 function handleLineBreakWhenCmdAndEnterToSendEnabled(event) {
@@ -860,7 +882,7 @@ onMounted(() => {
   }
 });
 
-defineExpose({ focusEditorInputField });
+defineExpose({ focusEditorInputField, insertReviewedCannedResponse });
 
 // BUS Event to insert text or markdown into the editor at the
 // current cursor position.
@@ -885,6 +907,8 @@ useEmitter(BUS_EVENTS.INSERT_INTO_RICH_EDITOR, insertContentIntoEditor);
     <CannedResponse
       v-if="shouldShowCannedResponses"
       :search-key="cannedSearchTerm"
+      :review-before-insert="reviewCannedResponses"
+      @review="reviewCannedResponse"
       @replace="content => insertSpecialContent('cannedResponse', content)"
     />
     <VariableList

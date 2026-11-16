@@ -1,0 +1,66 @@
+{
+  "backend": {
+    "examples": 119,
+    "failures": 0
+  },
+  "frontend": {
+    "files": 13,
+    "tests": 186,
+    "failures": 0
+  },
+  "browser": [
+    {
+      "passed": 9,
+      "checks": [
+        "authorized context and original image preview",
+        "selection never sends",
+        "mobile preview fits viewport",
+        "native editor receives both text and file with direct uploads enabled",
+        "confirmation identifies target, channel, final text and file",
+        "lost acknowledgement preserves the reviewed PDF and exact text",
+        "retry resolves one persisted native message with one attachment",
+        "conversation switch invalidates the preview",
+        "foreign account catalog is denied by the real backend"
+      ],
+      "errors": []
+    },
+    {
+      "passed": 8,
+      "checks": [
+        "desktop native preview renders without horizontal overflow",
+        "background composer is protected during review",
+        "pasting a preview file leaves the background draft untouched",
+        "native dark theme has readable foreground and dark dialog background",
+        "native creation persists text and PDF",
+        "native editing replaces the stored file",
+        "native editing removes the file without losing text",
+        "synthetic model deletion uses the existing backend"
+      ],
+      "errors": []
+    },
+    {
+      "passed": 3,
+      "checks": {
+        "samePreview": true,
+        "noAutomaticSend": true,
+        "backgroundProtected": true
+      },
+      "errors": []
+    },
+    {
+      "passed": 3,
+      "checks": [
+        "legacy Liquid resolves against the real backend and stays insertable",
+        "remaining Liquid expressions cannot enter a second native rendering pass",
+        "manual correction inserts normally without sending"
+      ],
+      "errors": []
+    }
+  ],
+  "database": {
+    "messages": 1,
+    "intents": 1,
+    "attachments": 1,
+    "independent_file_copy": true
+  }
+}

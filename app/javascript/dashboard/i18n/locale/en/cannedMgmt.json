@@ -34,7 +34,7 @@
           "PLACEHOLDER": "Please write the message you want to save as a template to use later.",
           "ERROR": "Message is required."
         },
-        "SUBMIT": "Submit"
+        "SUBMIT": "Save reply"
       },
       "API": {
         "SUCCESS_MESSAGE": "Canned response added successfully.",
@@ -55,7 +55,7 @@
           "PLACEHOLDER": "Please write the message you want to save as a template to use later.",
           "ERROR": "Message is required."
         },
-        "SUBMIT": "Submit"
+        "SUBMIT": "Save reply"
       },
       "BUTTON_TEXT": "Edit",
       "API": {
@@ -75,6 +75,35 @@
         "YES": "Yes, delete ",
         "NO": "No, keep "
       }
+    },
+    "QUICK": {
+      "TITLE": "Quick replies",
+      "ERROR": "Unable to complete. Your content was preserved; check the attachment and try again.",
+      "SEND_ERROR": "Delivery could not be confirmed. Check the history before retrying. The same key prevents duplicate delivery; content was preserved.",
+      "LOADING": "Loading…",
+      "SEARCH": "Search quick replies",
+      "REVIEW": "Review before inserting or sending",
+      "MISSING": "Some variables have no data. Fill the unresolved fields before sending.",
+      "TOO_LONG": "The text exceeds this channel's {limit} character limit. Shorten it before sending.",
+      "CHANNEL": "This channel cannot use this file or requires separate text and media messages. Review in the editor.",
+      "BACK": "Back",
+      "INSERT": "Insert into editor",
+      "SEND": "Send now",
+      "CONFIRM": "Confirm quick reply delivery",
+      "CONFIRM_HELP": "Send the reviewed message and attachment to the selected conversation? Channel rules still apply.",
+      "FILE_HELP": "One attachment per response. Storage and channel file type and size limits apply.",
+      "ATTACH": "Attach image or file",
+      "REMOVE": "Remove attachment",
+      "RECIPIENT": "Recipient",
+      "CHANNEL_LABEL": "Channel",
+      "NO_FILE": "No attachment",
+      "RECIPIENT_VALUE": "{name} {address} · #{id}",
+      "CHANNEL_VALUE": "{name} · {type}",
+      "DOWNLOAD": "Download attachment",
+      "REVIEW_ERROR": "Delivery was refused. No new message was created: check variables, recipient, attachment and channel rules. Select the model again if it changed.",
+      "QUEUED": "Message queued. Check its status in the conversation history.",
+      "INSERTED": "Reply inserted into the editor. Review before sending.",
+      "TEMPLATE_REVIEW": "Template expressions are unresolved. Review or fill them in the preview before inserting into the editor."
     }
   }
 }

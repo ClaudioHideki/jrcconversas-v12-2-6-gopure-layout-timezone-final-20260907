@@ -31,6 +31,7 @@ const render = (props = {}) => {
     attachTo: document.body,
     props: {
       conversationId: 947,
+      portalSlug: '',
       inbox: { channel_type: 'Channel::Api', medium: 'whatsapp' },
       showFileUpload: true,
       showAudioRecorder: true,
@@ -38,7 +39,7 @@ const render = (props = {}) => {
     },
     global: {
       plugins: [store],
-      stubs: { NextButton: Button, VideoCallButton: true },
+      stubs: { NextButton: Button, VideoCallButton: true, 'fluent-icon': true },
     },
   });
   wrappers.push(wrapper);
@@ -152,4 +153,24 @@ it('disables microphone recording with an explanation when the browser cannot re
   const microphone = wrapper.get('[data-icon="i-ph-microphone"]');
   expect(microphone.attributes('disabled')).toBeDefined();
   expect(microphone.attributes('title')).toContain('navegador');
+});
+
+it('opens quick replies beside the existing signature control without sending', async () => {
+  const wrapper = render();
+  const controls = wrapper.findAll('[data-icon]');
+  const quick = controls.findIndex(
+    control => control.attributes('data-icon') === 'i-ph-chat-text'
+  );
+  expect(controls[quick + 1].attributes('data-icon')).toBe('i-ph-signature');
+  await controls[quick].trigger('click');
+  expect(wrapper.emitted('openQuickReplies')).toEqual([[]]);
+});
+
+it('hides quick replies on private notes and disables them when the native editor is unavailable', async () => {
+  const wrapper = render({ isOnPrivateNote: true });
+  expect(wrapper.find('[data-icon="i-ph-chat-text"]').exists()).toBe(false);
+  await wrapper.setProps({ isOnPrivateNote: false, isEditorDisabled: true });
+  expect(
+    wrapper.get('[data-icon="i-ph-chat-text"]').attributes('disabled')
+  ).toBeDefined();
 });

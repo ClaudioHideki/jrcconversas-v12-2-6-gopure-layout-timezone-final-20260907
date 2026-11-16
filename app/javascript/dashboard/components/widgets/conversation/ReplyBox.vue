@@ -7,6 +7,7 @@ import { useTrack } from 'dashboard/composables';
 import keyboardEventListenerMixins from 'shared/mixins/keyboardEventListenerMixins';
 
 import ReplyToMessage from './ReplyToMessage.vue';
+import QuickReplyPicker from './QuickReplyPicker.vue';
 import AttachmentPreview from 'dashboard/components/widgets/AttachmentsPreview.vue';
 import ReplyTopPanel from 'dashboard/components/widgets/WootWriter/ReplyTopPanel.vue';
 import ReplyEmailHead from './ReplyEmailHead.vue';
@@ -74,6 +75,7 @@ export default {
     EmojiIconPicker,
     MessageSignatureMissingAlert,
     ReplyBottomPanel,
+    QuickReplyPicker,
     ReplyEmailHead,
     ReplyToMessage,
     ReplyTopPanel,
@@ -138,6 +140,7 @@ export default {
       showMentions: false,
       showUserMentions: false,
       showCannedMenu: false,
+      isQuickReplyOpen: false,
       showVariablesMenu: false,
       newConversationModalActive: false,
       showArticleSearchPopover: false,
@@ -398,6 +401,14 @@ export default {
         return AUDIO_FORMATS.MP3;
       }
       return AUDIO_FORMATS.WAV;
+    },
+    quickReplyIdentity() {
+      return JSON.stringify([
+        this.currentUser.id,
+        this.$store.getters.getCurrentAccount,
+        this.currentChat.inbox_id,
+        this.currentChat.meta?.sender?.id,
+      ]);
     },
     messageVariables() {
       const variables = getMessageVariables({
@@ -725,6 +736,7 @@ export default {
     },
     isAValidEvent(selectedKey) {
       return (
+        !this.isQuickReplyOpen &&
         !this.showUserMentions &&
         !this.showMentions &&
         !this.showCannedMenu &&
@@ -735,7 +747,7 @@ export default {
     },
     onPaste(e) {
       // Don't handle paste if compose new conversation modal is open
-      if (this.newConversationModalActive) return;
+      if (this.newConversationModalActive || this.isQuickReplyOpen) return;
 
       // Don't handle paste if editor is disabled
       if (this.isEditorDisabled) return;
@@ -974,6 +986,98 @@ export default {
     clearEditorSelection() {
       this.updateEditorSelectionWith = '';
     },
+    canAttachQuickReply(file) {
+      return (
+        this.showFileUpload &&
+        file.byte_size <= this.maxSizeFor(file.content_type) * 1024 * 1024 &&
+        isFileTypeAllowedForChannel(
+          {
+            name: file.filename,
+            type: file.content_type,
+            size: file.byte_size,
+          },
+          {
+            channelType: this.channelType || this.inbox?.channel_type,
+            medium: this.inbox?.medium,
+            conversationType: this.conversationType,
+            isInstagramChannel: this.isAnInstagramChannel,
+            isOnPrivateNote: false,
+          }
+        )
+      );
+    },
+    prepareQuickReply(content) {
+      return this.sendWithSignature && this.messageSignature
+        ? appendSignature(
+            content,
+            this.messageSignature,
+            getEffectiveChannelType(this.channelType, this.inbox?.medium || '')
+          )
+        : content;
+    },
+    openQuickReply(id) {
+      this.$refs.quickReplies?.open(id);
+    },
+    onQuickReplyDelivered(message) {
+      if (
+        message.conversation_id === this.currentChat.id &&
+        !this.isEditorDisabled &&
+        !this.isPrivate
+      ) {
+        this.$store.dispatch('addMessage', message);
+        useAlert(this.$t('CANNED_MGMT.QUICK.QUEUED'));
+      }
+    },
+    quickReplyIsCurrent({ accountId, conversationId, authorityKey }) {
+      return (
+        accountId === this.accountId &&
+        conversationId === this.currentChat.id &&
+        authorityKey === this.quickReplyIdentity &&
+        !this.isEditorDisabled &&
+        !this.isPrivate
+      );
+    },
+    async insertQuickReply({ content, file, ...context }) {
+      if (!this.quickReplyIsCurrent(context) || !this.$refs.messageEditor)
+        throw new Error('Quick reply editor context changed');
+      if (/\{\{|\{%/.test(content))
+        throw new Error('Quick reply template needs manual review');
+      try {
+        if (file) {
+          // The native File stays local until the ordinary message send.
+          const success = await this.onIndirectFileUpload({
+            file,
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            quickReplyContext: context,
+          });
+          if (!success) throw new Error('Quick reply attachment failed');
+        }
+        if (!this.quickReplyIsCurrent(context) || !this.$refs.messageEditor)
+          throw new Error('Quick reply editor context changed');
+        const reviewed = this.sendWithSignature
+          ? removeSignature(
+              content,
+              this.messageSignature,
+              getEffectiveChannelType(
+                this.channelType,
+                this.inbox?.medium || ''
+              )
+            )
+          : content;
+        const inserted =
+          await this.$refs.messageEditor.insertReviewedCannedResponse(reviewed);
+        if (!inserted) throw new Error('Quick reply editor unavailable');
+        useAlert(this.$t('CANNED_MGMT.QUICK.INSERTED'));
+      } catch (error) {
+        if (file)
+          this.attachedFiles = this.attachedFiles.filter(
+            attachment => attachment.resource?.file !== file
+          );
+        throw error;
+      }
+    },
     addIntoEditor(content) {
       this.updateEditorSelectionWith = content;
       this.onFocus();
@@ -1079,20 +1183,42 @@ export default {
       });
     },
     attachFile({ blob, file }) {
-      if (!this.showFileUpload && !this.isOnPrivateNote) return;
+      if (!this.showFileUpload && !this.isOnPrivateNote)
+        return Promise.resolve(false);
 
-      const reader = new FileReader();
-      reader.readAsDataURL(file.file);
-      reader.onloadend = () => {
-        this.attachedFiles.push({
-          currentChatId: this.currentChat.id,
-          resource: blob || file,
-          isPrivate: this.isPrivate,
-          thumb: reader.result,
-          blobSignedId: blob ? blob.signed_id : undefined,
-          isVoiceMessage: file?.isVoiceMessage || false,
-        });
-      };
+      const conversationId =
+        file.quickReplyContext?.conversationId || this.currentChat.id;
+      if (
+        conversationId !== this.currentChat.id ||
+        (file.quickReplyContext &&
+          !this.quickReplyIsCurrent(file.quickReplyContext))
+      )
+        return Promise.resolve(false);
+      return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file.file);
+        reader.onerror = () => resolve(false);
+        reader.onloadend = () => {
+          if (
+            reader.error ||
+            conversationId !== this.currentChat.id ||
+            (file.quickReplyContext &&
+              !this.quickReplyIsCurrent(file.quickReplyContext))
+          ) {
+            resolve(false);
+            return;
+          }
+          this.attachedFiles.push({
+            currentChatId: conversationId,
+            resource: blob || file,
+            isPrivate: this.isPrivate,
+            thumb: reader.result,
+            blobSignedId: blob ? blob.signed_id : undefined,
+            isVoiceMessage: file?.isVoiceMessage || false,
+          });
+          resolve(true);
+        };
+      });
     },
     removeAttachment(attachments) {
       this.attachedFiles = attachments;
@@ -1117,9 +1243,8 @@ export default {
         let caption =
           this.isAnInstagramChannel || this.isATiktokChannel ? '' : message;
         this.attachedFiles.forEach(attachment => {
-          const attachedFile = this.globalConfig.directUploadsEnabled
-            ? attachment.blobSignedId
-            : attachment.resource.file;
+          const attachedFile =
+            attachment.blobSignedId || attachment.resource.file;
           let attachmentPayload = {
             conversationId: this.currentChat.id,
             files: [attachedFile],
@@ -1174,7 +1299,10 @@ export default {
       if (this.attachedFiles && this.attachedFiles.length) {
         messagePayload.files = [];
         this.attachedFiles.forEach(attachment => {
-          if (this.globalConfig.directUploadsEnabled) {
+          if (
+            this.globalConfig.directUploadsEnabled &&
+            attachment.blobSignedId
+          ) {
             messagePayload.files.push(attachment.blobSignedId);
             if (attachment.isVoiceMessage) {
               messagePayload.isVoiceMessage = true;
@@ -1376,6 +1504,7 @@ export default {
           ref="messageEditor"
           v-model="message"
           :conversation-id="conversationId"
+          review-canned-responses
           :editor-id="editorStateId"
           class="input popover-prosemirror-menu"
           :is-private="isOnPrivateNote"
@@ -1394,6 +1523,7 @@ export default {
           @focus="onFocus"
           @blur="onBlur"
           @toggle-user-mention="toggleUserMention"
+          @review-canned-response="openQuickReply"
           @toggle-canned-menu="toggleCannedMenu"
           @toggle-variables-menu="toggleVariablesMenu"
           @clear-selection="clearEditorSelection"
@@ -1475,7 +1605,10 @@ export default {
         :toggle-emoji-picker="toggleEmojiPicker"
         :message="message"
         :portal-slug="connectedPortalSlug"
-        :new-conversation-modal-active="newConversationModalActive"
+        :new-conversation-modal-active="
+          newConversationModalActive || isQuickReplyOpen
+        "
+        @open-quick-replies="$refs.quickReplies.open()"
         @select-whatsapp-template="openWhatsappTemplateModal"
         @select-content-template="openContentTemplateModal"
         @toggle-insert-article="toggleInsertArticle"
@@ -1483,6 +1616,27 @@ export default {
       />
     </Transition>
 
+    <QuickReplyPicker
+      v-if="currentChat.id"
+      ref="quickReplies"
+      :account-id="accountId"
+      :conversation-id="currentChat.id"
+      :authority-key="quickReplyIdentity"
+      :disabled="isEditorDisabled || isPrivate"
+      :can-attach="canAttachQuickReply"
+      :can-insert="!showAudioRecorderEditor && !copilot.isActive.value"
+      :can-send-combined="
+        !isAnInstagramChannel &&
+        !isATiktokChannel &&
+        conversationType !== 'instagram_direct_message'
+      "
+      :max-length="maxLength"
+      :prepare-content="prepareQuickReply"
+      :on-insert="insertQuickReply"
+      :is-context-current="quickReplyIsCurrent"
+      @delivered="onQuickReplyDelivered"
+      @toggle="isQuickReplyOpen = $event"
+    />
     <WhatsappTemplates
       :inbox-id="inbox.id"
       :show="showWhatsAppTemplatesModal"

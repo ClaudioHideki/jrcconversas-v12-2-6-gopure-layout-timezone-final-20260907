@@ -101,6 +101,9 @@ jobs:
           spec/services/whatsapp/send_on_whatsapp_service_spec.rb
           spec/services/whatsapp/providers/whatsapp_cloud_service_spec.rb
           spec/services/whatsapp/providers/whatsapp360_dialog_service_spec.rb
+          spec/controllers/api/v1/accounts/canned_responses_controller_spec.rb
+          spec/requests/api/v1/accounts/canned_replies_workflow_spec.rb
+          spec/services/canned_responses
       - name: Testar janela WhatsApp de 24 horas e templates
         run: |
           ruby scripts/qa/whatsapp24h/services_test.rb
@@ -126,6 +129,10 @@ jobs:
           app/javascript/dashboard/store/crm/specs/funnel.spec.js
           app/javascript/dashboard/routes/dashboard/crm/components/kanban/specs/DealsFunnelKanban.spec.js
           app/javascript/dashboard/routes/dashboard/crm/views/spec/CommercialViews.spec.js
+          --maxWorkers=1 --minWorkers=1
+      - name: Testar respostas rápidas, anexos e recuperação
+        run: >-
+          pnpm exec vitest run --config vitest.quickReplies.config.ts
           --maxWorkers=1 --minWorkers=1
       - name: Testar criação oficial e Cadastro Mestre
         run: >-

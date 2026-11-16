@@ -38,9 +38,12 @@ const actions = {
     { searchKey } = {}
   ) {
     commit(types.default.SET_CANNED_UI_FLAG, { fetchingList: true });
+    const accountId = CannedResponseAPI.accountIdFromRoute;
     try {
       const response = await CannedResponseAPI.get({ searchKey });
-      commit(types.default.SET_CANNED, response.data);
+      if (accountId === CannedResponseAPI.accountIdFromRoute) {
+        commit(types.default.SET_CANNED, response.data);
+      }
       commit(types.default.SET_CANNED_UI_FLAG, { fetchingList: false });
     } catch (error) {
       commit(types.default.SET_CANNED_UI_FLAG, { fetchingList: false });
