@@ -553,6 +553,16 @@
       "IMPLEMENTATION_OWNER": "Responsável pela implantação",
       "IMPLEMENTATION_DATE": "Data da implantação",
       "DOCUMENTS": "Documentos de apoio"
+    },
+    "PRODUCT_ACTIONS": {
+      "DELETE": "Excluir produto",
+      "TITLE": "Excluir produto definitivamente?",
+      "DESCRIPTION": "Os registros comerciais existentes serão preservados. A exclusão pode ser bloqueada quando houver vínculos protegidos. Para apenas retirar o produto de uso, escolha Desativar.",
+      "CANCEL": "Cancelar",
+      "CONFIRM": "Confirmar exclusão",
+      "WORKING": "Excluindo…",
+      "DELETED": "Produto excluído com sucesso.",
+      "ERROR": "Não foi possível excluir o produto."
     }
   }
 }

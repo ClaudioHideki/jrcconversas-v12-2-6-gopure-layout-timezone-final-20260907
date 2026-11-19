@@ -756,6 +756,16 @@
       "RESULT_REQUESTS": "Revisões no Backoffice:",
       "ERROR": "Não foi possível concluir. Confira o resultado e gere uma nova prévia antes de tentar novamente."
     },
-    "DETAILS": "Detalhes"
+    "DETAILS": "Detalhes",
+    "PRODUCT_ACTIONS": {
+      "DELETE": "Delete product",
+      "TITLE": "Permanently delete product?",
+      "DESCRIPTION": "Existing commercial records will be preserved. Protected dependencies may prevent deletion. To stop using the product, choose Deactivate.",
+      "CANCEL": "Cancel",
+      "CONFIRM": "Confirm deletion",
+      "WORKING": "Deleting…",
+      "DELETED": "Product deleted successfully.",
+      "ERROR": "Unable to delete the product."
+    }
   }
 }

@@ -14,6 +14,8 @@ Nenhuma execução funcional é iniciada por este bootstrap. As frentes já em a
 
 ## Concluído (Done)
 
+- [x] **CRM-PRODUTOS-20261119:** Corrigir edição de catálogo e oferecer exclusão confirmada, preservando ativação e vínculos. Ver [QA local](docs/qa/gopure-produtos-acoes-20261119.md).
+
 - [x] **CRM-20261119:** Remover ação global duplicada, incluir endereço completo da empresa, bloquear aprovação já solicitada e simplificar envio de propostas; validado somente com dados sintéticos. Ver [QA local](docs/qa/gopure-crm-simplificado-20261119.md); publicação não executada.
 
 - [x] **BOOTSTRAP-01:** Identidade, stack, natureza Brownfield e fontes locais registradas.

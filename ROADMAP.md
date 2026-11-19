@@ -33,3 +33,7 @@ Respostas rápidas com anexos e contexto adicionadas à trilha de evolução. Im
 - [x] Validar cadastro completo de endereço, solicitação única de aprovação e diálogo compacto de envio, preservando canais e histórico nativos.
 
 Evidências locais deste incremento: [QA CRM simplificado](docs/qa/gopure-crm-simplificado-20261119.md).
+
+## Incremento 2026-11-19 — Ações de produtos
+
+- [x] Corrigir edição reativa, exclusão confirmada e mensagens de vínculos protegidos. [Evidências locais](docs/qa/gopure-produtos-acoes-20261119.md).

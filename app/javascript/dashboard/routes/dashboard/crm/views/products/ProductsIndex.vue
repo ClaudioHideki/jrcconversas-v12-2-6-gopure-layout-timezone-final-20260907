@@ -13,6 +13,7 @@ import CrmStatCard from '../../components/shared/CrmStatCard.vue';
 const { t } = useI18n();
 const store = useStore();
 const { formatBRL } = useCrmMetrics();
+const refresh = () => store.dispatch('jrcCrm/products/fetchProducts');
 
 const products = computed(
   () => store.getters['jrcCrm/products/allProducts'] || []
@@ -27,6 +28,13 @@ const isAdmin = computed(
 const showForm = ref(false);
 const saving = ref(false);
 const editingId = ref(null);
+const deletingProduct = ref(null);
+const deleting = ref(false);
+const deleteError = ref('');
+const changingStatusId = ref(null);
+const productActionBusy = computed(
+  () => saving.value || deleting.value || changingStatusId.value !== null
+);
 const activeTab = ref('information');
 const search = ref('');
 const typeFilter = ref('');
@@ -413,10 +421,11 @@ const openCreate = () => {
 };
 
 const openEdit = product => {
+  if (!isAdmin.value || productActionBusy.value) return;
   Object.assign(form, {
     ...defaultForm(),
     ...product,
-    document_rules: structuredClone(product.document_rules || []),
+    document_rules: (product.document_rules || []).map(rule => ({ ...rule })),
     tags_text: (product.tags || []).join(', '),
     availability_text: (product.available_for || []).join(', '),
     unit_price: fromCents(product.unit_price_cents),
@@ -522,16 +531,45 @@ const saveProduct = async () => {
 };
 
 const toggleActive = async product => {
-  if (!isAdmin.value) return;
+  if (!isAdmin.value || productActionBusy.value) return;
+  changingStatusId.value = product.id;
+  const wasActive = product.active;
   try {
     await productsAPI.toggleActive(product.id);
     await refresh();
-    useAlert(product.active ? 'Produto desativado.' : 'Produto ativado.');
+    useAlert(wasActive ? 'Produto desativado.' : 'Produto ativado.');
   } catch (error) {
     useAlert(
       error.response?.data?.errors?.join(', ') ||
         'Não foi possível alterar o status.'
     );
+  } finally {
+    changingStatusId.value = null;
+  }
+};
+
+const requestDeletion = product => {
+  if (!isAdmin.value || productActionBusy.value) return;
+  deleteError.value = '';
+  deletingProduct.value = product;
+};
+
+const deleteProduct = async () => {
+  if (!isAdmin.value || !deletingProduct.value || productActionBusy.value)
+    return;
+  deleting.value = true;
+  deleteError.value = '';
+  try {
+    await productsAPI.delete(deletingProduct.value.id);
+    deletingProduct.value = null;
+    await refresh();
+    useAlert(t('CRM.PRODUCT_ACTIONS.DELETED'));
+  } catch (error) {
+    deleteError.value =
+      error.response?.data?.errors?.join(', ') ||
+      t('CRM.PRODUCT_ACTIONS.ERROR');
+  } finally {
+    deleting.value = false;
   }
 };
 
@@ -548,11 +586,11 @@ const requestCatalogImport = () => {
 };
 
 const importRowValue = (record, aliases) => {
-  for (const alias of aliases) {
-    const value = record[normalizeImportKey(alias)];
-    if (value !== undefined && value !== '') return value;
-  }
-  return '';
+  const alias = aliases.find(key => {
+    const value = record[normalizeImportKey(key)];
+    return value !== undefined && value !== '';
+  });
+  return alias ? record[normalizeImportKey(alias)] : '';
 };
 
 const buildImportedProduct = record => {
@@ -819,7 +857,8 @@ const handleCatalogImport = async event => {
 
     let imported = 0;
     const failures = [];
-    for (const item of pending) {
+    await pending.reduce(async (previous, item) => {
+      await previous;
       try {
         await productsAPI.create({ product: item.product });
         imported += 1;
@@ -828,7 +867,7 @@ const handleCatalogImport = async event => {
           error.response?.data?.errors?.join(', ') || 'erro não identificado';
         failures.push(`linha ${item.line}: ${message}`);
       }
-    }
+    }, Promise.resolve());
 
     await refresh();
     const summary = [
@@ -948,8 +987,6 @@ const exportCatalog = () => {
   link.click();
   URL.revokeObjectURL(link.href);
 };
-
-const refresh = () => store.dispatch('jrcCrm/products/fetchProducts');
 
 onMounted(refresh);
 onMounted(loadOperatingUnits);
@@ -1133,141 +1170,203 @@ onMounted(loadOperatingUnits);
                   Nenhum item encontrado com os filtros informados.
                 </td>
               </tr>
-              <tr
-                v-for="product in filteredProducts"
-                v-else
-                :key="product.id"
-                class="transition hover:bg-n-alpha-2"
-              >
-                <td class="px-5 py-4">
-                  <p class="font-semibold text-n-slate-12">
-                    {{ product.name }}
-                  </p>
-                  <p class="mt-0.5 text-xs text-n-slate-10">
-                    {{ product.sku || 'Sem SKU' }}
-                  </p>
-                  <div
-                    v-if="product.tags?.length"
-                    class="mt-2 flex flex-wrap gap-1"
-                  >
+              <template v-else>
+                <tr
+                  v-for="product in filteredProducts"
+                  :key="product.id"
+                  class="transition hover:bg-n-alpha-2"
+                >
+                  <td class="px-5 py-4">
+                    <p class="font-semibold text-n-slate-12">
+                      {{ product.name }}
+                    </p>
+                    <p class="mt-0.5 text-xs text-n-slate-10">
+                      {{ product.sku || 'Sem SKU' }}
+                    </p>
+                    <div
+                      v-if="product.tags?.length"
+                      class="mt-2 flex flex-wrap gap-1"
+                    >
+                      <span
+                        v-for="tag in product.tags.slice(0, 3)"
+                        :key="tag"
+                        class="rounded-full bg-n-blue-3 px-2 py-0.5 text-[11px] font-medium text-n-blue-11"
+                      >
+                        {{ tag }}
+                      </span>
+                    </div>
+                  </td>
+                  <td class="px-5 py-4">
                     <span
-                      v-for="tag in product.tags.slice(0, 3)"
-                      :key="tag"
-                      class="rounded-full bg-n-blue-3 px-2 py-0.5 text-[11px] font-medium text-n-blue-11"
+                      class="inline-flex rounded-full bg-n-iris-3 px-2.5 py-1 text-xs font-semibold text-n-iris-11"
                     >
-                      {{ tag }}
+                      {{ productTypeLabel(product.product_type) }}
                     </span>
-                  </div>
-                </td>
-                <td class="px-5 py-4">
-                  <span
-                    class="inline-flex rounded-full bg-n-iris-3 px-2.5 py-1 text-xs font-semibold text-n-iris-11"
-                  >
-                    {{ productTypeLabel(product.product_type) }}
-                  </span>
-                  <p class="mt-2 text-xs text-n-slate-11">
-                    {{ product.category || 'Sem categoria' }}
-                    <span v-if="product.subcategory">
-                      · {{ product.subcategory }}</span
+                    <p class="mt-2 text-xs text-n-slate-11">
+                      {{ product.category || 'Sem categoria' }}
+                      <span v-if="product.subcategory">
+                        · {{ product.subcategory }}</span
+                      >
+                    </p>
+                  </td>
+                  <td class="px-5 py-4">
+                    <p class="font-medium text-n-slate-12">
+                      {{ billingLabel(product.billing_model) }}
+                    </p>
+                    <p class="mt-1 text-xs text-n-slate-10">
+                      {{ product.sales_unit || 'Unidade' }}
+                      <span v-if="product.recurring"> · recorrente</span>
+                    </p>
+                  </td>
+                  <td class="px-5 py-4">
+                    <p class="font-bold text-n-slate-12">
+                      {{ formatBRL(product.unit_price_cents) }}
+                    </p>
+                    <p class="mt-1 text-xs text-n-slate-10">
+                      Implantação: {{ formatBRL(product.setup_fee_cents) }}
+                    </p>
+                  </td>
+                  <td v-if="isAdmin" class="px-5 py-4">
+                    <p
+                      class="font-bold"
+                      :class="
+                        Number(product.estimated_margin_percent || 0) >= 30
+                          ? 'text-n-teal-11'
+                          : 'text-n-amber-11'
+                      "
                     >
-                  </p>
-                </td>
-                <td class="px-5 py-4">
-                  <p class="font-medium text-n-slate-12">
-                    {{ billingLabel(product.billing_model) }}
-                  </p>
-                  <p class="mt-1 text-xs text-n-slate-10">
-                    {{ product.sales_unit || 'Unidade' }}
-                    <span v-if="product.recurring"> · recorrente</span>
-                  </p>
-                </td>
-                <td class="px-5 py-4">
-                  <p class="font-bold text-n-slate-12">
-                    {{ formatBRL(product.unit_price_cents) }}
-                  </p>
-                  <p class="mt-1 text-xs text-n-slate-10">
-                    Implantação: {{ formatBRL(product.setup_fee_cents) }}
-                  </p>
-                </td>
-                <td v-if="isAdmin" class="px-5 py-4">
-                  <p
-                    class="font-bold"
-                    :class="
-                      Number(product.estimated_margin_percent || 0) >= 30
-                        ? 'text-n-teal-11'
-                        : 'text-n-amber-11'
-                    "
-                  >
-                    {{ product.estimated_margin_percent || 0 }}%
-                  </p>
-                  <p class="mt-1 text-xs text-n-slate-10">
-                    Custo: {{ formatBRL(product.cost_cents) }}
-                  </p>
-                </td>
-                <td class="px-5 py-4 text-n-slate-11">
-                  <p>{{ product.contract_term_months || 0 }} meses</p>
-                  <p class="mt-1 text-xs text-n-slate-10">
-                    Ativação: {{ product.activation_days || 0 }} dias
-                  </p>
-                </td>
-                <td class="px-5 py-4">
-                  <span
-                    class="rounded-full px-2.5 py-1 text-xs font-semibold"
-                    :class="
-                      product.active
-                        ? 'bg-n-teal-3 text-n-teal-11'
-                        : 'bg-n-ruby-3 text-n-ruby-11'
-                    "
-                  >
-                    {{ product.active ? 'Ativo' : 'Inativo' }}
-                  </span>
-                </td>
-                <td v-if="isAdmin" class="px-5 py-4">
-                  <div class="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      class="flex size-9 items-center justify-center rounded-xl bg-n-blue-3 text-n-blue-11 transition hover:bg-n-blue-4"
-                      aria-label="Editar produto"
-                      title="Editar produto"
-                      @click="openEdit(product)"
-                    >
-                      <i class="i-lucide-pencil size-4" />
-                    </button>
-                    <button
-                      v-if="isAdmin"
-                      type="button"
-                      class="flex size-9 items-center justify-center rounded-xl transition"
+                      {{ product.estimated_margin_percent || 0 }}%
+                    </p>
+                    <p class="mt-1 text-xs text-n-slate-10">
+                      Custo: {{ formatBRL(product.cost_cents) }}
+                    </p>
+                  </td>
+                  <td class="px-5 py-4 text-n-slate-11">
+                    <p>{{ product.contract_term_months || 0 }} meses</p>
+                    <p class="mt-1 text-xs text-n-slate-10">
+                      Ativação: {{ product.activation_days || 0 }} dias
+                    </p>
+                  </td>
+                  <td class="px-5 py-4">
+                    <span
+                      class="rounded-full px-2.5 py-1 text-xs font-semibold"
                       :class="
                         product.active
-                          ? 'bg-n-ruby-3 text-n-ruby-11 hover:bg-n-ruby-4'
-                          : 'bg-n-teal-3 text-n-teal-11 hover:bg-n-teal-4'
+                          ? 'bg-n-teal-3 text-n-teal-11'
+                          : 'bg-n-ruby-3 text-n-ruby-11'
                       "
-                      :aria-label="
-                        product.active ? 'Desativar produto' : 'Ativar produto'
-                      "
-                      :title="
-                        product.active ? 'Desativar produto' : 'Ativar produto'
-                      "
-                      @click="toggleActive(product)"
                     >
-                      <i
-                        class="size-4"
+                      {{ product.active ? 'Ativo' : 'Inativo' }}
+                    </span>
+                  </td>
+                  <td v-if="isAdmin" class="px-5 py-4">
+                    <div class="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        class="flex size-9 items-center justify-center rounded-xl bg-n-blue-3 text-n-blue-11 transition hover:bg-n-blue-4"
+                        aria-label="Editar produto"
+                        :disabled="productActionBusy"
+                        title="Editar produto"
+                        @click="openEdit(product)"
+                      >
+                        <i class="i-lucide-pencil size-4" />
+                      </button>
+                      <button
+                        v-if="isAdmin"
+                        type="button"
+                        class="flex size-9 items-center justify-center rounded-xl transition"
                         :class="
                           product.active
-                            ? 'i-lucide-package-x'
-                            : 'i-lucide-package-check'
+                            ? 'bg-n-ruby-3 text-n-ruby-11 hover:bg-n-ruby-4'
+                            : 'bg-n-teal-3 text-n-teal-11 hover:bg-n-teal-4'
                         "
-                      />
-                    </button>
-                  </div>
-                </td>
-              </tr>
+                        :aria-label="
+                          product.active
+                            ? 'Desativar produto'
+                            : 'Ativar produto'
+                        "
+                        :title="
+                          product.active
+                            ? 'Desativar produto'
+                            : 'Ativar produto'
+                        "
+                        :disabled="productActionBusy"
+                        @click="toggleActive(product)"
+                      >
+                        <i
+                          class="size-4"
+                          :class="
+                            product.active
+                              ? 'i-lucide-package-x'
+                              : 'i-lucide-package-check'
+                          "
+                        />
+                      </button>
+                      <button
+                        type="button"
+                        :disabled="productActionBusy"
+                        :aria-label="t('CRM.PRODUCT_ACTIONS.DELETE')"
+                        :title="t('CRM.PRODUCT_ACTIONS.DELETE')"
+                        class="flex size-9 items-center justify-center rounded-xl bg-n-ruby-3 text-n-ruby-11 hover:bg-n-ruby-4 disabled:opacity-50"
+                        @click="requestDeletion(product)"
+                      >
+                        <i class="i-lucide-trash-2 size-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </template>
             </tbody>
           </table>
         </div>
       </section>
     </div>
 
+    <div
+      v-if="deletingProduct"
+      class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4"
+    >
+      <section
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="product-delete-title"
+        aria-describedby="product-delete-description"
+        class="w-full max-w-lg space-y-4 rounded-xl border border-n-weak bg-n-solid-2 p-5 shadow-xl"
+      >
+        <h3 id="product-delete-title" class="text-lg font-semibold">
+          {{ t('CRM.PRODUCT_ACTIONS.TITLE') }}
+        </h3>
+        <p class="break-words font-semibold">{{ deletingProduct.name }}</p>
+        <p id="product-delete-description" class="text-sm text-n-slate-11">
+          {{ t('CRM.PRODUCT_ACTIONS.DESCRIPTION') }}
+        </p>
+        <p v-if="deleteError" role="alert" class="text-sm text-n-ruby-11">
+          {{ deleteError }}
+        </p>
+        <div class="flex justify-end gap-3">
+          <button
+            type="button"
+            :disabled="deleting"
+            class="rounded-lg border border-n-weak px-4 py-2 disabled:opacity-50"
+            @click="deletingProduct = null"
+          >
+            {{ t('CRM.PRODUCT_ACTIONS.CANCEL') }}
+          </button>
+          <button
+            type="button"
+            :disabled="deleting"
+            class="rounded-lg bg-n-ruby-9 px-4 py-2 text-white disabled:opacity-50"
+            @click="deleteProduct"
+          >
+            {{
+              deleting
+                ? t('CRM.PRODUCT_ACTIONS.WORKING')
+                : t('CRM.PRODUCT_ACTIONS.CONFIRM')
+            }}
+          </button>
+        </div>
+      </section>
+    </div>
     <div
       v-if="showForm"
       class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/50 p-2 sm:p-4"

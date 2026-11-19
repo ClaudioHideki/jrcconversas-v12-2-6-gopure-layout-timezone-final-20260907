@@ -12,3 +12,5 @@ Não marcar uma proposta como aceita sem a decisão correspondente. Preserve os 
 - [0002-respostas-rapidas-contextuais](0002-respostas-rapidas-contextuais.md): evolução do catálogo nativo de respostas rápidas com arquivos, contexto e idempotência persistente.
 
 - [0003 — Cadastro e envio simplificado no CRM](0003-crm-cadastro-envio-simplificado.md)
+
+- [0004 — Ações de produtos](0004-acoes-de-produtos.md)

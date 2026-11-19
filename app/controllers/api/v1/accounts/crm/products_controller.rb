@@ -52,6 +52,10 @@ module Api
             else
               render json: { errors: @product.errors.full_messages }, status: :unprocessable_entity
             end
+          rescue ActiveRecord::InvalidForeignKey, ActiveRecord::DeleteRestrictionError
+            message = 'Este produto possui vínculos protegidos com pedidos, contratos ou outros registros. ' \
+                      'Desative-o para retirá-lo do uso comercial.'
+            render json: { errors: [message], code: 'PRODUCT_HAS_DEPENDENCIES' }, status: :conflict
           end
 
           def toggle_active
