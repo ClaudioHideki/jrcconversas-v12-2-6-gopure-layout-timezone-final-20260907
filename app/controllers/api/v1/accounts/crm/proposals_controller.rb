@@ -70,7 +70,8 @@ module Api
           def destroy
             authorize @proposal, :destroy?, policy_class: JrcCrm::ProposalPolicy
             if @proposal.sales_orders.exists?
-              render json: { errors: ['A proposta possui pedido vinculado e não pode ser excluída.'], code: 'PROPOSAL_HAS_DEPENDENCIES' }, status: :conflict
+              render json: { errors: ['A proposta possui pedido vinculado e não pode ser excluída.'], code: 'PROPOSAL_HAS_DEPENDENCIES' },
+                     status: :conflict
               return
             end
             snapshot = @proposal.attributes.except('public_token_digest', 'accepted_from_ip', 'accepted_user_agent')
@@ -115,15 +116,19 @@ module Api
               return
             end
 
-            @proposal.recalculate_totals!
-            @proposal.update!(
-              status: 'pending_approval',
-              approval_status: 'pending',
-              commercial_approval_status: 'pending',
-              financial_approval_status: financial_approval_required? ? 'pending' : 'not_required',
-              technical_approval_status: technical_approval_required? ? 'pending' : 'not_required'
-            )
-            audit_event!('approval_requested', 'Aprovação interna solicitada')
+            @proposal.with_lock do
+              unless @proposal.status == 'pending_approval' || @proposal.approval_status == 'approved'
+                @proposal.recalculate_totals!
+                @proposal.update!(
+                  status: 'pending_approval',
+                  approval_status: 'pending',
+                  commercial_approval_status: 'pending',
+                  financial_approval_status: financial_approval_required? ? 'pending' : 'not_required',
+                  technical_approval_status: technical_approval_required? ? 'pending' : 'not_required'
+                )
+                audit_event!('approval_requested', 'Aprovação interna solicitada')
+              end
+            end
             render json: serialize(@proposal.reload)
           end
 
@@ -337,7 +342,7 @@ module Api
           def recipient_delivery_params
             return unless params.key?(:delivery)
 
-            params.require(:delivery).permit(:contact_id, :inbox_id, :content, template_params: {}).to_h
+            params.require(:delivery).permit(:contact_id, :inbox_id, :content, :subject, :attach_pdf, template_params: {}).to_h
           end
 
           def audit_event!(event_type, description, metadata: {})

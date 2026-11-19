@@ -10,3 +10,5 @@ Não marcar uma proposta como aceita sem a decisão correspondente. Preserve os 
 - [0001-governanca-operacional-init](0001-governanca-operacional-init.md): adoção do INIT solicitado pelo usuário.
 
 - [0002-respostas-rapidas-contextuais](0002-respostas-rapidas-contextuais.md): evolução do catálogo nativo de respostas rápidas com arquivos, contexto e idempotência persistente.
+
+- [0003 — Cadastro e envio simplificado no CRM](0003-crm-cadastro-envio-simplificado.md)

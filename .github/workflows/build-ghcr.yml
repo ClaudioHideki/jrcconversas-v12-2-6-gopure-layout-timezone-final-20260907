@@ -118,6 +118,8 @@ jobs:
           app/javascript/dashboard/routes/dashboard/crm/views/proposals/spec
           app/javascript/dashboard/api/crm/spec/proposals.spec.js
           --maxWorkers=1 --minWorkers=1
+      - name: Testar compositor nativo e envio simplificado de propostas
+        run: pnpm exec vitest run --config vitest.proposalCompose.config.ts --maxWorkers=1 --minWorkers=1
       - name: Testar indicadores, pedidos, anexos e áudio
         run: >-
           pnpm exec vitest run

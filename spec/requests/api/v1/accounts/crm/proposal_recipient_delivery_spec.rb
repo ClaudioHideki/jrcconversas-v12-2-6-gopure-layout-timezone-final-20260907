@@ -196,7 +196,8 @@ RSpec.describe 'CRM proposal delivery to a selected recipient', type: :request d
 
     it 'sends a free-form proposal within an existing technical reply window' do
       conversation = create(:conversation, account: account, inbox: inbox, contact: recipient, assignee: agent)
-      create(:message, conversation: conversation, account: account, sender: recipient, message_type: :incoming, source_id: "wamid.qa-#{SecureRandom.hex(8)}")
+      create(:message, conversation: conversation, account: account, sender: recipient, message_type: :incoming,
+                       source_id: "wamid.qa-#{SecureRandom.hex(8)}")
       expect { post url, params: payload, headers: headers, as: :json }.to change(Message, :count).by(1)
       expect(response).to have_http_status(:ok), response.body
       expect(proposal.reload.last_sent_conversation_id).to eq(conversation.id)
@@ -229,6 +230,48 @@ RSpec.describe 'CRM proposal delivery to a selected recipient', type: :request d
       expect { post url, params: payload, headers: headers, as: :json }.not_to change(Message, :count)
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body['errors'].join).to include('modelo WhatsApp aprovado')
+    end
+  end
+
+  it 'sends only the link when requested but retains the PDF in proposal history' do
+    delivery[:attach_pdf] = false
+    post url, params: payload, headers: headers, as: :json
+    expect(response).to have_http_status(:ok), response.body
+    message = Message.find(proposal.reload.last_sent_message_id)
+    expect(message.attachments).to be_empty
+    expect(message.content).to include('/jrc/propostas/')
+    expect(message.content).not_to include('PDF da proposta está anexado')
+    expect(proposal.events.find_by!(event_type: 'sent').document.download).to start_with('%PDF-')
+  end
+
+  context 'with an authorized email inbox' do
+    let(:inbox) { create(:inbox, account: account, channel: build(:channel_email, account: account)) }
+
+    before do
+      recipient.update!(email: 'synthetic@example.test')
+      delivery[:subject] = 'Synthetic proposal'
+      payload[:channel] = 'email'
+    end
+
+    it 'uses the selected contact email and subject, preserving native conversation delivery' do
+      post url, params: payload, headers: headers, as: :json
+      expect(response).to have_http_status(:ok), response.body
+      conversation = account.conversations.find(proposal.reload.last_sent_conversation_id)
+      expect(conversation.additional_attributes['mail_subject']).to eq('Synthetic proposal')
+      expect(conversation.contact_id).to eq(recipient.id)
+      expect(proposal.last_sent_channel).to eq('email')
+    end
+
+    it 'rejects newline subject injection without creating a message' do
+      delivery[:subject] = "Unsafe\r\nBcc: another@example.test"
+      expect { post url, params: payload, headers: headers, as: :json }.not_to change(Message, :count)
+      expect(response).to have_http_status(:unprocessable_entity)
+    end
+
+    it 'rejects a mismatched explicit channel' do
+      payload[:channel] = 'whatsapp'
+      expect { post url, params: payload, headers: headers, as: :json }.not_to change(Message, :count)
+      expect(response).to have_http_status(:unprocessable_entity)
     end
   end
 end

@@ -392,3 +392,35 @@ it('converts an accepted proposal using the server endpoint and opens the order'
   });
   expect(proposalsAPI.update).not.toHaveBeenCalled();
 });
+
+it('disables an already requested approval, including after reopening the proposal', async () => {
+  proposal.status = 'pending_approval';
+  proposal.approval_status = 'pending';
+  await mountPage();
+  const button = wrapper
+    .findAll('button')
+    .find(item => item.text() === 'Aguardando aprovação');
+  expect(button).toBeDefined();
+  expect(button.attributes('disabled')).toBeDefined();
+});
+
+it('allows the first approval request for a draft requiring approval', async () => {
+  proposal.approval_status = 'pending';
+  proposal.commercial_approval_status = 'pending';
+  await mountPage();
+  const button = wrapper
+    .findAll('button')
+    .find(item => item.text() === 'Solicitar aprovação');
+  expect(button).toBeDefined();
+  expect(button.attributes('disabled')).toBeUndefined();
+});
+
+it('keeps a completed approval disabled until commercial terms require a new request', async () => {
+  proposal.approval_status = 'approved';
+  proposal.status = 'sent';
+  await mountPage();
+  const button = wrapper
+    .findAll('button')
+    .find(item => item.text() === 'Aprovação concluída');
+  expect(button.attributes('disabled')).toBeDefined();
+});

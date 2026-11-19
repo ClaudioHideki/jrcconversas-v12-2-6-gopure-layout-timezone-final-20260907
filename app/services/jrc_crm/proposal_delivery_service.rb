@@ -41,12 +41,14 @@ module JrcCrm
 
       gate = JrcApprovals::CommercialGate.check!(resource: @proposal, user: @actor, key: 'crm.proposal_send')
       if @delivery
-        raise ArgumentError, 'Canal de envio inválido' unless @channel == 'whatsapp'
+        raise ArgumentError, 'Canal de envio inválido' unless %w[whatsapp email].include?(@channel)
         raise JrcApprovals::Error, 'IDEMPOTENCY_KEY_REQUIRED' if @idempotency_key.blank?
 
         @target = JrcCrm::ProposalDeliveryTarget.new(proposal: @proposal, actor: @actor,
                                                      delivery: @delivery, public_url: public_url)
         @target.authorize!
+        selected_channel = @target.inbox.email? ? 'email' : 'whatsapp'
+        raise ArgumentError, 'Canal incompatível com a caixa selecionada.' unless @channel == selected_channel
       end
       raise JrcApprovals::Error, 'IDEMPOTENCY_KEY_REQUIRED' if gate[:mode] == 'enforcement' && @idempotency_key.blank?
 
@@ -126,7 +128,7 @@ module JrcCrm
           pipeline_transition: pipeline_transition
         }
       )
-      sent_event.document.attach(message.attachments.first.file.blob)
+      sent_event.document.attach(@delivery_document_blob)
 
       { proposal: @proposal.reload, message: message, conversation: conversation, channel: channel_key(conversation) }
     end
@@ -152,8 +154,9 @@ module JrcCrm
       conversation = @proposal.account.conversations.includes(:inbox).find_by(id: @proposal.last_sent_conversation_id)
       return unless conversation && (requested.nil? || channel_key(conversation) == requested)
 
-      @target = JrcCrm::ProposalDeliveryTarget.new(proposal: @proposal, actor: @actor, public_url: public_url,
-                                                   delivery: { contact_id: conversation.contact_id, inbox_id: conversation.inbox_id })
+      delivery = { contact_id: conversation.contact_id, inbox_id: conversation.inbox_id,
+                   subject: conversation.additional_attributes['mail_subject'].presence || @proposal.title }
+      @target = JrcCrm::ProposalDeliveryTarget.new(proposal: @proposal, actor: @actor, public_url: public_url, delivery: delivery)
       @target.authorize!
       raise Pundit::NotAuthorizedError unless @target.authorized_conversation?(conversation)
 
@@ -169,24 +172,35 @@ module JrcCrm
         content_type: 'application/pdf'
       )
 
+      @delivery_document_blob = blob
       params = {
         content: outgoing_text,
         message_type: 'outgoing',
-        attachments: [blob.signed_id],
+        attachments: attach_pdf? ? [blob.signed_id] : [],
         content_attributes: {
           jrc_crm_proposal_id: @proposal.id,
           jrc_crm_public_url: public_url
         }
       }
       params[:template_params] = @target.template_params if @target&.template_params.present?
-      if channel_key(conversation) == 'email'
-        email = @proposal.customer_contact&.email
-        raise StandardError, 'O cliente não possui e-mail cadastrado.' if email.blank?
-
-        params[:to_emails] = email
-      end
+      params[:to_emails] = message_email(conversation) if channel_key(conversation) == 'email'
 
       Messages::MessageBuilder.new(@actor, conversation, params).perform
+    end
+
+    def message_email(conversation)
+      email = @target ? @target.contact.email : @proposal.customer_contact&.email
+      if @delivery && @target
+        attributes = conversation.additional_attributes.merge('mail_subject' => @delivery.fetch('subject').strip)
+        conversation.update!(additional_attributes: attributes)
+      end
+      raise StandardError, 'O cliente não possui e-mail cadastrado.' if email.blank?
+
+      email
+    end
+
+    def attach_pdf?
+      !@delivery&.key?('attach_pdf') || ActiveModel::Type::Boolean.new.cast(@delivery['attach_pdf'])
     end
 
     def message_text

@@ -33,6 +33,8 @@ import ComposeNewConversationForm from 'dashboard/components-next/NewConversatio
 
 const props = defineProps({
   initialMessage: { type: String, default: '' },
+  proposalMode: { type: Boolean, default: false },
+  proposalUrl: { type: String, default: '' },
   submitHandler: { type: Function, default: null },
   inboxFilter: { type: Function, default: null },
   isSubmitting: { type: Boolean, default: false },
@@ -71,6 +73,7 @@ const formState = reactive({
   ccEmails: '',
   bccEmails: '',
   attachedFiles: [],
+  attachPdf: true,
 });
 
 const clearFormState = () => {
@@ -309,8 +312,12 @@ onMounted(() => resetContacts());
     :show-content-border="false"
     :close-on-scroll="false"
     modal
-    modal-class="max-w-7xl"
-    :modal-label="t('JRC_HOME.COMPOSE.TITLE')"
+    :modal-class="proposalMode ? 'max-w-2xl' : 'max-w-7xl'"
+    :modal-label="
+      proposalMode
+        ? t('CRM.PROPOSAL_RECIPIENT.TITLE')
+        : t('JRC_HOME.COMPOSE.TITLE')
+    "
     @show="onPopoverShow"
     @hide="onPopoverHide"
   >
@@ -336,7 +343,9 @@ onMounted(() => resetContacts());
         :contacts-ui-flags="contactsUiFlags"
         :message-signature="messageSignature"
         :send-with-signature="sendWithSignature"
-        workspace
+        :workspace="!proposalMode"
+        :proposal-mode="proposalMode"
+        :proposal-url="proposalUrl"
         @search-contacts="onContactSearch"
         @reset-contact-search="resetContacts"
         @update-selected-contact="handleSelectedContact"

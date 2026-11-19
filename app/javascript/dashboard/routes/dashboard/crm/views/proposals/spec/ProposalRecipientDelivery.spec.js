@@ -31,6 +31,8 @@ const Composer = {
     'inboxFilter',
     'disabled',
     'isSubmitting',
+    'proposalMode',
+    'proposalUrl',
   ],
   emits: ['submitted'],
   setup(_props, { expose }) {
@@ -176,7 +178,7 @@ it('blocks double submission and ignores a late success after switching accounts
   expect(useAlert).not.toHaveBeenCalled();
 });
 
-it('filters the native inbox list to supported WhatsApp channels', () => {
+it('filters the native inbox list to supported WhatsApp and email channels', () => {
   mountDelivery();
   const accepts = wrapper.findComponent(Composer).props('inboxFilter');
   expect(accepts({ channelType: 'Channel::Whatsapp' })).toBe(true);
@@ -186,9 +188,9 @@ it('filters the native inbox list to supported WhatsApp channels', () => {
   expect(
     accepts({ channelType: 'Channel::Api', name: 'WhatsApp integration' })
   ).toBe(true);
-  expect(
-    accepts({ channelType: 'Channel::Email', name: 'WhatsApp by email' })
-  ).toBe(false);
+  expect(accepts({ channelType: 'Channel::Email', name: 'Email inbox' })).toBe(
+    true
+  );
   expect(accepts({ channelType: 'Channel::TwilioSms', medium: 'sms' })).toBe(
     false
   );
@@ -213,4 +215,20 @@ it('blocks submission while the parent proposal has unsaved or terminal data', a
     wrapper.get('[data-proposal-recipient-trigger]').attributes('disabled')
   ).toBeDefined();
   expect(messages.CRM.PROPOSAL_RECIPIENT.ERROR).toBeTruthy();
+});
+
+it('passes email subject and optional PDF through the native composer', async () => {
+  mountDelivery();
+  expect(wrapper.findComponent(Composer).props('proposalMode')).toBe('');
+  await submit({
+    ...payload,
+    mailSubject: 'Synthetic proposal',
+    attachPdf: false,
+  });
+  expect(proposalsAPI.sendToRecipient.mock.calls[0][1]).toMatchObject({
+    subject: 'Synthetic proposal',
+    attach_pdf: false,
+    contact_id: 12,
+    inbox_id: 18,
+  });
 });

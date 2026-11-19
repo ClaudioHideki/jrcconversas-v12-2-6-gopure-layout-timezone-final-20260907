@@ -67,7 +67,7 @@ RSpec.describe 'Customer master API', type: :request do
     attributes = { city: 'São Paulo', country: 'Brazil', country_code: 'BR', description: 'Contato comercial',
                    social_profiles: { linkedin: 'perfil-de-teste' } }
     post "#{root}/contacts", headers: headers, params: { contact: { name: 'Pessoa de teste', email: 'pessoa@example.test',
-      company_id: company.id, additional_attributes: attributes, blocked: true } }, as: :json
+                                                                    company_id: company.id, additional_attributes: attributes, blocked: true } }, as: :json
     expect(response).to have_http_status(:created)
     contact = account.contacts.find(response.parsed_body.dig('payload', 'id'))
     expect(contact.company_id).to eq(company.id)
@@ -77,7 +77,7 @@ RSpec.describe 'Customer master API', type: :request do
     expect(audit.actor_id).to eq(admin.id)
     expect(audit.to_value['additional_attributes']).to include(attributes.deep_stringify_keys)
     post "#{root}/contacts", headers: headers, params: { contact: { name: 'Duplicado', email: contact.email,
-      company_id: company.id, additional_attributes: { city: 'Não substituir' } } }, as: :json
+                                                                    company_id: company.id, additional_attributes: { city: 'Não substituir' } } }, as: :json
     expect(response).to have_http_status(:conflict)
     expect(response.parsed_body['code']).to eq('POSSIBLE_DUPLICATE')
     expect(account.contacts.where(email: contact.email).count).to eq(1)
@@ -100,5 +100,32 @@ RSpec.describe 'Customer master API', type: :request do
     post "#{root}/contacts/#{base.id}/merge", headers: headers, params: { source_contact_id: source.id }, as: :json
     expect(response).to have_http_status(:bad_request)
     expect(source.reload).to be_persisted
+  end
+
+  it 'saves the complete business address atomically and updates it without replacing other addresses' do
+    address = { street: 'Rua Sintética', number: '123', complement: 'Sala 2', district: 'Centro', city: 'Florianópolis',
+                state: 'SC', postal_code: '88000-000', country: 'BR' }
+    post "#{root}/companies", headers: headers, params: { company: { name: 'Synthetic address company', primary_address: address } }, as: :json
+    expect(response).to have_http_status(:created), response.body
+    data = response.parsed_body.fetch('payload')
+    expect(data['primary_address']).to include(address.stringify_keys)
+    company = account.master_companies.find(data['id'])
+    other = company.addresses.create!(account: account, address_type: 'billing', street: 'Preserve', country: 'BR')
+    patch "#{root}/companies/#{company.id}",
+          headers: headers,
+          params: { company: { revision: data['revision'], primary_address: address.merge(number: '456') } }, as: :json
+    expect(response).to have_http_status(:ok), response.body
+    expect(company.addresses.where(address_type: 'business').count).to eq(1)
+    expect(response.parsed_body.dig('payload', 'primary_address', 'number')).to eq('456')
+    expect(other.reload.street).to eq('Preserve')
+  end
+
+  it 'rolls back the new company when its address is invalid' do
+    expect do
+      post "#{root}/companies",
+           headers: headers,
+           params: { company: { name: 'Invalid synthetic address', primary_address: { street: 'Rua', country: 'X' * 101 } } }, as: :json
+    end.not_to change(JrcCustomers::Company, :count)
+    expect(response).to have_http_status(:unprocessable_entity)
   end
 end

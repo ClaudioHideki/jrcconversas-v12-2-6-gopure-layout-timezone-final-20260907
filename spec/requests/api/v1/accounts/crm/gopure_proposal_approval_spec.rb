@@ -8,6 +8,7 @@ RSpec.describe 'GoPure commercial approval', type: :request do
   let(:contact) { create(:contact, account: account) }
   let(:proposal) { JrcCrm::ProposalBuilderService.new(account: account, actor: agent, contact: contact).call }
   let(:url) { "/api/v1/accounts/#{account.id}/crm/proposals/#{proposal.id}" }
+
   before { account.enable_features!('jrc_crm') }
 
   it 'requires commercial approval even without discounts and does not send before approval' do
@@ -47,7 +48,7 @@ RSpec.describe 'GoPure commercial approval', type: :request do
     expect(proposal.reload).to have_attributes(approval_status: 'approved', commercial_approval_status: 'approved')
     expect(proposal.events.where(event_type: 'approval_updated', user_id: admin.id)).to exist
     expect(JrcApprovals::CommercialGate).to receive(:check!).with(resource: proposal, user: agent, key: 'crm.proposal_send')
-      .and_raise(JrcApprovals::Error, 'APPROVAL_REQUIRED')
+                                                            .and_raise(JrcApprovals::Error, 'APPROVAL_REQUIRED')
     expect { JrcCrm::ProposalDeliveryService.new(proposal: proposal, actor: agent).call }.to raise_error(JrcApprovals::Error)
   end
 
@@ -60,5 +61,24 @@ RSpec.describe 'GoPure commercial approval', type: :request do
     expect(proposal.reload.commercial_approval_status).to eq('pending')
     post "#{url}/approve", params: { approval_type: 'commercial', decision: 'approved' }, headers: other_admin.create_new_auth_token, as: :json
     expect(response).to have_http_status(:ok)
+  end
+
+  it 'does not duplicate a pending approval request or its audit event' do
+    proposal.proposal_items.create!(name_snapshot: 'Synthetic product', quantity: 1, unit_price_cents: 1000)
+    post "#{url}/request_approval", headers: agent.create_new_auth_token
+    expect(response).to have_http_status(:ok)
+    counts = [proposal.events.count, JrcCrm::AuditEvent.count]
+    post "#{url}/request_approval", headers: agent.create_new_auth_token
+    expect(response).to have_http_status(:ok)
+    expect([proposal.events.count, JrcCrm::AuditEvent.count]).to eq(counts)
+    expect(proposal.reload.approval_status).to eq('pending')
+  end
+
+  it 'does not reset a completed approval when the request is repeated' do
+    proposal.proposal_items.create!(name_snapshot: 'Synthetic product', quantity: 1, unit_price_cents: 1000)
+    proposal.update!(approval_status: 'approved', commercial_approval_status: 'approved')
+    expect { post "#{url}/request_approval", headers: agent.create_new_auth_token }.not_to change(JrcCrm::AuditEvent, :count)
+    expect(response).to have_http_status(:ok)
+    expect(proposal.reload.approval_status).to eq('approved')
   end
 end

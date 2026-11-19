@@ -17,6 +17,7 @@ class JrcCustomers::CompanyWriter
       end
 
       attributes = attributes.to_h.symbolize_keys
+      primary_address = attributes.delete(:primary_address)
       created = company.new_record?
       if @actor && company.has_attribute?(:updated_by_id)
         attributes[:updated_by_id] = @actor.id
@@ -28,6 +29,7 @@ class JrcCustomers::CompanyWriter
       company.assign_attributes(attributes)
       company.save!
       assign_customer_code!(company)
+      save_primary_address!(company, primary_address) if primary_address
 
       JrcCustomers::Audit.record!(
         account: @account,
@@ -42,6 +44,32 @@ class JrcCustomers::CompanyWriter
   end
 
   private
+
+  def save_primary_address!(company, values)
+    values = values.to_h.stringify_keys.slice('postal_code', 'street', 'number', 'complement', 'district', 'city', 'state', 'country')
+    address = primary_business_address(company, values)
+    return unless address
+
+    previous = address.attributes
+    address.assign_attributes(values)
+    return unless address.changed?
+
+    address.save!
+    company.update!(updated_at: Time.current)
+    JrcCustomers::Audit.record!(account: @account, actor: @actor, resource: company,
+                                event_type: 'customer_address_changed', metadata: { action: 'saved' },
+                                from_value: previous, to_value: address.attributes)
+  end
+
+  def primary_business_address(company, values)
+    address = company.addresses.where(account_id: @account.id, address_type: 'business').order(:id).first
+    return address if address
+    return if values.except('country').values.all?(&:blank?)
+
+    raise ActionController::BadRequest, 'Maximum of 100 addresses per company' if company.addresses.count >= 100
+
+    company.addresses.new(account_id: @account.id, address_type: 'business')
+  end
 
   def assign_customer_code!(company)
     return unless company.has_attribute?(:customer_code) && company.customer_code.blank?

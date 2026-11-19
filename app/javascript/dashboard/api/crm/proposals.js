@@ -12,7 +12,7 @@ proposalsAPI.sendProposal = (id, channel = 'auto', options = {}) =>
   });
 proposalsAPI.sendToRecipient = (id, delivery, idempotencyKey, options = {}) =>
   axios.post(`${proposalsAPI.url}/${id}/send_proposal`, {
-    channel: 'whatsapp',
+    channel: delivery.subject !== undefined ? 'email' : 'whatsapp',
     delivery,
     idempotency_key: idempotencyKey,
     ...options,

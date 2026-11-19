@@ -857,8 +857,22 @@ const openVersionHistory = async () => {
   }
 };
 
+const approvalPending = computed(
+  () => selectedProposal.value?.status === 'pending_approval'
+);
+
+const approvalCompleted = computed(
+  () => selectedProposal.value?.approval_status === 'approved'
+);
+
 const requestApproval = async () => {
-  if (!selectedProposal.value || actionWorking.value) return;
+  if (
+    !selectedProposal.value ||
+    actionWorking.value ||
+    approvalPending.value ||
+    approvalCompleted.value
+  )
+    return;
   actionWorking.value = 'approval';
   try {
     const saved = selectedProposal.value.locked
@@ -1534,16 +1548,24 @@ onMounted(async () => {
                 <i class="i-lucide-link mr-1" /> Copiar link
               </button>
               <button
-                v-if="
-                  !selectedProposal.locked &&
-                  selectedProposal.approval?.status !== 'pending'
-                "
+                v-if="!selectedProposal.locked || approvalPending"
                 type="button"
-                class="rounded-xl bg-n-amber-9 px-3 py-2 text-sm font-semibold text-n-on-amber shadow-sm disabled:opacity-100"
-                :disabled="Boolean(actionWorking)"
+                class="rounded-xl bg-n-amber-9 px-3 py-2 text-sm font-semibold text-n-on-amber shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="
+                  Boolean(actionWorking) || approvalPending || approvalCompleted
+                "
                 @click="requestApproval"
               >
-                <i class="i-lucide-shield-check mr-1" /> Solicitar aprovação
+                <i class="i-lucide-shield-check mr-1" />
+                {{
+                  approvalCompleted
+                    ? 'Aprovação concluída'
+                    : approvalPending
+                      ? 'Aguardando aprovação'
+                      : actionWorking === 'approval'
+                        ? 'Solicitando…'
+                        : 'Solicitar aprovação'
+                }}
               </button>
               <button
                 v-if="!isHistorical"

@@ -31,6 +31,17 @@ const textFields = [
   'economic_group',
 ];
 
+const addressFields = [
+  'postal_code',
+  'street',
+  'number',
+  'complement',
+  'district',
+  'city',
+  'state',
+  'country',
+];
+const address = reactive({});
 const form = reactive({});
 const owners = ref([]);
 const metadata = ref({ segments: [] });
@@ -47,6 +58,10 @@ const secondaryRelationships = computed(() =>
 watch(
   () => props.company,
   value => {
+    addressFields.forEach(key => {
+      address[key] =
+        value?.primary_address?.[key] || (key === 'country' ? 'BR' : '');
+    });
     textFields.forEach(key => {
       form[key] = value?.[key] || '';
     });
@@ -98,7 +113,12 @@ const save = async () => {
       .filter(Boolean)
       .filter((value, index, values) => values.indexOf(value) === index)
       .slice(0, 50);
-    const payload = { ...form, tags, revision: props.company?.revision };
+    const payload = {
+      ...form,
+      tags,
+      primary_address: { ...address },
+      revision: props.company?.revision,
+    };
     delete payload.tagsText;
     payload.relationship_tags = (payload.relationship_tags || []).filter(
       value => value !== payload.relationship_type
@@ -235,6 +255,25 @@ const save = async () => {
             {{ label }}
           </label>
         </div>
+      </div>
+
+      <div
+        class="grid gap-4 rounded-xl border border-n-weak p-4 md:col-span-2 md:grid-cols-2 xl:col-span-3 xl:grid-cols-3"
+      >
+        <h3 class="font-semibold md:col-span-2 xl:col-span-3">
+          {{ T.addresses }}
+        </h3>
+        <label v-for="field in addressFields" :key="field" class="text-sm">
+          {{ FIELD_LABELS[field] }}
+          <input
+            v-model.trim="address[field]"
+            :class="inputClass"
+            :maxlength="
+              field === 'country' ? 100 : field === 'postal_code' ? 32 : 255
+            "
+            :autocomplete="field === 'postal_code' ? 'postal-code' : 'off'"
+          />
+        </label>
       </div>
 
       <label class="text-sm md:col-span-2 xl:col-span-3">

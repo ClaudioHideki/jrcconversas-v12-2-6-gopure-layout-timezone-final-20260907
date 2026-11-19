@@ -46,8 +46,8 @@ const canSend = computed(
 const initialMessage = computed(() =>
   t('CRM.PROPOSAL_RECIPIENT.MESSAGE', { url: props.publicUrl })
 );
-const publicPdfUrl = computed(() => `${props.publicUrl}/pdf`);
-const whatsappInbox = inbox =>
+const supportedInbox = inbox =>
+  inbox.channelType === INBOX_TYPES.EMAIL ||
   inbox.channelType === INBOX_TYPES.WHATSAPP ||
   (inbox.channelType === INBOX_TYPES.TWILIO && inbox.medium === 'whatsapp') ||
   (inbox.channelType === INBOX_TYPES.API && /whatsapp/i.test(inbox.name));
@@ -67,6 +67,12 @@ const submitDelivery = async ({ payload }) => {
     inbox_id: payload.inboxId,
     content: payload.message?.content,
     template_params: payload.message?.template_params,
+    ...(payload.mailSubject !== undefined
+      ? { subject: payload.mailSubject }
+      : {}),
+    ...(payload.attachPdf !== undefined
+      ? { attach_pdf: payload.attachPdf }
+      : {}),
   };
   const fingerprint = JSON.stringify([startedFor, delivery]);
   if (attempt?.fingerprint !== fingerprint)
@@ -102,7 +108,9 @@ const submitDelivery = async ({ payload }) => {
   <ComposeConversation
     ref="composer"
     :initial-message="initialMessage"
-    :inbox-filter="whatsappInbox"
+    :inbox-filter="supportedInbox"
+    proposal-mode
+    :proposal-url="publicUrl"
     :submit-handler="submitDelivery"
     :is-submitting="working"
     :disabled="disabled || !canSend"
@@ -120,44 +128,16 @@ const submitDelivery = async ({ payload }) => {
       </button>
     </template>
     <template #recipient-actions>
-      <div class="space-y-3 border-b border-n-weak px-4 py-3">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <p class="mb-0 text-sm text-n-slate-11">
-            {{ t('CRM.PROPOSAL_RECIPIENT.DESCRIPTION') }}
-          </p>
-          <button
-            v-if="canCreateContact"
-            type="button"
-            data-proposal-create-contact
-            :disabled="working || disabled"
-            class="rounded-xl bg-n-brand px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-            @click="contactDialog.open()"
-          >
-            {{ t('JRC_HOME.ACTIONS.CONTACT') }}
-          </button>
-        </div>
-        <p class="mb-0 text-xs text-n-slate-11">
-          {{ t('CRM.PROPOSAL_RECIPIENT.TEMPLATE_HINT') }}
-        </p>
-        <label class="block text-xs font-medium text-n-slate-11">
-          {{ t('CRM.PROPOSAL_RECIPIENT.LINK') }}
-          <input
-            :value="publicUrl"
-            readonly
-            class="mt-1 w-full rounded-lg border border-n-weak bg-n-solid-2 px-3 py-2 text-sm text-n-slate-12"
-            @focus="$event.target.select()"
-          />
-        </label>
-        <label class="block text-xs font-medium text-n-slate-11">
-          {{ t('CRM.PROPOSAL_RECIPIENT.PDF_LINK') }}
-          <input
-            :value="publicPdfUrl"
-            readonly
-            class="mt-1 w-full rounded-lg border border-n-weak bg-n-solid-2 px-3 py-2 text-sm text-n-slate-12"
-            @focus="$event.target.select()"
-          />
-        </label>
-      </div>
+      <button
+        v-if="canCreateContact"
+        type="button"
+        data-proposal-create-contact
+        :disabled="working || disabled"
+        class="ml-auto whitespace-nowrap text-sm font-semibold text-n-brand disabled:opacity-50"
+        @click="contactDialog.open()"
+      >
+        {{ t('CRM.PROPOSAL_RECIPIENT.NEW_CONTACT') }}
+      </button>
       <CreateNewContactDialog
         ref="contactDialog"
         nested-popover

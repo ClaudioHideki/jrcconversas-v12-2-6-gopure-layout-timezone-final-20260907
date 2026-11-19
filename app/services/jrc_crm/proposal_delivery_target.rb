@@ -52,7 +52,10 @@ class JrcCrm::ProposalDeliveryTarget
     message = "Olá #{contact.name}, segue sua proposta comercial JRC:" if message.blank?
     return message if message.include?(@public_url)
 
-    "#{message}\n\n#{@public_url}\n\nO PDF da proposta está anexado a esta mensagem."
+    link_message = "#{message}\n\n#{@public_url}"
+    return link_message if @delivery.key?('attach_pdf') && !ActiveModel::Type::Boolean.new.cast(@delivery['attach_pdf'])
+
+    "#{link_message}\n\nO PDF da proposta está anexado a esta mensagem."
   end
 
   private
@@ -65,9 +68,23 @@ class JrcCrm::ProposalDeliveryTarget
   end
 
   def validate_recipient!
-    raise ArgumentError, 'Selecione uma caixa WhatsApp autorizada.' unless whatsapp_inbox?
-    raise ArgumentError, 'Cadastre o telefone com código do país para enviar por WhatsApp.' if contact.phone_number.blank?
+    raise ArgumentError, 'Selecione uma caixa WhatsApp ou e-mail autorizada.' unless whatsapp_inbox? || inbox.email?
+
+    if inbox.email?
+      validate_email_recipient!
+    elsif contact.phone_number.blank?
+      raise ArgumentError, 'Cadastre o telefone com código do país para enviar por WhatsApp.'
+    end
     raise ArgumentError, 'O destinatário está bloqueado para receber mensagens.' if contact.blocked?
+  end
+
+  def validate_email_recipient!
+    raise ArgumentError, 'Cadastre o e-mail do destinatário.' if contact.email.blank?
+
+    subject = @delivery['subject'].to_s.strip
+    raise ArgumentError, 'Informe um assunto válido para o e-mail.' if subject.blank? || subject.length > 255 || subject.match?(/[\r\n]/)
+
+    raise ArgumentError, 'Modelos WhatsApp não são aplicáveis a e-mail.' if template_params.present?
   end
 
   def whatsapp_inbox?

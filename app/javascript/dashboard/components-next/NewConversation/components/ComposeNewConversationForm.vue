@@ -31,6 +31,8 @@ import CopilotReplyBottomPanel from 'dashboard/components/widgets/WootWriter/Cop
 
 const props = defineProps({
   workspace: { type: Boolean, default: false },
+  proposalMode: { type: Boolean, default: false },
+  proposalUrl: { type: String, default: '' },
   contacts: { type: Array, default: () => [] },
   contactId: { type: String, default: null },
   selectedContact: { type: Object, default: null },
@@ -135,7 +137,7 @@ const validationStates = computed(() => ({
 
 const newMessagePayload = () => {
   const { message, subject, ccEmails, bccEmails, attachedFiles } = state;
-  return prepareNewMessagePayload({
+  const payload = prepareNewMessagePayload({
     targetInbox: props.targetInbox,
     selectedContact: props.selectedContact,
     message,
@@ -146,6 +148,12 @@ const newMessagePayload = () => {
     attachedFiles,
     directUploadsEnabled: props.isDirectUploadsEnabled,
   });
+  if (props.proposalMode) {
+    payload.attachPdf = state.attachPdf;
+    if (inboxTypes.value.isEmail) payload.mailSubject = subject;
+    else delete payload.mailSubject;
+  }
+  return payload;
 };
 
 const contactableInboxesList = computed(() => {
@@ -320,7 +328,9 @@ const handleSendWhatsappMessage = async ({ message, templateParams }) => {
     currentUser: props.currentUser,
   });
   await emit('createConversation', {
-    payload: whatsappMessagePayload,
+    payload: props.proposalMode
+      ? { ...whatsappMessagePayload, attachPdf: state.attachPdf }
+      : whatsappMessagePayload,
     isFromWhatsApp: true,
   });
 };
@@ -334,7 +344,9 @@ const handleSendTwilioMessage = async ({ message, templateParams }) => {
     currentUser: props.currentUser,
   });
   await emit('createConversation', {
-    payload: twilioMessagePayload,
+    payload: props.proposalMode
+      ? { ...twilioMessagePayload, attachPdf: state.attachPdf }
+      : twilioMessagePayload,
     isFromWhatsApp: true,
   });
 };
@@ -371,13 +383,15 @@ useKeyboardEvents({
     :class="
       workspace
         ? 'h-[min(52rem,calc(100dvh-3rem))] !max-h-none !overflow-hidden !bg-n-solid-2'
-        : 'md:w-[42rem]'
+        : proposalMode
+          ? '!max-h-[calc(100dvh-3rem)] !overflow-hidden !bg-n-solid-2 md:!w-full'
+          : 'md:w-[42rem]'
     "
     class="w-full divide-y divide-n-strong overflow-visible transition-all duration-300 ease-in-out top-full flex flex-col bg-n-alpha-3 border border-n-strong shadow-sm backdrop-blur-[100px] rounded-xl min-w-0 max-h-[calc(100vh-8rem)]"
   >
     <header
-      v-if="workspace"
-      class="flex shrink-0 items-center justify-between gap-4 border-b border-n-weak bg-n-slate-2 p-5"
+      v-if="workspace || proposalMode"
+      class="flex shrink-0 items-center justify-between gap-4 border-b border-n-weak bg-n-slate-2 p-4"
     >
       <div class="flex items-center gap-3">
         <div
@@ -387,10 +401,18 @@ useKeyboardEvents({
         </div>
         <div>
           <h2 class="mb-1 text-xl font-bold text-n-slate-12">
-            {{ t('JRC_HOME.COMPOSE.TITLE') }}
+            {{
+              proposalMode
+                ? t('CRM.PROPOSAL_RECIPIENT.TITLE')
+                : t('JRC_HOME.COMPOSE.TITLE')
+            }}
           </h2>
           <p class="mb-0 text-sm text-n-slate-11">
-            {{ t('JRC_HOME.COMPOSE.DESCRIPTION') }}
+            {{
+              proposalMode
+                ? t('CRM.PROPOSAL_RECIPIENT.COMPOSE_HELP')
+                : t('JRC_HOME.COMPOSE.DESCRIPTION')
+            }}
           </p>
         </div>
       </div>
@@ -407,7 +429,9 @@ useKeyboardEvents({
       :class="
         workspace
           ? 'flex min-h-0 flex-1 flex-col overflow-y-auto xl:flex-row xl:overflow-hidden'
-          : ''
+          : proposalMode
+            ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
+            : ''
       "
     >
       <div
@@ -421,7 +445,7 @@ useKeyboardEvents({
           >
             {{ t('JRC_HOME.COMPOSE.RECIPIENT') }}
           </h3>
-          <slot name="recipient-actions" />
+          <slot v-if="!proposalMode" name="recipient-actions" />
           <ContactSelector
             :workspace="workspace"
             :contacts="contacts"
@@ -437,7 +461,11 @@ useKeyboardEvents({
             @set-selected-contact="setSelectedContact"
             @clear-selected-contact="clearSelectedContact"
             @update-dropdown="handleDropdownUpdate"
-          />
+          >
+            <template v-if="proposalMode" #actions>
+              <slot name="recipient-actions" />
+            </template>
+          </ContactSelector>
           <h3
             v-if="workspace"
             class="mb-0 px-4 pt-4 text-sm font-semibold text-n-slate-12"
@@ -483,8 +511,26 @@ useKeyboardEvents({
               /><span class="truncate">{{ inbox.label }}</span>
             </button>
           </div>
+          <div v-if="proposalMode && inboxTypes.isEmail" class="space-y-2 p-4">
+            <label
+              for="proposal-recipient-subject"
+              class="block text-sm font-semibold"
+            >
+              <span>{{
+                t('COMPOSE_NEW_CONVERSATION.FORM.EMAIL_OPTIONS.SUBJECT_LABEL')
+              }}</span>
+            </label>
+            <input
+              id="proposal-recipient-subject"
+              v-model="state.subject"
+              maxlength="255"
+              :disabled="isCreating"
+              :aria-invalid="validationStates.isSubjectInvalid"
+              class="w-full rounded-xl border border-n-weak bg-n-solid-2 p-3 text-sm"
+            />
+          </div>
           <EmailOptions
-            v-if="inboxTypes.isEmail"
+            v-else-if="inboxTypes.isEmail"
             v-model:cc-emails="state.ccEmails"
             v-model:bcc-emails="state.bccEmails"
             v-model:subject="state.subject"
@@ -504,8 +550,43 @@ useKeyboardEvents({
           >
             {{ t('JRC_HOME.COMPOSE.MESSAGE') }}
           </h3>
+          <div
+            v-if="proposalMode && shouldShowMessageEditor"
+            class="space-y-2 p-4"
+          >
+            <label
+              class="block text-sm font-semibold"
+              for="proposal-recipient-message"
+            >
+              <span>{{ t('CRM.PROPOSAL_RECIPIENT.MESSAGE_LABEL') }}</span>
+            </label>
+            <textarea
+              id="proposal-recipient-message"
+              v-model="state.message"
+              rows="5"
+              :disabled="isCreating"
+              class="min-h-28 w-full resize-y rounded-xl border border-n-weak bg-n-solid-2 p-3 text-sm text-n-slate-12"
+              :aria-invalid="validationStates.isMessageInvalid"
+            />
+            <div
+              class="flex flex-wrap items-center justify-between gap-2 text-xs text-n-slate-11"
+            >
+              <span>{{ t('CRM.PROPOSAL_RECIPIENT.LINK_HINT') }}</span>
+              <button
+                type="button"
+                :disabled="isCreating"
+                class="font-semibold text-n-brand"
+                @click="
+                  !state.message.includes(proposalUrl) &&
+                    (state.message += '\n\n' + proposalUrl)
+                "
+              >
+                {{ t('CRM.PROPOSAL_RECIPIENT.INSERT_LINK') }}
+              </button>
+            </div>
+          </div>
           <MessageEditor
-            v-if="shouldShowMessageEditor"
+            v-else-if="shouldShowMessageEditor"
             v-model="state.message"
             :message-signature="messageSignature"
             :send-with-signature="sendWithSignature"
@@ -515,6 +596,30 @@ useKeyboardEvents({
             :copilot="copilot"
           />
 
+          <label
+            v-if="proposalMode"
+            class="m-4 flex items-center gap-3 rounded-xl border border-n-weak bg-n-solid-2 p-3 text-sm"
+          >
+            <span
+              class="i-lucide-file-text size-6 text-n-brand"
+              aria-hidden="true"
+            />
+            <span class="flex-1">
+              <span class="block">{{
+                t('CRM.PROPOSAL_RECIPIENT.FILE_NAME')
+              }}</span>
+              <span class="block text-xs text-n-slate-11">{{
+                state.attachPdf
+                  ? t('CRM.PROPOSAL_RECIPIENT.WITH_PDF')
+                  : t('CRM.PROPOSAL_RECIPIENT.LINK_ONLY')
+              }}</span>
+            </span>
+            <input
+              v-model="state.attachPdf"
+              type="checkbox"
+              :disabled="isCreating"
+            />{{ t('CRM.PROPOSAL_RECIPIENT.ATTACH_PDF') }}
+          </label>
           <AttachmentPreviews
             v-if="state.attachedFiles.length > 0"
             :attachments="state.attachedFiles"
@@ -529,6 +634,40 @@ useKeyboardEvents({
           @submit="onSubmitCopilotReply"
           @cancel="copilot.reset"
         />
+        <div
+          v-else-if="
+            proposalMode &&
+            !inboxTypes.isWhatsapp &&
+            !inboxTypes.isTwilioWhatsapp
+          "
+          class="flex justify-end gap-3 border-t border-n-weak p-4"
+        >
+          <button
+            type="button"
+            :disabled="isCreating"
+            class="rounded-xl border border-n-weak px-4 py-2 text-sm"
+            @click="$emit('discard')"
+          >
+            {{ t('CRM.PROPOSAL_RECIPIENT.CANCEL') }}
+          </button>
+          <button
+            type="button"
+            :disabled="
+              isCreating ||
+              !targetInbox ||
+              !selectedContact ||
+              !state.message.trim()
+            "
+            class="rounded-xl bg-n-brand px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            @click="handleSendMessage"
+          >
+            {{
+              isCreating
+                ? t('CRM.PROPOSAL_RECIPIENT.SENDING')
+                : t('CRM.PROPOSAL_RECIPIENT.SEND')
+            }}
+          </button>
+        </div>
         <ActionButtons
           v-else
           class="shrink-0 border-t border-n-weak bg-n-solid-2"

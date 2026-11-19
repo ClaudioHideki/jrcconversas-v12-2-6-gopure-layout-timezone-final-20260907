@@ -27,3 +27,9 @@ Veja [TASKS.md](TASKS.md). Roadmaps e planos anteriores continuam válidos no se
 ## Incremento de atendimento — 2026-11-16
 
 Respostas rápidas com anexos e contexto adicionadas à trilha de evolução. Implementação e testes locais têm evidências próprias; CI, build completo, publicação e aceite com provedores continuam sendo etapas separadas. Referência: [ADR 0002](docs/adr/0002-respostas-rapidas-contextuais.md).
+
+## Incremento 2026-11-19 — Cadastro e envio no CRM
+
+- [x] Validar cadastro completo de endereço, solicitação única de aprovação e diálogo compacto de envio, preservando canais e histórico nativos.
+
+Evidências locais deste incremento: [QA CRM simplificado](docs/qa/gopure-crm-simplificado-20261119.md).

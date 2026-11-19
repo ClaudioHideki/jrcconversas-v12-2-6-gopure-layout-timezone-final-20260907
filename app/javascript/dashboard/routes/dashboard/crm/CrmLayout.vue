@@ -243,12 +243,6 @@ watch(
             </h1>
           </div>
         </div>
-        <RouterLink
-          :to="{ name: 'crm_leads', query: { new: '1' } }"
-          class="inline-flex shrink-0 items-center gap-2 rounded-xl bg-n-brand px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 focus-visible:ring-2 focus-visible:ring-n-blue-8"
-        >
-          <i class="i-lucide-plus size-4" /> Novo lead
-        </RouterLink>
       </div>
       <nav
         ref="navigationRef"

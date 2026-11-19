@@ -101,7 +101,10 @@ const handleInput = value => {
   <div class="relative flex-1 px-4 py-3 overflow-y-visible">
     <div
       class="flex w-full gap-3 min-h-7"
-      :class="workspace ? 'flex-col items-stretch' : 'items-baseline'"
+      :class="[
+        workspace ? 'flex-col items-stretch' : 'items-baseline',
+        $slots.actions ? 'flex-wrap' : '',
+      ]"
     >
       <label class="text-sm font-medium text-n-slate-11 whitespace-nowrap">
         {{ t(`${i18nPrefix}.LABEL`) }}
@@ -158,6 +161,7 @@ const handleInput = value => {
         @add="emit('setSelectedContact', $event)"
         @remove="emit('clearSelectedContact')"
       />
+      <slot name="actions" />
     </div>
   </div>
 </template>
