@@ -63,6 +63,19 @@ RSpec.describe 'Campaign connector isolation' do
     expect(delivery.reload).to be_delivered
   end
 
+  it 'keeps a Meta rejection on the official route without falling back to Evolution or Broker' do
+    expect(JrcCampaigns::EvolutionClient).not_to receive(:new)
+    expect(JrcCampaigns::EvolutionConnector).not_to receive(:for).with(inbox)
+    expect(JrcCampaigns::BrokerConnector).not_to receive(:for).with(inbox)
+    stub_request(:post, "https://graph.facebook.com/v24.0/#{channel.provider_config.fetch('phone_number_id')}/messages")
+      .to_return(status: 400, body: { error: { code: 132_012, message: 'Synthetic template rejection' } }.to_json,
+                 headers: { 'Content-Type' => 'application/json' })
+    result = JrcCampaigns::TestMessageService.new(account: account, user: user, inbox_id: inbox.id, phone_number: phone, step: step,
+                                                  operator_confirmed: true, idempotency_key: SecureRandom.uuid).perform
+    expect(result).to include(status: 'failed', connector: 'official', delivery_confirmed: false)
+    expect(WebMock).not_to have_requested(:any, /evolution|broker/)
+  end
+
   it 'fails closed instead of forwarding official campaigns to an alternate base URL' do
     expect(JrcCampaigns::EvolutionClient).not_to receive(:new)
     with_modified_env WHATSAPP_CLOUD_BASE_URL: 'https://evolution.example.test' do

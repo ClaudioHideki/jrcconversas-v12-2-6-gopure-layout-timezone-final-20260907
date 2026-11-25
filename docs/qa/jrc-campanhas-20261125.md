@@ -76,3 +76,5 @@ Atualização futura: somente após aceite/autorização, conferir SHA/checksum,
 - F: `59382b17` — interface, histórico, rótulos e teste de não regressão Meta/Evolution.
 - Os 55 arquivos Ruby passaram pelos hooks reais, sem diferenças entre fonte local e ambiente sintético. Métricas de complexidade e avisos de estilo permanecem documentados; não houve bypass ou supressão de regras.
 - O teste adicional de rótulo confirma Meta/WAMID sem rótulo Evolution, além dos testes Evolution/Broker existentes.
+
+O teste de isolamento foi ampliado para seis casos aprovados: uma rejeição HTTP 400 da Meta permanece falha oficial, sem consulta ou chamada à Evolution/Broker. A CI preliminar foi cancelada para validar o checkpoint com esse caso explícito, sem gerar/publicar imagem parcial.
