@@ -29,28 +29,39 @@ RSpec.describe Channel::Whatsapp do
   end
 
   describe 'validate_provider_config' do
-    let(:channel) { build(:channel_whatsapp, provider: 'whatsapp_cloud', account: create(:account)) }
+    let(:channel) do
+      build(:channel_whatsapp, provider: 'whatsapp_cloud', account: create(:account),
+                               provider_config: { api_key: 'test_key', phone_number_id: 'random_id', business_account_id: 'synthetic_waba' })
+    end
+
+    before do
+      setup_service = instance_double(Whatsapp::WebhookSetupService, perform: true)
+      allow(Whatsapp::WebhookSetupService).to receive(:new).with(channel, 'synthetic_waba', 'test_key').and_return(setup_service)
+    end
 
     it 'validates false when provider config is wrong' do
-      stub_request(:get, 'https://graph.facebook.com/v24.0//message_templates?access_token=test_key').to_return(status: 401)
+      stub_request(:get, 'https://graph.facebook.com/v24.0/synthetic_waba/message_templates?access_token=test_key').to_return(status: 401)
       expect(channel.save).to be(false)
     end
 
     it 'validates true when provider config is right' do
-      stub_request(:get, 'https://graph.facebook.com/v24.0//message_templates?access_token=test_key')
+      stub_request(:get, 'https://graph.facebook.com/v24.0/synthetic_waba/message_templates?access_token=test_key')
         .to_return(status: 200,
                    body: { data: [{
                      id: '123456789', name: 'test_template'
                    }] }.to_json)
-      stub_request(:get, 'https://graph.facebook.com/v24.0//phone_numbers?fields=id&limit=100&access_token=test_key')
+      stub_request(:get, 'https://graph.facebook.com/v24.0/synthetic_waba/phone_numbers?fields=id&limit=100&access_token=test_key')
         .to_return(status: 200, body: { data: [{ id: 'random_id' }] }.to_json, headers: { 'Content-Type' => 'application/json' })
+      stub_request(:get, 'https://graph.facebook.com/v24.0/synthetic_waba/message_templates?limit=100')
+        .to_return(status: 200, body: { data: [{ id: '123456789', name: 'test_template' }] }.to_json,
+                   headers: { 'Content-Type' => 'application/json' })
       expect(channel.save).to be(true)
     end
 
     it 'validates false when phone number id is wrong' do
-      stub_request(:get, 'https://graph.facebook.com/v24.0//message_templates?access_token=test_key')
+      stub_request(:get, 'https://graph.facebook.com/v24.0/synthetic_waba/message_templates?access_token=test_key')
         .to_return(status: 200, body: { data: [] }.to_json)
-      stub_request(:get, 'https://graph.facebook.com/v24.0//phone_numbers?fields=id&limit=100&access_token=test_key')
+      stub_request(:get, 'https://graph.facebook.com/v24.0/synthetic_waba/phone_numbers?fields=id&limit=100&access_token=test_key')
         .to_return(status: 200, body: { data: [{ id: 'another_phone_id' }] }.to_json, headers: { 'Content-Type' => 'application/json' })
       expect(channel.save).to be(false)
     end
