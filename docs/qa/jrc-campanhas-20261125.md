@@ -39,3 +39,40 @@ A: auditoria; B: contrato de templates, mídia e prévia; C: testes Meta e statu
 - Caso de fuso reproduzido antes da correção: seis falhas esperadas em sete testes; o legado retorna 26/11 às 08h UTC para 25/11 às 19h21 UTC.
 - Prettier de componentes de campanhas usa whitespace ignore para compatibilizar a formatação com o autofix Vue dos hooks; nenhuma regra foi desabilitada.
 - Nova migration aditiva para chave de cache de mídia. Aplicada somente no banco sintético.
+
+## Etapas C–F — rastreamento, janela e isolamento
+
+- Testes individuais oficiais persistem pedido, usuário, caixa, destinatário, template/idioma, referência de mídia, idempotência, WAMID e timestamps. HTTP aceito não é entrega; falha e resultado desconhecido não geram reenvio automático.
+- Webhooks percorrem os status e os envelopes, correlacionam por caixa e WAMID e retêm eventos antecipados para reaplicação idempotente sem envio. Conversas normais mantêm seus recibos e o lookup fica limitado à caixa.
+- Fuso IANA explícito em `sending_window.timezone`, UTC no banco e nos instantes Sidekiq. Sem alteração global de Rails ou deslocamento fixo. Janelas antigas sem fuso continuam UTC até avaliação/autorização; o script `scripts/qa/campaigns/timezone_audit.rb` apenas consulta as campanhas ativas da conta explicitamente informada.
+- Janela revalidada no job e na fronteira HTTP. Recorrência usa calendário no fuso operacional; retomada, follow-up, exportação e relatório seguem o mesmo fuso. A ponte Broker também verifica a janela antes do webhook nativo.
+- Sincronização reaproveita paginação e cache existentes e acrescenta claim concorrente por caixa. Atualização manual exibe totais, aprovações, data e erro; tokens/webhooks não são alterados.
+- Público paginado e contadores usam a mesma seleção. Prévia oficial exige finalidade `whatsapp_campaigns`, como o envio; lista QR mantém sua regra existente, sem fabricar consentimentos. Registros históricos sem finalidade não são promovidos automaticamente.
+- A API de mensagens, mídia e catálogo foi centralizada em `WHATSAPP_CLOUD_API_VERSION`, padrão v24.0. Voz mantém o caminho v22.0 separado. Fontes oficiais consultadas: [versões Graph](https://developers.facebook.com/docs/graph-api/changelog/versions/), [mídia](https://developers.facebook.com/documentation/business-messaging/whatsapp/business-phone-numbers/media), [webhooks](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/reference/messages), [coleção oficial Meta](https://www.postman.com/meta/whatsapp-business-platform/request/2qbotrb/send-message-template-media).
+- Regressão intermediária: 284 exemplos backend e 190 testes frontend sem falhas. Fixtures de envio usam janelas explicitamente abertas; o teste de resposta localiza o WAMID, preservando a ordenação por timestamp real do provedor.
+- Browser com APIs simuladas: importação automática, substituição por upload, validação sem envio, confirmação do teste, aceito sem entrega fictícia, WAMID, histórico, tabela com cinco linhas, JSON inválido bloqueado, temas claro/escuro e viewport 390×844 sem overflow horizontal. Capturas em `docs/qa/campanhas-20261125/`. Nenhum teste visual usou um canal ou celular real.
+- O teste visual revelou painéis de fundo fixo ilegíveis no tema escuro: convertidos para as classes semânticas Tailwind existentes. Rótulo oficial corrigido para Meta e WAMID exibido, preservando os rótulos Evolution/Broker nas respectivas caixas.
+- Novas migrations são aditivas (tracking de testes e eventos) e de renomeação preservadora do atributo reservado `errors`; somente o banco sintético foi migrado.
+
+### Garantia de separação Meta / Evolution
+
+Caixas `whatsapp_cloud` entram no `Channel::Whatsapp` e no `WhatsappCloudService`. Rotas de campanha/teste/catálogo não consultam a configuração Evolution/Broker para essas caixas. URL alternativa no caminho de campanhas oficial é rejeitada antes do envio, sem fallback. Caixa Evolution é `Channel::Api`, depende exclusivamente da sua configuração explícita e não pode usar templates Meta. O rastreador oficial rejeita caixas API. Testes de isolamento verificam POST oficial com imagem em teste e campanha, ausência de consulta/chamada Evolution, rejeição de URL alternativa, rastreamento por caixa e recusa de template Meta na caixa API. O endpoint oficial também é validado no provider Cloud usado pelo catálogo nativo; nenhuma alteração é aplicada ao transporte Evolution.
+
+Regressão local final antes dos hooks: 285 exemplos backend e 192 testes frontend aprovados, mais o teste explícito adicional de rótulo Meta (12 casos do arquivo, todos aprovados). A invocação inicial do frontend com a configuração genérica falhou na resolução local de fake-indexeddb; a configuração dedicada usada pela CI passou integralmente. ESLint: zero erros; 53 avisos de i18n, principalmente chaves dinâmicas e pontuação, sem desativar regras. RuboCop executado de verdade pelo hook, com correções seguras revisadas e avisos de complexidade/estilo remanescentes; não foi utilizado bypass. A CI continua pendente de envio do checkpoint.
+
+## Pendências para homologação externa
+
+Não foi efetuado envio real nem confirmado recebimento em celular. Precisam de autorização específica e ambiente Meta de teste: destinatário, evidência de consentimento, recebimento de imagem/texto/botões, WAMID real e webhook de entrega/leitura. O incidente produtivo de não entrega não pode ser atribuído exclusivamente ao formato ou à versão da API sem essas evidências.
+
+## Imagem candidata e operação
+
+CI autorizada e publicação GHCR proibida nesta etapa. O workflow recebe `publish=false` e uma tag candidata nova: executa a CI, constrói a imagem, testa Rails/Sidekiq em banco isolado e armazena um arquivo Docker comprimido como artefato de CI por três dias, com checksum e identificação do commit. Não efetua login/push GHCR. Candidata não é homologação nem atualização produtiva.
+
+Atualização futura: somente após aceite/autorização, conferir SHA/checksum, carregar a candidata e executar o procedimento aprovado do ambiente, com as migrations pendentes avaliadas. Não retomar campanhas legadas automaticamente. Rollback deve usar a imagem anterior preservada e avaliar a compatibilidade das colunas aditivas; não apagar histórico de envio ou executar reversão destrutiva de banco.
+
+## Checkpoints locais consolidados
+
+- C–E: `04bd0bee` — testes oficiais persistentes, status/webhooks, janela IANA, catálogo e isolamento de transportes.
+- F: `59382b17` — interface, histórico, rótulos e teste de não regressão Meta/Evolution.
+- Os 55 arquivos Ruby passaram pelos hooks reais, sem diferenças entre fonte local e ambiente sintético. Métricas de complexidade e avisos de estilo permanecem documentados; não houve bypass ou supressão de regras.
+- O teste adicional de rótulo confirma Meta/WAMID sem rótulo Evolution, além dos testes Evolution/Broker existentes.

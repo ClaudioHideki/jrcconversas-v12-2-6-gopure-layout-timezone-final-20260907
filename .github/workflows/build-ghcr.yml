@@ -12,7 +12,7 @@ on:
         type: boolean
         default: false
       image_tag:
-        description: Tag nova da imagem candidata (obrigatória para publicar)
+        description: Tag nova; com publish=false gera artefato de homologação sem GHCR
         type: string
         default: ''
 
@@ -53,7 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validar tag de publicação
-        if: inputs.publish
+        if: inputs.publish || inputs.image_tag != ''
         env:
           IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
@@ -98,9 +98,17 @@ jobs:
           spec/controllers/api_controller_spec.rb
           spec/controllers/super_admin/accounts_controller_spec.rb
           spec/controllers/api/v1/accounts/conversations/direct_uploads_controller_spec.rb
+          spec/services/whatsapp/csat_template_service_spec.rb
+          spec/services/whatsapp/incoming_message_whatsapp_cloud_service_spec.rb
+          spec/jobs/webhooks/whatsapp_events_job_spec.rb
+          spec/jobs/channels/whatsapp/templates_sync_job_spec.rb
+          spec/jobs/channels/whatsapp/templates_sync_scheduler_job_spec.rb
+          spec/models/channel/whatsapp_spec.rb
           spec/services/whatsapp/send_on_whatsapp_service_spec.rb
           spec/services/whatsapp/providers/whatsapp_cloud_service_spec.rb
           spec/services/whatsapp/providers/whatsapp360_dialog_service_spec.rb
+          spec/enterprise/models/inbox_spec.rb
+          spec/enterprise/services/enterprise/whatsapp/providers/whatsapp_cloud_service_spec.rb
           spec/controllers/api/v1/accounts/canned_responses_controller_spec.rb
           spec/requests/api/v1/accounts/canned_replies_workflow_spec.rb
           spec/services/canned_responses
@@ -146,7 +154,7 @@ jobs:
           app/javascript/dashboard/components-next/sidebar/specs/sections.spec.js
           app/javascript/dashboard/components-next/sidebar/specs/ServiceDeskNavigation.spec.js
           --maxWorkers=1 --minWorkers=1
-      - name: Testar selecao Evolution e confirmacao de testes
+      - name: Testar campanhas, isolamento Meta/Evolution e confirmação
         run: pnpm exec vitest run --config vitest.campaigns.config.ts
       - name: Testar interfaces e projeções de Projetos
         run: |
@@ -160,8 +168,8 @@ jobs:
         run: npm ci --include=dev && npm run build && npm test
   build-and-push:
     needs: validate
-    if: inputs.publish
-    name: Publicar ${{ matrix.component }}
+    if: inputs.publish || inputs.image_tag != ''
+    name: ${{ inputs.publish && 'Publicar' || 'Gerar candidata' }} ${{ matrix.component }}
     runs-on: ubuntu-24.04
     services:
       postgres:
@@ -195,6 +203,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Entrar no GHCR
+        if: inputs.publish
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -231,9 +240,32 @@ jobs:
           IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}
         run: bash scripts/qa/campaigns/image_smoke.sh "$IMAGE"
       - name: Publicar somente a imagem testada
+        if: inputs.publish
         env:
           IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           while IFS= read -r tag; do docker push "$tag"; done <<< "$TAGS"
           docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$IMAGE" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Exportar candidata sem publicar
+        if: ${{ !inputs.publish }}
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}
+        run: |
+          mkdir -p candidate
+          docker image inspect --format '{{.Id}}' "$IMAGE" > candidate/image-id.txt
+          docker image inspect --format '{{json .Config.Labels}}' "$IMAGE" > candidate/image-labels.json
+          docker save "$IMAGE" | zstd -T2 -3 -o candidate/image.tar.zst
+          sha256sum candidate/image.tar.zst > candidate/SHA256SUMS
+          cat candidate/image-id.txt candidate/SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
+          printf 'Commit: %s\nImagem local: %s\nPublicação GHCR: não executada\n' "$GITHUB_SHA" "$IMAGE" > candidate/README.txt
+      - name: Guardar candidata de homologação
+        if: ${{ !inputs.publish }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: jrc-campanhas-candidate-${{ github.sha }}
+          path: candidate/
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error

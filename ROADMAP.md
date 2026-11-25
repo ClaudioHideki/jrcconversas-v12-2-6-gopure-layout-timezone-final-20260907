@@ -24,6 +24,10 @@ Referência inicial: INIT solicitado pelo usuário em 2026-11-13. É uma trilha 
 
 Veja [TASKS.md](TASKS.md). Roadmaps e planos anteriores continuam válidos no seu escopo.
 
+## Incremento 2026-11-25 — JRC Campanhas
+
+Templates oficiais com mídias retidas por conta, exemplos automáticos, idempotência e rastreamento de testes Meta, fuso IANA e consistência de público/consentimentos. Evolução genérica, sem dados fixos da GoPure. Candidata de CI não representa homologação externa, publicação ou deploy. Ver [ADR 0005](docs/adr/0005-campanhas-meta-midia-timezone.md).
+
 ## Incremento de atendimento — 2026-11-16
 
 Respostas rápidas com anexos e contexto adicionadas à trilha de evolução. Implementação e testes locais têm evidências próprias; CI, build completo, publicação e aceite com provedores continuam sendo etapas separadas. Referência: [ADR 0002](docs/adr/0002-respostas-rapidas-contextuais.md).

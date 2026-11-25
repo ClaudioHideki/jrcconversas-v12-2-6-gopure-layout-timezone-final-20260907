@@ -14,3 +14,5 @@ Não marcar uma proposta como aceita sem a decisão correspondente. Preserve os 
 - [0003 — Cadastro e envio simplificado no CRM](0003-crm-cadastro-envio-simplificado.md)
 
 - [0004 — Ações de produtos](0004-acoes-de-produtos.md)
+
+- [0005 — Campanhas, templates Meta, mídia e timezone](0005-campanhas-meta-midia-timezone.md)
