@@ -2,7 +2,7 @@ class JrcCampaigns::TestMessageService
   CampaignContext = Data.define(:account)
   RecipientContext = Data.define(:campaign, :contact, :name, :phone_number, :email)
 
-  def initialize(account:, user:, delivery_channel: 'whatsapp', phone_number: nil, email: nil, inbox_id:, step:,
+  def initialize(account:, user:, inbox_id:, step:, delivery_channel: 'whatsapp', phone_number: nil, email: nil,
                  idempotency_key: nil, operator_confirmed: false)
     @account = account
     @user = user
@@ -16,9 +16,7 @@ class JrcCampaigns::TestMessageService
   end
 
   def perform
-    unless JrcCampaigns::Campaign::DELIVERY_CHANNELS.include?(delivery_channel)
-      raise ArgumentError, 'Canal de envio inválido.'
-    end
+    raise ArgumentError, 'Canal de envio inválido.' unless JrcCampaigns::Campaign::DELIVERY_CHANNELS.include?(delivery_channel)
     return send_email if delivery_channel == 'email'
 
     send_whatsapp
@@ -30,13 +28,17 @@ class JrcCampaigns::TestMessageService
 
   def send_whatsapp
     raise ArgumentError, 'Informe um número válido para o teste.' if phone_number.blank?
+
     connector = JrcCampaigns::EvolutionConnector.for(inbox)
     return send_evolution(connector) if connector
+
     broker = JrcCampaigns::BrokerConnector.for(inbox)
     if broker
       return JrcCampaigns::BrokerTestService.new(connector: broker, user: user, phone_number: phone_number,
-                                                step: %w[kind body media_url file_name media_asset_id].index_with { |key| renderer.render(effective_value(key)) },
-                                                idempotency_key: @idempotency_key, operator_confirmed: @operator_confirmed).perform
+                                                 step: %w[kind body media_url file_name media_asset_id].index_with do |key|
+                                                   renderer.render(effective_value(key))
+                                                 end,
+                                                 idempotency_key: @idempotency_key, operator_confirmed: @operator_confirmed).perform
     end
 
     raise ArgumentError, 'A caixa selecionada não é WhatsApp.' unless channel.is_a?(Channel::Whatsapp)
@@ -44,6 +46,7 @@ class JrcCampaigns::TestMessageService
     eligibility = JrcCampaigns::EligibilityPolicy.new(account: account, phone_number: phone_number)
     rejection = eligibility.rejection_reason
     raise ArgumentError, rejection if rejection
+
     eligibility.freeform_conversation!(inbox) unless step[:kind] == 'template'
 
     message_id = step[:kind] == 'template' ? send_template : send_freeform
@@ -113,21 +116,8 @@ class JrcCampaigns::TestMessageService
   end
 
   def send_template
-    raw_params = effective_value(:template_params).to_h.deep_stringify_keys
-    raw_params['name'] = effective_value(:template_name)
-    raw_params['namespace'] = effective_value(:template_namespace)
-    raw_params['language'] = effective_value(:template_language)
-    name, namespace, lang_code, parameters = Whatsapp::TemplateProcessorService.new(
-      channel: channel,
-      template_params: renderer.render(raw_params)
-    ).call
-    raise ArgumentError, 'Template não aprovado ou não encontrado na caixa selecionada.' if name.blank?
-
-    channel.send_template(
-      phone_number,
-      { name: name, namespace: namespace, lang_code: lang_code, parameters: parameters },
-      proxy
-    )
+    template_info = JrcCampaigns::TemplateConfiguration.new(inbox: inbox, step: step).payload(renderer: renderer)
+    channel.send_template(phone_number, template_info, proxy)
   end
 
   def effective_value(field)

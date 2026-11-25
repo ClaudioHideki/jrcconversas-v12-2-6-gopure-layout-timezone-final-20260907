@@ -28,3 +28,14 @@
 ## Plano de checkpoints
 
 A: auditoria; B: contrato de templates, mídia e prévia; C: testes Meta e status; D: fuso operacional; E: catálogo, público e consentimentos; F: segurança/regressão; G: CI e imagem candidata sem publicação. Registrar resultados reais em cada etapa.
+
+## Etapa B — templates e mídia
+
+- Contrato compartilhado entre teste e campanha, campos visuais de cabeçalho/corpo e URL dinâmica, bloqueio de componentes incompatíveis e JSON inválido.
+- Recuperação automática de `example.header_handle` somente do catálogo aprovado da caixa autorizada, cache por conta/caixa/template e armazenamento permanente da aplicação. Exemplo expirado solicita importação manual; nunca representa sucesso fictício.
+- Importação HTTPS pelo SafeFetch, verificação de conteúdo real, limites Meta, decodificação de imagens e rejeição de conteúdo ativo conhecido em PDF. Não equivale a antivírus universal; arquivo não é executado no servidor.
+- Prévia de mídia, cabeçalho, corpo, rodapé e botões; parâmetros ausentes bloqueiam envio. IDs de arquivo preservados no serializer.
+- Testes locais: 17 exemplos backend e 21 frontend aprovados. Fixture do fluxo oficial passou a fornecer um template realmente aprovado em vez de um nome inexistente.
+- Caso de fuso reproduzido antes da correção: seis falhas esperadas em sete testes; o legado retorna 26/11 às 08h UTC para 25/11 às 19h21 UTC.
+- Prettier de componentes de campanhas usa whitespace ignore para compatibilizar a formatação com o autofix Vue dos hooks; nenhuma regra foi desabilitada.
+- Nova migration aditiva para chave de cache de mídia. Aplicada somente no banco sintético.

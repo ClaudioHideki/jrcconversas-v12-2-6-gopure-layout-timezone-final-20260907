@@ -516,7 +516,10 @@ Rails.application.routes.draw do
                 post :import_csv
               end
             end
-            resource :metadata, only: :show, controller: :metadata
+            resource :metadata, only: :show, controller: :metadata do
+              post :template_media
+              post :sync_templates
+            end
             resources :blacklists, only: [:index, :create, :destroy]
             resources :sanitized_lists, only: [:index, :show, :create, :destroy]
             resources :media_assets, only: :create

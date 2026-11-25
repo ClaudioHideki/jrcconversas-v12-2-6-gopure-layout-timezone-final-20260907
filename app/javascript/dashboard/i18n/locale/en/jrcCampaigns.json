@@ -605,6 +605,30 @@
         "DIRECT_EVOLUTION_CONFIGURATION_REQUIRED": "Esta caixa usa a Evolution diretamente. Configure o remetente desta conta para campanhas ou migre a conexão pelo procedimento do Broker. O nome da caixa, sozinho, não autoriza disparos."
       },
       "RESULT_STATUS": "#{id} · {status}"
+    },
+    "META": {
+      "MEDIA": "Required header: {kind}",
+      "HTTPS_URL": "Public HTTPS URL",
+      "IMPORT_URL": "Import URL",
+      "UPLOADING": "Uploading and validating…",
+      "UPLOADED": "Upload complete",
+      "REMOVE": "Remove media",
+      "MEDIA_ERROR": "Could not import media. Check format, size and availability.",
+      "UNSUPPORTED": "This template contains a component not supported by campaigns. Sending is blocked.",
+      "VARIABLE": "{section} variable {variable}: fixed value or recipient field",
+      "BUTTON_VARIABLE": "URL variable: {name}",
+      "INCOMPLETE": "Required components are missing or invalid. Sending is blocked.",
+      "PREVIEW": "Template media preview",
+      "SYNC": "Update Meta templates",
+      "SYNC_FAILED": "Template update failed. The previous catalog was preserved.",
+      "SYNCED": "Last update",
+      "TIMEZONE": "Operational timezone (IANA)",
+      "CONFIRM_TEST": "Send one test from {sender} to {recipient}? Provider acceptance does not confirm delivery.",
+      "ACCEPTED": "Accepted by provider; awaiting delivery confirmation.",
+      "HELD": "Held for quality assessment.",
+      "UNKNOWN": "Unknown outcome. Automatic resend blocked.",
+      "VALIDATE": "Configuration validated without sending.",
+      "EXAMPLE_UNAVAILABLE": "The approved template example is unavailable or expired. Upload a file or import a public HTTPS URL."
     }
   }
 }

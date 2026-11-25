@@ -16,6 +16,17 @@ class Api::V1::Accounts::JrcCampaigns::MetadataController < Api::V1::Accounts::J
     }
   end
 
+  def template_media
+    inbox = Current.account.inboxes.find(params.require(:inbox_id))
+    asset = JrcCampaigns::TemplateMediaService.new(inbox: inbox, user: Current.user, name: params.require(:name),
+                                                   language: params.require(:language)).perform
+    render json: { id: asset.id, url: Rails.application.routes.url_helpers.rails_blob_url(asset.file, host: request.base_url),
+                   file_name: asset.file.filename.to_s, kind: asset.kind, byte_size: asset.file.byte_size }
+  rescue ArgumentError, Whatsapp::OutgoingMessageGuard::Error, ActiveStorage::FileNotFoundError
+    render json: { errors: ['A mídia de exemplo está indisponível ou não é compatível. Importe o arquivo manualmente.'] },
+           status: :unprocessable_entity
+  end
+
   private
 
   def source_inboxes
@@ -32,9 +43,8 @@ class Api::V1::Accounts::JrcCampaigns::MetadataController < Api::V1::Accounts::J
                connector: 'evolution', health_status: 'UNKNOWN', health_error: false, templates: [],
                min_interval_seconds: connector.min_interval_seconds, daily_limit: connector.daily_limit })
       end
-      if JrcCampaigns::BrokerConnector.candidate?(inbox)
-        next broker_inbox(inbox)
-      end
+      next broker_inbox(inbox) if JrcCampaigns::BrokerConnector.candidate?(inbox)
+
       if evolution_setup_candidate?(inbox)
         next({ id: inbox.id, name: inbox.name, provider: 'Evolution / WhatsApp QR', connector: 'evolution', templates: [],
                health_status: 'DISCONNECTED', health_error: true, setup_reason: 'DIRECT_EVOLUTION_CONFIGURATION_REQUIRED' })
@@ -70,7 +80,8 @@ class Api::V1::Accounts::JrcCampaigns::MetadataController < Api::V1::Accounts::J
     { id: inbox.id, name: inbox.name, phone_number: data&.fetch('numberSuffix', nil)&.then { |suffix| "•••• #{suffix}" },
       provider: 'Broker JRC / WhatsApp QR', connector: 'broker', health_status: data&.fetch('ready', false) ? 'CONNECTED' : 'DISCONNECTED',
       health_error: data&.fetch('ready', false) != true, templates: [], setup_reason: data&.fetch('reason', nil) || (connector ? nil : 'CONFIGURATION_REQUIRED') }
-  rescue JrcBroker::Client::Error, JrcBroker::Configuration::InvalidConfiguration, JrcBroker::CredentialStore::InvalidCredential, ActiveRecord::RecordNotFound
+  rescue JrcBroker::Client::Error, JrcBroker::Configuration::InvalidConfiguration, JrcBroker::CredentialStore::InvalidCredential,
+         ActiveRecord::RecordNotFound
     { id: inbox.id, name: inbox.name, provider: 'Broker JRC / WhatsApp QR', connector: 'broker', health_status: 'DISCONNECTED',
       health_error: true, templates: [], setup_reason: 'BROKER_UPDATE_OR_CONFIGURATION_REQUIRED' }
   end

@@ -23,6 +23,7 @@ class JrcCampaigns::DispatchStepService
       return
     end
     return if recipient.status.in?(%w[failed canceled skipped])
+
     if delivery && !delivery.queued?
       if delivery.status == 'sending' && delivery.metadata.to_h['broker_connector'] && delivery.metadata['message_id']
         JrcCampaigns::BrokerStatusJob.perform_later('campaign', delivery.id)
@@ -87,7 +88,7 @@ class JrcCampaigns::DispatchStepService
     return 'Contato bloqueado.' if recipient.contact&.reload&.blocked?
     return nil if campaign.email?
 
-    (@evolution_connector || @broker_connector) ? eligibility.list_rejection_reason : eligibility.rejection_reason
+    @evolution_connector || @broker_connector ? eligibility.list_rejection_reason : eligibility.rejection_reason
   rescue ActiveRecord::RecordInvalid => e
     e.record.errors.full_messages.join(', ')
   end
@@ -110,7 +111,7 @@ class JrcCampaigns::DispatchStepService
 
   def eligibility
     JrcCampaigns::EligibilityPolicy.new(account: campaign.account, phone_number: recipient.phone_number, contact: recipient.contact,
-                                       purpose: (@evolution_connector || @broker_connector) ? 'whatsapp_campaigns' : nil)
+                                        purpose: @evolution_connector || @broker_connector ? 'whatsapp_campaigns' : nil)
   end
 
   def skip_delivery(delivery, reason)
@@ -185,16 +186,17 @@ class JrcCampaigns::DispatchStepService
   def dispatch_broker(delivery)
     @broker_connector.ready!(campaign.created_by)
     return if defer_for_campaign_state(delivery)
+
     rejection = sending_rejection
     return skip_delivery(delivery, rejection) if rejection
 
     delivery.update!(metadata: delivery.metadata.to_h.merge('broker_connector' => @broker_connector.public_configuration))
     values = %w[kind body media_url file_name media_asset_id].index_with { |key| renderer.render(effective_value(key, step.public_send(key))) }
     message = JrcCampaigns::BrokerMessageSender.call(delivery: delivery, user: campaign.created_by, phone_number: recipient.phone_number, step: values,
-                                                    conversation_status: campaign.conversation_mode == 'open' ? 'open' : 'pending',
-                                                    attributes: { 'campaign_id' => campaign.id, 'jrc_campaign_id' => campaign.id,
-                                                                  'jrc_campaign_broker_delivery_id' => delivery.id,
-                                                                  'jrc_campaign_execution_id' => recipient.execution_id, 'jrc_campaign_step_id' => step.id })
+                                                     conversation_status: campaign.conversation_mode == 'open' ? 'open' : 'pending',
+                                                     attributes: { 'campaign_id' => campaign.id, 'jrc_campaign_id' => campaign.id,
+                                                                   'jrc_campaign_broker_delivery_id' => delivery.id,
+                                                                   'jrc_campaign_execution_id' => recipient.execution_id, 'jrc_campaign_step_id' => step.id })
     recipient.update!(contact: message.conversation.contact, conversation: message.conversation)
   end
 
@@ -271,22 +273,13 @@ class JrcCampaigns::DispatchStepService
   end
 
   def send_template(channel)
-    raw_params = effective_value('template_params', step.template_params).deep_dup
-    raw_params['name'] = effective_value('template_name', step.template_name)
-    raw_params['namespace'] = effective_value('template_namespace', step.template_namespace)
-    raw_params['language'] = effective_value('template_language', step.template_language)
-    rendered_params = renderer.render(raw_params)
-    name, namespace, lang_code, parameters = Whatsapp::TemplateProcessorService.new(
-      channel: channel,
-      template_params: rendered_params
-    ).call
-    raise 'Template não aprovado ou não encontrado na caixa selecionada' if name.blank?
+    template_info = JrcCampaigns::TemplateConfiguration.new(inbox: inbox, step: step.attributes).payload(renderer: renderer)
 
     proxy = JrcCampaigns::ProviderMessageProxy.new(kind: 'text', body: '')
     @provider_attempted = true
     external_id = channel.send_template(
       recipient.phone_number,
-      { name: name, namespace: namespace, lang_code: lang_code, parameters: parameters },
+      template_info,
       proxy
     )
     raise proxy.external_error if external_id.blank? && proxy.external_error.present?

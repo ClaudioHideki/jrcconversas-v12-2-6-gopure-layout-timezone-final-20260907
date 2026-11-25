@@ -77,8 +77,11 @@ class JrcCampaignsAPI extends ApiClient {
     return axios.post(`${this.url}/${id}/duplicate`);
   }
 
-  audiencePreview(payload) {
-    return axios.post(`${this.url}/audience_preview`, { campaign: payload });
+  audiencePreview(payload, options = {}) {
+    return axios.post(`${this.url}/audience_preview`, {
+      campaign: payload,
+      ...options,
+    });
   }
 
   analytics(params = {}) {
@@ -144,10 +147,26 @@ class JrcCampaignsAPI extends ApiClient {
     );
   }
 
-  uploadMedia(file, kind) {
+  templateMedia(inboxId, name, language) {
+    return axios.post(
+      `${super.baseUrl()}/jrc_campaigns/metadata/template_media`,
+      { inbox_id: inboxId, name, language }
+    );
+  }
+
+  importMetaMedia(url, kind) {
+    return axios.post(`${super.baseUrl()}/jrc_campaigns/media_assets`, {
+      url,
+      kind,
+      meta_template: true,
+    });
+  }
+
+  uploadMedia(file, kind, metaTemplate = false) {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('kind', kind);
+    formData.append('meta_template', String(metaTemplate));
     return axios.post(
       `${super.baseUrl()}/jrc_campaigns/media_assets`,
       formData,
