@@ -68,11 +68,15 @@ RSpec.describe 'Campaign connector isolation' do
     expect(JrcCampaigns::EvolutionConnector).not_to receive(:for).with(inbox)
     expect(JrcCampaigns::BrokerConnector).not_to receive(:for).with(inbox)
     stub_request(:post, "https://graph.facebook.com/v24.0/#{channel.provider_config.fetch('phone_number_id')}/messages")
-      .to_return(status: 400, body: { error: { code: 132_012, message: 'Synthetic template rejection' } }.to_json,
+      .to_return(status: 400, body: { error: { code: 132_012, type: 'OAuthException', message: 'private-synthetic-marker https://secret.example.test' } }.to_json,
                  headers: { 'Content-Type' => 'application/json' })
     result = JrcCampaigns::TestMessageService.new(account: account, user: user, inbox_id: inbox.id, phone_number: phone, step: step,
                                                   operator_confirmed: true, idempotency_key: SecureRandom.uuid).perform
-    expect(result).to include(status: 'failed', connector: 'official', delivery_confirmed: false)
+    expect(result).to include(status: 'failed', connector: 'official', delivery_confirmed: false, error_code: '132012')
+    record = JrcCampaigns::TestDelivery.find(result[:test_delivery_id])
+    expect(record.failed_at).to be_present
+    expect(record.metadata.dig('provider_response', 'error')).to eq('code' => '132012', 'type' => 'OAuthException')
+    expect(record.error_message).not_to include('private-synthetic-marker', 'secret.example.test')
     expect(WebMock).not_to have_requested(:any, /evolution|broker/)
   end
 

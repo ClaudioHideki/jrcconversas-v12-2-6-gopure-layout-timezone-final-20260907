@@ -78,3 +78,5 @@ Atualização futura: somente após aceite/autorização, conferir SHA/checksum,
 - O teste adicional de rótulo confirma Meta/WAMID sem rótulo Evolution, além dos testes Evolution/Broker existentes.
 
 O teste de isolamento foi ampliado para seis casos aprovados: uma rejeição HTTP 400 da Meta permanece falha oficial, sem consulta ou chamada à Evolution/Broker. A CI preliminar foi cancelada para validar o checkpoint com esse caso explícito, sem gerar/publicar imagem parcial.
+
+Rejeições imediatas agora persistem código/classificação permitidos e horário, sem corpo bruto nos logs de campanhas. O código 132012 recebe descrição segura de incompatibilidade de parâmetros; os demais recebem descrição genérica com código consultável. O tratamento nativo de mensagens comuns permanece intacto. Regressão adicional: 95 exemplos, zero falhas, incluindo Evolution, Cloud, testes oficiais e isolamento.

@@ -48,7 +48,10 @@ class JrcCampaigns::OfficialTestService
                     @inbox.channel.send_message(@phone, proxy)
                   end
     if external_id.blank?
-      @delivery.update!(status: proxy.status.to_s == 'failed' ? 'failed' : 'unknown',
+      failed = proxy.status.to_s == 'failed'
+      @delivery.update!(status: failed ? 'failed' : 'unknown', failed_at: failed ? Time.current : nil,
+                        error_code: proxy.provider_response.to_h.dig('error', 'code'),
+                        metadata: @delivery.metadata.merge('provider_response' => proxy.provider_response.to_h),
                         error_message: proxy.external_error.presence || 'Resultado desconhecido.')
     else
       held = proxy.provider_response.to_h['message_status'] == 'held_for_quality_assessment'
@@ -92,6 +95,6 @@ class JrcCampaigns::OfficialTestService
     @delivery.reload
     { test_delivery_id: @delivery.id, message_id: @delivery.external_id, inbox_id: @inbox.id, phone_number: @phone,
       status: @delivery.status, connector: 'official', delivery_channel: 'whatsapp', delivery_confirmed: @delivery.delivered_at.present?,
-      error_message: @delivery.error_message }
+      error_code: @delivery.error_code, error_message: @delivery.error_message }
   end
 end
