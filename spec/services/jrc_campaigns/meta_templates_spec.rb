@@ -82,6 +82,12 @@ RSpec.describe JrcCampaigns::TemplateConfiguration do
     end
   end
 
+  it 'omits empty legacy sections without converting valid enhanced body parameters to legacy text' do
+    params['processed_params']['buttons'] = {}
+    params['processed_params']['header'] = {}
+    expect(configuration.payload[:parameters]).to eq([{ type: 'body', parameters: [{ type: 'text', text: 'Ana' }] }])
+  end
+
   it 'validates inbox overrides rather than the default template alone' do
     step['inbox_overrides'] = { inbox.id.to_s => { 'template_name' => 'missing' } }
     expect { configuration.validate! }.to raise_error(ArgumentError, /não encontrado/)

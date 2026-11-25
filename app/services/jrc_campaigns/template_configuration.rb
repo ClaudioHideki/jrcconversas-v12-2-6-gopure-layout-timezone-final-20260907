@@ -43,6 +43,7 @@ class JrcCampaigns::TemplateConfiguration
   def payload(renderer: nil)
     validate!
     params = step.fetch('template_params', {}).deep_dup
+    params['processed_params']&.compact_blank!
     params['name'] = step['template_name']
     params['namespace'] = step['template_namespace']
     params['language'] = step['template_language']
