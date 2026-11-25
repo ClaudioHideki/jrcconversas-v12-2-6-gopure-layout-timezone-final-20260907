@@ -1,8 +1,9 @@
 class JrcCampaigns::StatusTrackerService
   VALID_STATUSES = %w[sent delivered read failed].freeze
 
-  def self.call(external_id:, status:, errors: nil)
-    delivery = JrcCampaigns::Delivery.find_by(external_id: external_id.to_s)
+  def self.call(external_id:, status:, errors: nil, inbox: nil)
+    scope = inbox ? JrcCampaigns::Delivery.where(inbox: inbox) : JrcCampaigns::Delivery.all
+    delivery = scope.find_by(external_id: external_id.to_s)
     return false unless delivery
 
     normalized_status = status.to_s

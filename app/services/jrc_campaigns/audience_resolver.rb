@@ -38,7 +38,7 @@ class JrcCampaigns::AudienceResolver
     counters = Hash.new(0)
     rejections = []
     evolution = campaign.whatsapp? && (campaign.evolution_connectors.any? || campaign.broker_connectors.any?)
-    list_preview = evolution || (campaign.new_record? && campaign.inbox_id.nil? && campaign.campaign_inboxes.empty?)
+    list_preview = evolution
     eligible = resolved.filter_map do |entry|
       normalized = normalized_entry(entry)
       destination = normalized.destination(campaign.delivery_channel)
@@ -60,7 +60,7 @@ class JrcCampaigns::AudienceResolver
 
       if campaign.whatsapp?
         policy = JrcCampaigns::EligibilityPolicy.new(account: account, phone_number: destination, contact: entry.contact,
-                                                      purpose: evolution ? 'whatsapp_campaigns' : nil)
+                                                     purpose: 'whatsapp_campaigns')
         reason = list_preview ? policy.list_rejection_reason : policy.rejection_reason
         if reason
           counters[reason == 'Telefone inválido.' ? :without_destination_count : :without_consent_count] += 1

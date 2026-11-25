@@ -10,7 +10,10 @@ RSpec.describe JrcCampaigns::TemplateConfiguration do
   let(:step) { { 'kind' => 'template', 'template_name' => 'approved', 'template_language' => 'pt_BR', 'template_params' => params } }
   let(:configuration) { described_class.new(inbox: inbox, step: step) }
 
-  before { allow(channel).to receive(:message_templates).and_return([template]) }
+  before do
+    allow(channel).to receive(:message_templates).and_return([template])
+    allow(channel).to receive(:inbox).and_return(inbox)
+  end
 
   it 'accepts approved text and preserves a positional body parameter' do
     expect(described_class.new(inbox: inbox, step: step).validate!).to eq(template)
@@ -65,5 +68,31 @@ RSpec.describe JrcCampaigns::TemplateConfiguration do
   it 'validates inbox overrides rather than the default template alone' do
     step['inbox_overrides'] = { inbox.id.to_s => { 'template_name' => 'missing' } }
     expect { configuration.validate! }.to raise_error(ArgumentError, /não encontrado/)
+  end
+
+  { 'image' => ['avatar.png', 'image/png'], 'video' => ['sample.mp4', 'video/mp4'],
+    'document' => ['sample.pdf', 'application/pdf'] }.each do |kind, file|
+    it "converts a retained #{kind} header to the provider media component" do
+      components.unshift({ 'type' => 'HEADER', 'format' => kind.upcase })
+      asset = account.jrc_campaign_media_assets.create!(kind: kind,
+                                                        file: {
+                                                          io: File.open(Rails.root.join('spec/assets',
+                                                                                        file[0])), filename: file[0], content_type: file[1]
+                                                        })
+      params['processed_params']['header'] = { 'media_type' => kind, 'media_asset_id' => asset.id }
+      payload = described_class.new(inbox: inbox, step: step).payload
+      expect(payload[:parameters].first[:parameters].first[:type]).to eq(kind)
+      expect(payload[:parameters].first[:parameters].first[kind.to_sym][:link]).to include('/rails/active_storage/')
+    end
+  end
+
+  it 'rejects a media asset from another account' do
+    components.unshift({ 'type' => 'HEADER', 'format' => 'IMAGE' })
+    other = create(:account).jrc_campaign_media_assets.create!(kind: 'image',
+                                                               file: {
+                                                                 io: File.open(Rails.root.join('spec/assets/avatar.png')), filename: 'avatar.png'
+                                                               })
+    params['processed_params']['header'] = { 'media_type' => 'image', 'media_asset_id' => other.id }
+    expect { described_class.new(inbox: inbox, step: step).payload }.to raise_error(ActiveRecord::RecordNotFound)
   end
 end

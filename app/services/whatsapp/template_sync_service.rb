@@ -1,11 +1,13 @@
 class Whatsapp::TemplateSyncService
   class Error < StandardError; end
+  class Busy < Error; end
 
   def initialize(channel)
     @channel = channel
   end
 
   def call
+    claim_sync!
     # Fetch all pages BEFORE replacing the cache. A failed page must not expose
     # a partial catalog or leave a removed template approved locally forever.
     templates = @channel.provider_service.load_templates!
@@ -14,6 +16,8 @@ class Whatsapp::TemplateSyncService
     persist_sync(templates: templates)
     @channel.inbox&.update_account_cache
     templates
+  rescue Busy
+    raise
   rescue StandardError => e
     persist_sync(error: 'Não foi possível sincronizar. Verifique as credenciais e a disponibilidade do provedor.')
     # Do not log token-bearing URLs or provider credentials.
@@ -23,10 +27,28 @@ class Whatsapp::TemplateSyncService
 
   private
 
+  def claim_sync!
+    @channel.with_lock do
+      config = @channel.provider_config.to_h.deep_dup
+      settings = config[Whatsapp::TemplateCatalogService::SETTINGS_KEY] ||= {}
+      if settings['sync_started_at'].present? && Time.iso8601(settings['sync_started_at']) > 45.minutes.ago
+        raise Busy, 'Já existe uma sincronização em andamento nesta caixa.'
+      end
+
+      @sync_id = SecureRandom.uuid
+      settings.merge!('sync_id' => @sync_id, 'sync_started_at' => Time.current.utc.iso8601, 'last_attempt_at' => Time.current.utc.iso8601)
+      @channel.update_columns(provider_config: config)
+    end
+  end
+
   def persist_sync(templates: nil, error: nil)
     @channel.with_lock do
       config = (@channel.provider_config || {}).deep_dup
       settings = config[Whatsapp::TemplateCatalogService::SETTINGS_KEY] ||= {}
+      return if settings['sync_id'] != @sync_id
+
+      settings.delete('sync_id')
+      settings.delete('sync_started_at')
       settings['last_attempt_at'] = Time.current.utc.iso8601
       settings['last_error'] = error
       columns = { provider_config: config, updated_at: Time.current }

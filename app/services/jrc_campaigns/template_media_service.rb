@@ -9,6 +9,7 @@ class JrcCampaigns::TemplateMediaService
   end
 
   def perform
+    JrcCampaigns::OfficialMetaRoute.assert!(@inbox)
     raise ArgumentError, 'Selecione uma caixa WhatsApp oficial.' unless @inbox.channel.is_a?(Channel::Whatsapp)
 
     template = Whatsapp::TemplateCatalogService.new(inbox: @inbox).find!('name' => @name, 'language' => @language)

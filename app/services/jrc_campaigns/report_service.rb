@@ -11,6 +11,7 @@ class JrcCampaigns::ReportService
     recipients = scope.offset((page - 1) * per_page).limit(per_page)
 
     {
+      timezone: campaign.sending_window['timezone'].presence || 'UTC',
       summary: summary,
       executions: campaign.executions.map { |execution| execution_json(execution) },
       recipients: recipients.map { |recipient| recipient_json(recipient) },
@@ -35,18 +36,20 @@ class JrcCampaigns::ReportService
 
   def execution_json(execution)
     execution.as_json(only: [:id, :run_number, :status, :total_count, :sent_count, :failed_count, :delivered_count, :read_count, :replied_count,
-                              :started_at, :completed_at])
+                             :started_at, :completed_at])
   end
 
   def recipient_json(recipient)
     recipient.as_json(only: [:id, :name, :phone_number, :email, :destination, :source, :status, :scheduled_at, :sent_at, :delivered_at, :read_at,
-                              :replied_at,
-                              :failed_at, :error_message]).merge(
-      contact_id: recipient.contact_id,
-      inbox_id: recipient.inbox_id,
-      inbox_name: recipient.inbox&.name,
-      deliveries: recipient.deliveries.map { |delivery| delivery.as_json(only: [:id, :step_id, :status, :external_id, :error_message, :metadata]) },
-      execution_number: recipient.execution&.run_number
-    )
+                             :replied_at,
+                             :failed_at, :error_message]).merge(
+                               contact_id: recipient.contact_id,
+                               inbox_id: recipient.inbox_id,
+                               inbox_name: recipient.inbox&.name,
+                               deliveries: recipient.deliveries.map do |delivery|
+                                 delivery.as_json(only: [:id, :step_id, :status, :external_id, :error_message, :metadata])
+                               end,
+                               execution_number: recipient.execution&.run_number
+                             )
   end
 end

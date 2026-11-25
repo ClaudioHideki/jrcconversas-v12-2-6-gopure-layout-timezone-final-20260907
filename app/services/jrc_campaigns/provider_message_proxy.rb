@@ -15,7 +15,7 @@ class JrcCampaigns::ProviderMessageProxy
     end
   end
 
-  attr_accessor :external_error, :status
+  attr_accessor :external_error, :status, :provider_response
   attr_reader :content_type, :content_attributes
 
   def initialize(kind:, body:, media_url: nil, file_name: nil)

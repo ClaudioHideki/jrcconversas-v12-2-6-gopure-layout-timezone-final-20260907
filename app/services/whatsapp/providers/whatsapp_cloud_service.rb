@@ -48,13 +48,13 @@ class Whatsapp::Providers::WhatsappCloudService < Whatsapp::Providers::BaseServi
       unless response.success? && data.is_a?(Hash) && data['data'].is_a?(Array)
         raise Whatsapp::TemplateSyncService::Error, 'Provider template request failed'
       end
+
       templates.concat(data['data'])
       return templates unless data.dig('paging', 'next').present?
 
       cursor = data.dig('paging', 'cursors', 'after')
-      if cursor.blank? || seen_cursors.include?(cursor)
-        raise Whatsapp::TemplateSyncService::Error, 'Invalid pagination cursor'
-      end
+      raise Whatsapp::TemplateSyncService::Error, 'Invalid pagination cursor' if cursor.blank? || seen_cursors.include?(cursor)
+
       seen_cursors << cursor
     end
     raise Whatsapp::TemplateSyncService::Error, 'Template catalog exceeded pagination limit'
@@ -96,7 +96,7 @@ class Whatsapp::Providers::WhatsappCloudService < Whatsapp::Providers::BaseServi
   end
 
   def media_url(media_id)
-    "#{api_base_path}/v13.0/#{media_id}"
+    "#{api_base_path}/#{Whatsapp::GraphApiVersion.current}/#{media_id}"
   end
 
   private
@@ -116,16 +116,15 @@ class Whatsapp::Providers::WhatsappCloudService < Whatsapp::Providers::BaseServi
   end
 
   def api_base_path
-    ENV.fetch('WHATSAPP_CLOUD_BASE_URL', 'https://graph.facebook.com')
+    Whatsapp::CloudApiEndpoint.base_url
   end
 
-  # TODO: See if we can unify the API versions and for both paths and make it consistent with out facebook app API versions
-  def phone_id_path(version = 'v13.0')
+  def phone_id_path(version = Whatsapp::GraphApiVersion.current)
     "#{api_base_path}/#{version}/#{whatsapp_channel.provider_config['phone_number_id']}"
   end
 
   def business_account_path
-    "#{api_base_path}/v14.0/#{whatsapp_channel.provider_config['business_account_id']}"
+    "#{api_base_path}/#{Whatsapp::GraphApiVersion.current}/#{whatsapp_channel.provider_config['business_account_id']}"
   end
 
   def send_text_message(phone_number, message)
@@ -150,7 +149,7 @@ class Whatsapp::Providers::WhatsappCloudService < Whatsapp::Providers::BaseServi
     type = %w[image audio video].include?(attachment.file_type) ? attachment.file_type : 'document'
     type_content = build_attachment_content(type, attachment, message)
     response = HTTParty.post(
-      "#{phone_id_path('v24.0')}/messages",
+      "#{phone_id_path}/messages",
       headers: api_headers,
       body: {
         :messaging_product => 'whatsapp',

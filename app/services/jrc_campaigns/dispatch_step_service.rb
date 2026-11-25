@@ -10,8 +10,8 @@ class JrcCampaigns::DispatchStepService
     @provider_attempted = false
     @accepted_external_id = nil
     @deferred_for_campaign_state = false
-    @evolution_connector = JrcCampaigns::EvolutionConnector.for(inbox)
-    @broker_connector = JrcCampaigns::BrokerConnector.for(inbox)
+    @evolution_connector = inbox.channel_type == 'Channel::Api' ? JrcCampaigns::EvolutionConnector.for(inbox) : nil
+    @broker_connector = inbox.channel_type == 'Channel::Api' ? JrcCampaigns::BrokerConnector.for(inbox) : nil
     delivery = recipient.deliveries.find_by(step: step)
     return reconcile_delivery(delivery) if delivery&.sent_at.present?
 
@@ -43,6 +43,7 @@ class JrcCampaigns::DispatchStepService
 
     rejection = sending_rejection
     return skip_delivery(delivery, rejection) if rejection
+    return if defer_for_send_window(delivery)
 
     return dispatch_broker(delivery) if @broker_connector
 
@@ -51,6 +52,10 @@ class JrcCampaigns::DispatchStepService
     raise 'O provedor não retornou o identificador da mensagem' if @accepted_external_id.blank?
 
     delivery.update!(external_id: @accepted_external_id, status: 'sent', sent_at: Time.current, error_message: nil)
+    unless @evolution_connector || @broker_connector || campaign.email?
+      JrcCampaigns::MetaStatusService.replay(inbox: inbox,
+                                             external_id: @accepted_external_id)
+    end
     JrcCampaigns::EvolutionSafetyGate.new(@evolution_connector).complete! if @evolution_connector
     reconcile_delivery(delivery)
   rescue JrcCampaigns::EvolutionSafetyGate::Throttled => e
@@ -109,6 +114,17 @@ class JrcCampaigns::DispatchStepService
     true
   end
 
+  def defer_for_send_window(delivery)
+    target = JrcCampaigns::ScheduleWindow.new(campaign).next_time(Time.current)
+    return false unless target.future?
+
+    delivery.update!(status: 'queued')
+    recipient.update!(status: 'queued', scheduled_at: target, metadata: recipient.metadata.to_h.merge('pending_step_id' => step.id))
+    JrcCampaigns::DispatchStepJob.set(wait_until: target).perform_later(recipient.id, step.id)
+    @deferred_for_campaign_state = true
+    true
+  end
+
   def eligibility
     JrcCampaigns::EligibilityPolicy.new(account: campaign.account, phone_number: recipient.phone_number, contact: recipient.contact,
                                         purpose: @evolution_connector || @broker_connector ? 'whatsapp_campaigns' : nil)
@@ -161,11 +177,12 @@ class JrcCampaigns::DispatchStepService
       return dispatch_email(delivery).fetch(:external_id)
     end
 
+    JrcCampaigns::OfficialMetaRoute.assert!(inbox)
     channel = inbox.channel
     raise 'A caixa selecionada não é WhatsApp' unless channel.is_a?(Channel::Whatsapp)
 
     if step.kind == 'template'
-      send_template(channel)
+      send_template(channel, delivery)
     else
       ensure_freeform_allowed!
       body = renderer.render(effective_value('body', step.body))
@@ -175,6 +192,8 @@ class JrcCampaigns::DispatchStepService
         media_url: effective_value('media_url', step.media_url),
         file_name: effective_value('file_name', step.file_name)
       )
+      return if defer_for_campaign_state(delivery) || defer_for_send_window(delivery)
+
       @provider_attempted = true
       external_id = channel.send_message(recipient.phone_number, proxy)
       raise proxy.external_error if external_id.blank? && proxy.external_error.present?
@@ -272,8 +291,10 @@ class JrcCampaigns::DispatchStepService
     campaign.conversation_mode == 'open' ? 'open' : 'pending'
   end
 
-  def send_template(channel)
+  def send_template(channel, delivery)
     template_info = JrcCampaigns::TemplateConfiguration.new(inbox: inbox, step: step.attributes).payload(renderer: renderer)
+
+    return if defer_for_campaign_state(delivery) || defer_for_send_window(delivery)
 
     proxy = JrcCampaigns::ProviderMessageProxy.new(kind: 'text', body: '')
     @provider_attempted = true

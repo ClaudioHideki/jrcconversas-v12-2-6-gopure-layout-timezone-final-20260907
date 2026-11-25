@@ -5,7 +5,8 @@ class Api::V1::Accounts::JrcCampaigns::CampaignsController < Api::V1::Accounts::
     render json: { error: exception.message }, status: :unprocessable_entity
   end
 
-  before_action :set_campaign, only: [:show, :update, :destroy, :launch, :pause, :resume, :cancel, :duplicate, :report, :export, :preview, :request_review, :approve]
+  before_action :set_campaign,
+                only: [:show, :update, :destroy, :launch, :pause, :resume, :cancel, :duplicate, :report, :export, :preview, :request_review, :approve]
 
   def request_review
     @campaign.request_review!
@@ -38,6 +39,15 @@ class Api::V1::Accounts::JrcCampaigns::CampaignsController < Api::V1::Accounts::
   def audience_preview
     campaign = scope.new(audience_preview_params)
     render json: audience_preview_json(campaign, recipient_preview_params)
+  end
+
+  def validate_message
+    inbox = Current.account.inboxes.find(test_message_params.fetch(:inbox_id))
+    values = test_message_params.fetch(:step).to_h
+    JrcCampaigns::TemplateConfiguration.new(inbox: inbox, step: values).payload if values['kind'] == 'template'
+    render json: { valid: true, sent: false }
+  rescue ArgumentError, KeyError, ActiveRecord::RecordNotFound => e
+    render json: { valid: false, sent: false, errors: [e.message] }, status: :unprocessable_entity
   end
 
   def test_message
@@ -149,11 +159,11 @@ class Api::V1::Accounts::JrcCampaigns::CampaignsController < Api::V1::Accounts::
           recipient.inbox&.name,
           recipient.execution&.run_number,
           recipient.status,
-          recipient.scheduled_at,
-          recipient.sent_at,
-          recipient.delivered_at,
-          recipient.read_at,
-          recipient.replied_at,
+          recipient.scheduled_at&.in_time_zone(@campaign.sending_window['timezone'].presence || 'UTC')&.iso8601,
+          recipient.sent_at&.in_time_zone(@campaign.sending_window['timezone'].presence || 'UTC')&.iso8601,
+          recipient.delivered_at&.in_time_zone(@campaign.sending_window['timezone'].presence || 'UTC')&.iso8601,
+          recipient.read_at&.in_time_zone(@campaign.sending_window['timezone'].presence || 'UTC')&.iso8601,
+          recipient.replied_at&.in_time_zone(@campaign.sending_window['timezone'].presence || 'UTC')&.iso8601,
           recipient.error_message
         ]
       end
@@ -173,7 +183,7 @@ class Api::V1::Accounts::JrcCampaigns::CampaignsController < Api::V1::Accounts::
 
   def audience_preview_params
     params.require(:campaign).permit(:audience_type, :delivery_channel, :inbox_id,
-                                    campaign_inboxes_attributes: [:inbox_id, :enabled, :position], audience_config: {})
+                                     campaign_inboxes_attributes: [:inbox_id, :enabled, :position], audience_config: {})
   end
 
   def test_message_params

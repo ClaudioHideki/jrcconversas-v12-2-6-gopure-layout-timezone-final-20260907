@@ -44,24 +44,22 @@ class Whatsapp::IncomingMessageBaseService
       set_conversation
       create_messages
     end
-    unless outgoing_echo
-      JrcCampaigns::ReplyTrackerService.call(contact: @contact, inbox: @inbox, conversation: @conversation)
-    end
+    return if outgoing_echo
+
+    JrcCampaigns::ReplyTrackerService.call(contact: @contact, inbox: @inbox, conversation: @conversation)
   end
 
   def process_statuses
-    status = @processed_params[:statuses].first
-    JrcCampaigns::StatusTrackerService.call(
-      external_id: status[:id],
-      status: status[:status],
-      errors: status[:errors]
-    )
-    return unless find_message_by_source_id(status[:id])
+    @processed_params[:statuses].each do |status|
+      JrcCampaigns::MetaStatusService.record(inbox: inbox, external_id: status[:id], status: status[:status],
+                                             errors: status[:errors], timestamp: status[:timestamp])
+      next unless find_message_by_source_id(status[:id])
 
-    update_whatsapp_identifiers_from_status(status)
-    update_message_with_status(@message, status)
-  rescue ArgumentError => e
-    Rails.logger.error "Error while processing whatsapp status update #{e.message}"
+      update_whatsapp_identifiers_from_status(status)
+      update_message_with_status(@message, status)
+    rescue ArgumentError => e
+      Rails.logger.warn("[WHATSAPP_STATUS] inbox_id=#{inbox.id} error_class=#{e.class}")
+    end
   end
 
   def update_message_with_status(message, status)

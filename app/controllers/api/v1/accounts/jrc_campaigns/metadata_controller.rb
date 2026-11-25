@@ -3,6 +3,8 @@ class Api::V1::Accounts::JrcCampaigns::MetadataController < Api::V1::Accounts::J
     whatsapp = whatsapp_inboxes
     render json: {
       account_name: Current.account.name,
+      timezone: Current.account.reporting_timezone.presence || 'UTC',
+      timezones: TZInfo::Timezone.all_identifiers,
       contacts_count: Current.account.contacts.where.not(phone_number: [nil, '']).count,
       email_contacts_count: Current.account.contacts.where.not(email: [nil, '']).count,
       source_inboxes: source_inboxes,
@@ -14,6 +16,20 @@ class Api::V1::Accounts::JrcCampaigns::MetadataController < Api::V1::Accounts::J
       sanitized_lists: Current.account.jrc_campaign_sanitized_lists.order(created_at: :desc).map { |list| sanitized_list_json(list) },
       blacklist_count: Current.account.jrc_campaign_blacklists.count
     }
+  end
+
+  def sync_templates
+    inbox = Current.account.inboxes.find(params.require(:inbox_id))
+    unless inbox.channel.is_a?(Channel::Whatsapp) && inbox.channel.provider == 'whatsapp_cloud'
+      raise ArgumentError,
+            'Selecione uma caixa WhatsApp oficial Meta.'
+    end
+
+    JrcCampaigns::OfficialMetaRoute.assert!(inbox)
+    inbox.channel.sync_templates
+    show
+  rescue ArgumentError, Whatsapp::TemplateSyncService::Error => e
+    render json: { errors: [e.message] }, status: :unprocessable_entity
   end
 
   def template_media
@@ -37,13 +53,13 @@ class Api::V1::Accounts::JrcCampaigns::MetadataController < Api::V1::Accounts::J
 
   def whatsapp_inboxes
     Current.account.inboxes.includes(:channel).filter_map do |inbox|
-      connector = JrcCampaigns::EvolutionConnector.for(inbox)
+      connector = JrcCampaigns::EvolutionConnector.for(inbox) if inbox.channel_type == 'Channel::Api'
       if connector
         next({ id: inbox.id, name: inbox.name, phone_number: connector.sender_number, provider: 'Evolution Demo',
                connector: 'evolution', health_status: 'UNKNOWN', health_error: false, templates: [],
                min_interval_seconds: connector.min_interval_seconds, daily_limit: connector.daily_limit })
       end
-      next broker_inbox(inbox) if JrcCampaigns::BrokerConnector.candidate?(inbox)
+      next broker_inbox(inbox) if inbox.channel_type == 'Channel::Api' && JrcCampaigns::BrokerConnector.candidate?(inbox)
 
       if evolution_setup_candidate?(inbox)
         next({ id: inbox.id, name: inbox.name, provider: 'Evolution / WhatsApp QR', connector: 'evolution', templates: [],
@@ -60,6 +76,10 @@ class Api::V1::Accounts::JrcCampaigns::MetadataController < Api::V1::Accounts::J
         health_status: channel.phone_number_health.to_h['status'],
         health_error: channel.phone_number_health_error.present?,
         health_checked_at: channel.phone_number_health_checked_at,
+        template_sync: { last_success_at: channel.message_templates_last_updated, total: Array(channel.message_templates).size,
+                         approved: Array(channel.message_templates).count { |template| template['status'].to_s.casecmp?('approved') },
+                         last_error: channel.provider_config.to_h.dig('jrc_template_settings', 'last_error'),
+                         in_progress: channel.provider_config.to_h.dig('jrc_template_settings', 'sync_started_at').present? },
         templates: Array(channel.message_templates).select { |template| template['status'].to_s.casecmp('approved').zero? }
       }
     end

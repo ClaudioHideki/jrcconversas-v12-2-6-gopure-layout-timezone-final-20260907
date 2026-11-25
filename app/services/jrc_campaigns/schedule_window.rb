@@ -4,13 +4,26 @@ class JrcCampaigns::ScheduleWindow
   end
 
   def next_time(base_time)
-    time = base_time.in_time_zone
-    14.times do
-      return within_day(time) if allowed_day?(time) && before_end?(time)
+    zone = ActiveSupport::TimeZone[config[:timezone].presence || 'UTC']
+    raise ArgumentError, 'Fuso operacional inválido.' unless zone
 
-      time = (time + 1.day).beginning_of_day
+    days = Array(config[:days]).map(&:to_i)
+    clock = /\A(?:[01]\d|2[0-3]):[0-5]\d\z/
+    unless days.any? && days.all? { |day| day.between?(0, 6) } && config[:start].to_s.match?(clock) &&
+           config[:end].to_s.match?(clock) && config[:start] < config[:end]
+      raise ArgumentError, 'Janela de envio inválida; nenhum disparo foi autorizado.'
     end
-    base_time
+
+    time = base_time.in_time_zone(zone)
+    8.times do
+      start_time = zone.parse("#{time.to_date} #{config[:start]}")
+      end_time = zone.parse("#{time.to_date} #{config[:end]}")
+      candidate = [time, start_time].max
+      return candidate.utc if allowed_day?(time) && candidate < end_time
+
+      time = time.advance(days: 1).beginning_of_day
+    end
+    raise ArgumentError, 'Nenhuma janela de envio válida encontrada.'
   end
 
   private
@@ -23,15 +36,5 @@ class JrcCampaigns::ScheduleWindow
 
   def allowed_day?(time)
     Array(config[:days]).map(&:to_i).include?(time.wday)
-  end
-
-  def within_day(time)
-    start_time = Time.zone.parse("#{time.to_date} #{config[:start].presence || '00:00'}")
-    [time, start_time].max
-  end
-
-  def before_end?(time)
-    end_time = Time.zone.parse("#{time.to_date} #{config[:end].presence || '23:59'}")
-    time <= end_time
   end
 end

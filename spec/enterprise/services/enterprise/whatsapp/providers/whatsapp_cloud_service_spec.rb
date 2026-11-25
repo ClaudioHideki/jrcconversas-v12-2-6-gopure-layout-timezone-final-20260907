@@ -7,7 +7,7 @@ describe Whatsapp::Providers::WhatsappCloudService do
     create(:channel_whatsapp, provider: 'whatsapp_cloud', validate_provider_config: false, sync_templates: false)
   end
   # Call-flow endpoints use the configured WHATSAPP_API_VERSION (fallback v22.0),
-  # not the OSS v13.0 path locked for legacy /messages compatibility.
+  # not the OSS v24.0 path locked for legacy /messages compatibility.
   let(:calls_url) { 'https://graph.facebook.com/v22.0/123456789/calls' }
   let(:messages_url) { 'https://graph.facebook.com/v22.0/123456789/messages' }
   let(:permissions_url) { 'https://graph.facebook.com/v22.0/123456789/call_permissions' }

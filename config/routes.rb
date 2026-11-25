@@ -528,6 +528,7 @@ Rails.application.routes.draw do
                 post :audience_preview
                 get :analytics
                 post :test_message
+                post :validate_message
               end
               member do
                 post :launch

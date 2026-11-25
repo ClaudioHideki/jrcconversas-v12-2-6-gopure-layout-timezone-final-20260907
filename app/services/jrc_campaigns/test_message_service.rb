@@ -29,10 +29,10 @@ class JrcCampaigns::TestMessageService
   def send_whatsapp
     raise ArgumentError, 'Informe um número válido para o teste.' if phone_number.blank?
 
-    connector = JrcCampaigns::EvolutionConnector.for(inbox)
+    connector = JrcCampaigns::EvolutionConnector.for(inbox) if inbox.channel_type == 'Channel::Api'
     return send_evolution(connector) if connector
 
-    broker = JrcCampaigns::BrokerConnector.for(inbox)
+    broker = JrcCampaigns::BrokerConnector.for(inbox) if inbox.channel_type == 'Channel::Api'
     if broker
       return JrcCampaigns::BrokerTestService.new(connector: broker, user: user, phone_number: phone_number,
                                                  step: %w[kind body media_url file_name media_asset_id].index_with do |key|
@@ -43,16 +43,10 @@ class JrcCampaigns::TestMessageService
 
     raise ArgumentError, 'A caixa selecionada não é WhatsApp.' unless channel.is_a?(Channel::Whatsapp)
 
-    eligibility = JrcCampaigns::EligibilityPolicy.new(account: account, phone_number: phone_number)
-    rejection = eligibility.rejection_reason
-    raise ArgumentError, rejection if rejection
-
-    eligibility.freeform_conversation!(inbox) unless step[:kind] == 'template'
-
-    message_id = step[:kind] == 'template' ? send_template : send_freeform
-    raise StandardError, proxy.external_error.presence || 'O provedor não confirmou o envio do teste.' if message_id.blank?
-
-    { message_id: message_id, inbox_id: inbox.id, phone_number: phone_number, delivery_channel: 'whatsapp' }
+    values = step.deep_stringify_keys
+    values.merge!(values.fetch('inbox_overrides', {}).fetch(inbox.id.to_s, {}))
+    JrcCampaigns::OfficialTestService.new(inbox: inbox, user: user, phone_number: phone_number, step: values, renderer: renderer,
+                                          idempotency_key: @idempotency_key, operator_confirmed: @operator_confirmed).perform
   end
 
   def send_email
@@ -100,24 +94,6 @@ class JrcCampaigns::TestMessageService
       email: email
     )
     @renderer ||= JrcCampaigns::TemplateRenderer.new(recipient: recipient, inbox: inbox)
-  end
-
-  def proxy
-    @proxy ||= JrcCampaigns::ProviderMessageProxy.new(
-      kind: step[:kind],
-      body: renderer.render(effective_value(:body)),
-      media_url: effective_value(:media_url),
-      file_name: effective_value(:file_name)
-    )
-  end
-
-  def send_freeform
-    channel.send_message(phone_number, proxy)
-  end
-
-  def send_template
-    template_info = JrcCampaigns::TemplateConfiguration.new(inbox: inbox, step: step).payload(renderer: renderer)
-    channel.send_template(phone_number, template_info, proxy)
   end
 
   def effective_value(field)

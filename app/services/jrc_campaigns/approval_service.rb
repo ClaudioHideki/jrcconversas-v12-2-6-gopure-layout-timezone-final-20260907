@@ -12,6 +12,8 @@ class JrcCampaigns::ApprovalService
     campaign.with_lock do
       reject!('A revisão exige campanha em rascunho ou agendada.') unless campaign.editable?
       campaign.ensure_sender_compatibility!
+      @include_meta_definitions = true
+      validate_templates!
       snapshot = {
         'configuration' => configuration,
         'recipients' => JrcCampaigns::AudienceResolver.new(campaign).entries.map do |entry|
@@ -55,6 +57,8 @@ class JrcCampaigns::ApprovalService
   def current_review?
     snapshot = campaign.review_snapshot
     snapshot.present? && snapshot['configuration'] == configuration && digest(snapshot) == campaign.review_digest
+  rescue ArgumentError, ActiveRecord::RecordNotFound
+    false
   end
 
   def configuration
@@ -70,7 +74,26 @@ class JrcCampaigns::ApprovalService
         connector.public_configuration.merge('identity_revision' => connector.transport(campaign.created_by).fetch('identityRevision'))
       end
     end
+    if @include_meta_definitions || campaign.review_snapshot.to_h.dig('configuration', 'meta_templates')
+      result['meta_templates'] = campaign.sending_inbox_links.filter_map do |link|
+        next unless link.inbox.channel.is_a?(Channel::Whatsapp)
+
+        { 'inbox_id' => link.inbox.id, 'definitions' => campaign.steps.select { |step| step.kind == 'template' }.map do |step|
+          JrcCampaigns::TemplateConfiguration.new(inbox: link.inbox, step: step.attributes).validate!
+        end }
+      end
+    end
     result
+  end
+
+  def validate_templates!
+    campaign.sending_inbox_links.each do |link|
+      campaign.steps.select { |step| step.kind == 'template' }.each do |step|
+        JrcCampaigns::TemplateConfiguration.new(inbox: link.inbox, step: step.attributes).payload
+      rescue ArgumentError, ActiveRecord::RecordNotFound => e
+        reject!(e.message)
+      end
+    end
   end
 
   def digest(value)

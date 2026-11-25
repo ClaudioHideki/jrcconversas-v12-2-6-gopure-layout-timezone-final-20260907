@@ -39,6 +39,30 @@ class JrcBroker::WebhookDelivery
     [408, 425, 429].include?(status) || (500..599).cover?(status)
   end
 
+  def defer_campaign!(url:, payload:, webhook_type:, secret:, delivery_id:)
+    id = @message.additional_attributes.to_h['jrc_campaign_broker_delivery_id']
+    return false unless id
+
+    delivery = JrcCampaigns::Delivery.find_by!(id: id, inbox_id: @message.inbox_id)
+    raise ContextChanged unless delivery.metadata['message_id'] == @message.id && delivery.inbox.account_id == @message.account_id
+
+    campaign = delivery.recipient.campaign.reload
+    if campaign.canceled?
+      Messages::StatusUpdateService.new(@message, 'failed', 'Campanha cancelada antes do envio.').perform
+      return true
+    end
+    campaign.ensure_approved!
+    reason = JrcCampaigns::EligibilityPolicy.new(account: campaign.account, phone_number: delivery.recipient.phone_number,
+                                                 contact: delivery.recipient.contact, purpose: 'whatsapp_campaigns').list_rejection_reason
+    raise ContextChanged if reason
+
+    target = JrcCampaigns::ScheduleWindow.new(campaign).next_time(campaign.paused? ? 5.minutes.from_now : Time.current)
+    return false unless campaign.paused? || target.future?
+
+    WebhookJob.set(wait_until: target).perform_later(url, payload, webhook_type, secret: secret, delivery_id: delivery_id)
+    true
+  end
+
   def handle_failure(error)
     code = if error.is_a?(Unavailable) || error.is_a?(ContextChanged)
              error.message

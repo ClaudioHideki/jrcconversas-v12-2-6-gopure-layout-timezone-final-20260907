@@ -170,11 +170,15 @@ class JrcCampaigns::Campaign < ApplicationRecord
   end
 
   def evolution_connectors
-    sending_inbox_links.filter_map { |link| JrcCampaigns::EvolutionConnector.for(link.inbox) }
+    sending_inbox_links.select do |link|
+      link.inbox.channel_type == 'Channel::Api'
+    end.filter_map { |link| JrcCampaigns::EvolutionConnector.for(link.inbox) }
   end
 
   def broker_connectors
-    sending_inbox_links.filter_map { |link| JrcCampaigns::BrokerConnector.for(link.inbox) }
+    sending_inbox_links.select do |link|
+      link.inbox.channel_type == 'Channel::Api'
+    end.filter_map { |link| JrcCampaigns::BrokerConnector.for(link.inbox) }
   end
 
   def ensure_sender_compatibility!
@@ -183,11 +187,11 @@ class JrcCampaigns::Campaign < ApplicationRecord
     brokers = broker_connectors
     reason = if invalid
                'Caixa remetente não autorizada para esta conta e canal.'
-               elsif brokers.any? && sending_inbox_links.size != brokers.size
-                 'Use campanhas separadas para Broker, Evolution e WhatsApp oficial.'
+             elsif brokers.any? && sending_inbox_links.size != brokers.size
+               'Use campanhas separadas para Broker, Evolution e WhatsApp oficial.'
              elsif connectors.any? && sending_inbox_links.size != connectors.size
                'Use campanhas separadas para Evolution Demo e WhatsApp oficial.'
-               elsif (connectors.any? || brokers.any?) && steps.any? { |step| step.kind == 'template' }
+             elsif (connectors.any? || brokers.any?) && steps.any? { |step| step.kind == 'template' }
                'Templates Meta exigem uma caixa WhatsApp oficial.'
              elsif connectors.any? && delay_min_seconds < connectors.map(&:min_interval_seconds).max
                'O intervalo da campanha Evolution deve respeitar o mínimo configurado para a caixa.'
@@ -235,7 +239,6 @@ class JrcCampaigns::Campaign < ApplicationRecord
     errors.add(:inbox, 'deve pertencer à mesma conta') if inbox && inbox.account_id != account_id
   end
 
-
   def ensure_status!(*allowed)
     return if status.in?(allowed)
 
@@ -252,6 +255,13 @@ class JrcCampaigns::Campaign < ApplicationRecord
 
   def sending_window_is_valid
     window = sending_window.to_h.with_indifferent_access
+    if window[:timezone].present?
+      begin
+        TZInfo::Timezone.get(window[:timezone])
+      rescue TZInfo::InvalidTimezoneIdentifier
+        errors.add(:sending_window, 'deve usar um identificador IANA de fuso horário válido')
+      end
+    end
     days = Array(window[:days]).map(&:to_i)
     errors.add(:sending_window, 'deve ter pelo menos um dia permitido') if days.empty?
     errors.add(:sending_window, 'contém um dia inválido') if days.any? { |day| !day.between?(0, 6) }
@@ -275,9 +285,9 @@ class JrcCampaigns::Campaign < ApplicationRecord
       return
     end
 
-    if kind == 'custom' && config[:interval_days].to_i <= 0
-      errors.add(:recurrence_config, 'deve informar um intervalo em dias maior que zero')
-    end
+    return unless kind == 'custom' && config[:interval_days].to_i <= 0
+
+    errors.add(:recurrence_config, 'deve informar um intervalo em dias maior que zero')
   end
 
   def audience_changed?

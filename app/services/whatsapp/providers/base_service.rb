@@ -33,6 +33,9 @@ class Whatsapp::Providers::BaseService
 
   def process_response(response, message)
     parsed_response = response.parsed_response
+    if message.respond_to?(:provider_response=)
+      message.provider_response = parsed_response.is_a?(Hash) ? Array(parsed_response['messages']).first.to_h.slice('message_status') : {}
+    end
     if response.success? && parsed_response['error'].blank?
       parsed_response['messages'].first['id']
     else

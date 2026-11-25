@@ -11,6 +11,7 @@ class JrcCampaigns::TemplateConfiguration
   end
 
   def validate!
+    JrcCampaigns::OfficialMetaRoute.assert!(inbox)
     raise ArgumentError, 'Template Meta exige uma caixa WhatsApp oficial.' unless inbox.channel.is_a?(Channel::Whatsapp)
 
     template = Array(inbox.channel.message_templates).find do |item|
@@ -40,7 +41,16 @@ class JrcCampaigns::TemplateConfiguration
     params['name'] = step['template_name']
     params['namespace'] = step['template_namespace']
     params['language'] = step['template_language']
+    # Positional components are ordered by parameter number, not JSON insertion order.
+    %w[header body].each do |section|
+      data = params.dig('processed_params', section)
+      next unless data.is_a?(Hash) && data.keys.all? { |key| key.match?(/\A\d+\z/) }
+
+      params['processed_params'][section] = data.sort_by { |key, _| key.to_i }.to_h
+    end
     params = renderer.render(params) if renderer
+    self.class.new(inbox: inbox, step: step.merge('template_params' => params)).validate!
+
     header = params.dig('processed_params', 'header')
     if header && MEDIA_TYPES.include?(header['media_type'])
       asset_id = header.delete('media_asset_id') || step['media_asset_id']

@@ -1,7 +1,7 @@
 class Whatsapp::CsatTemplateService
   DEFAULT_BUTTON_TEXT = 'Please rate us'.freeze
   DEFAULT_LANGUAGE = 'en'.freeze
-  WHATSAPP_API_VERSION = 'v14.0'.freeze
+  WHATSAPP_API_VERSION = Whatsapp::GraphApiVersion.current.freeze
   TEMPLATE_CATEGORY = 'UTILITY'.freeze
   TEMPLATE_STATUS_PENDING = 'PENDING'.freeze
 
@@ -134,6 +134,6 @@ class Whatsapp::CsatTemplateService
   end
 
   def api_base_path
-    ENV.fetch('WHATSAPP_CLOUD_BASE_URL', 'https://graph.facebook.com')
+    Whatsapp::CloudApiEndpoint.base_url
   end
 end
