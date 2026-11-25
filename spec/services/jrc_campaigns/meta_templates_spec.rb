@@ -65,6 +65,23 @@ RSpec.describe JrcCampaigns::TemplateConfiguration do
     expect(described_class.new(inbox: inbox, step: step).validate!).to eq(template)
   end
 
+  { 'header' => { '1' => 'unexpected' }, 'buttons' => [{ 'type' => 'url', 'parameter' => 'unexpected' }] }.each do |key, value|
+    it "rejects parameters for an absent #{key} component" do
+      params['processed_params'][key] = value
+      expect { configuration.validate! }.to raise_error(ArgumentError, /não existe/)
+    end
+  end
+
+  [nil, {}].each do |placeholder|
+    it "preserves the effective dynamic URL index after a fixed button with #{placeholder.inspect}" do
+      components << { 'type' => 'BUTTONS', 'buttons' => [{ 'type' => 'PHONE_NUMBER' }, { 'type' => 'URL', 'url' => 'https://example.test/{{1}}' }] }
+      params['processed_params']['buttons'] = [placeholder, { 'type' => 'url', 'parameter' => 'order-1' }]
+      payload = configuration.payload
+      button = payload[:parameters].find { |item| item[:type] == 'button' }
+      expect(button).to include(index: 1, sub_type: 'url', parameters: [{ type: 'text', text: 'order-1' }])
+    end
+  end
+
   it 'validates inbox overrides rather than the default template alone' do
     step['inbox_overrides'] = { inbox.id.to_s => { 'template_name' => 'missing' } }
     expect { configuration.validate! }.to raise_error(ArgumentError, /não encontrado/)

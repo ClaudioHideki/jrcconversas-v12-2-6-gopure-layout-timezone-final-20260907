@@ -29,6 +29,11 @@ class JrcCampaigns::TemplateConfiguration
     raise ArgumentError, 'processed_params deve ser um objeto JSON.' unless processed.is_a?(Hash)
     raise ArgumentError, 'Componente de parâmetros não suportado.' if (processed.keys - %w[header body buttons]).any?
 
+    sections = Array(template['components']).map { |component| component['type'].to_s.downcase }
+    processed.each do |key, value|
+      raise ArgumentError, "O componente #{key} não existe no template aprovado." if value.present? && !sections.include?(key)
+    end
+
     Array(template['components']).each { |component| validate_component!(component) }
     template
   end

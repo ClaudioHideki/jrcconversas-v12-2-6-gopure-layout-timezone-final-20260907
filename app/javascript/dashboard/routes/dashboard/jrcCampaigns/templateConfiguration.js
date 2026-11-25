@@ -28,6 +28,17 @@ export const templateErrors = (template, params) => {
     return ['JSON'];
   const errors = [];
   const parts = templateParts(template);
+  const sections = (template.components || []).map(component =>
+    component.type?.toLowerCase()
+  );
+  Object.entries(processed).forEach(([key, value]) => {
+    const populated = value && Object.keys(value).length > 0;
+    if (
+      !['header', 'body', 'buttons'].includes(key) ||
+      (populated && !sections.includes(key))
+    )
+      errors.push('JSON');
+  });
   (template.components || []).forEach(component => {
     if (
       !['HEADER', 'BODY', 'FOOTER', 'BUTTONS'].includes(

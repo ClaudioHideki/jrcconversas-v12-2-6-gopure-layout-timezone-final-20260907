@@ -59,6 +59,20 @@ describe('Meta campaign template configuration', () => {
       })
     ).toEqual([]);
   });
+  it.each(['header', 'buttons'])(
+    'blocks an absent %s component in advanced JSON',
+    key => {
+      const definition = {
+        status: 'APPROVED',
+        components: [{ type: 'BODY', text: 'Hello' }],
+      };
+      expect(
+        templateErrors(definition, {
+          processed_params: { [key]: { unexpected: 'value' } },
+        })
+      ).toContain('JSON');
+    }
+  );
   it('blocks unsupported components and paused templates', () => {
     expect(
       templateErrors({ ...template, components: [{ type: 'CAROUSEL' }] }, {})

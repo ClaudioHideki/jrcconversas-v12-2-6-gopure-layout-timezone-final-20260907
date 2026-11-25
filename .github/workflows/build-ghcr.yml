@@ -105,6 +105,7 @@ jobs:
           spec/jobs/channels/whatsapp/templates_sync_scheduler_job_spec.rb
           spec/models/channel/whatsapp_spec.rb
           spec/services/whatsapp/send_on_whatsapp_service_spec.rb
+          spec/services/whatsapp/template_parameter_converter_service_spec.rb
           spec/services/whatsapp/providers/whatsapp_cloud_service_spec.rb
           spec/services/whatsapp/providers/whatsapp360_dialog_service_spec.rb
           spec/enterprise/models/inbox_spec.rb
