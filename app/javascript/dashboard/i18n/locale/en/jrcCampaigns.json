@@ -628,7 +628,13 @@
       "HELD": "Held for quality assessment.",
       "UNKNOWN": "Unknown outcome. Automatic resend blocked.",
       "VALIDATE": "Configuration validated without sending.",
-      "EXAMPLE_UNAVAILABLE": "The approved template example is unavailable or expired. Upload a file or import a public HTTPS URL."
+      "EXAMPLE_UNAVAILABLE": "The approved template example is unavailable or expired. Upload a file or import a public HTTPS URL.",
+      "HISTORY": "Test history",
+      "REFRESH": "Refresh status",
+      "ACCEPTED_AT": "Accepted",
+      "DELIVERED_AT": "Delivered",
+      "READ_AT": "Read",
+      "TEST_RESULT": "Meta test result"
     }
   }
 }

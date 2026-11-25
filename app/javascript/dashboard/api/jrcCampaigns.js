@@ -88,8 +88,18 @@ class JrcCampaignsAPI extends ApiClient {
     return axios.get(`${this.url}/analytics`, { params });
   }
 
+  validateMessage(payload) {
+    return axios.post(`${this.url}/validate_message`, {
+      test_message: payload,
+    });
+  }
+
   testMessage(payload) {
     return axios.post(`${this.url}/test_message`, { test_message: payload });
+  }
+
+  testDeliveries() {
+    return axios.get(`${super.baseUrl()}/jrc_campaigns/test_deliveries`);
   }
 
   testDelivery(id) {
@@ -144,6 +154,13 @@ class JrcCampaignsAPI extends ApiClient {
   deleteSanitizedList(id) {
     return axios.delete(
       `${super.baseUrl()}/jrc_campaigns/sanitized_lists/${id}`
+    );
+  }
+
+  syncTemplates(inboxId) {
+    return axios.post(
+      `${super.baseUrl()}/jrc_campaigns/metadata/sync_templates`,
+      { inbox_id: inboxId }
     );
   }
 

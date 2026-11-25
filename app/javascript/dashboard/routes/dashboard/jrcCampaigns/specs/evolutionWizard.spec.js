@@ -87,9 +87,9 @@ describe('Evolution campaign test confirmation', () => {
     };
     wrapper.vm.stepIndex = 2;
     await flushPromises();
-    const mediaLabel = wrapper.findAll('label').find(label =>
-      label.text().includes('JRC_CAMPAIGNS.WIZARD.MEDIA_URL')
-    );
+    const mediaLabel = wrapper
+      .findAll('label')
+      .find(label => label.text().includes('JRC_CAMPAIGNS.WIZARD.MEDIA_URL'));
     await mediaLabel.find('input').setValue('https://gopure.example/new-image');
     expect(wrapper.vm.form.steps[0].media_asset_id).toBeNull();
     expect(api.testMessage).not.toHaveBeenCalled();
@@ -199,6 +199,30 @@ describe('Evolution campaign test confirmation', () => {
     );
     await flushPromises();
     expect(wrapper.text()).toContain('JRC_CAMPAIGNS.EVOLUTION.TEST_RESULT');
+  });
+
+  it('labels a Cloud test as Meta and never as Evolution', async () => {
+    await wrapper.setProps({
+      metadata: {
+        whatsapp_inboxes: [
+          { id: 8, name: 'Synthetic Meta', connector: 'official' },
+        ],
+      },
+    });
+    api.testMessage.mockResolvedValue({
+      data: {
+        test_delivery_id: 18,
+        message_id: 'wamid.synthetic',
+        status: 'accepted',
+        connector: 'official',
+      },
+    });
+    await wrapper.vm.sendTest();
+    await flushPromises();
+    expect(wrapper.text()).toContain('JRC_CAMPAIGNS.META.TEST_RESULT');
+    expect(wrapper.text()).not.toContain('JRC_CAMPAIGNS.EVOLUTION.TEST_RESULT');
+    expect(wrapper.text()).toContain('wamid.synthetic');
+    expect(useAlert).toHaveBeenCalledWith('JRC_CAMPAIGNS.META.ACCEPTED');
   });
 
   it('does not tell the operator an unknown result was sent', async () => {

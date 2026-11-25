@@ -181,8 +181,13 @@ const statusOptions = computed(() =>
 );
 
 const statusLabel = status => t(`JRC_CAMPAIGNS.STATUS.${status}`);
-const formatDate = value =>
-  value ? new Date(value).toLocaleString() : t('JRC_CAMPAIGNS.NOT_AVAILABLE');
+const formatDate = (value, timezone = 'UTC') =>
+  value
+    ? new Date(value).toLocaleString(undefined, {
+        timeZone: timezone,
+        timeZoneName: 'short',
+      })
+    : t('JRC_CAMPAIGNS.NOT_AVAILABLE');
 const formatNumber = value =>
   new Intl.NumberFormat(undefined).format(Number(value || 0));
 const formatPercent = value =>
@@ -346,8 +351,9 @@ onMounted(fetchData);
             </h1>
             <span
               class="rounded-full bg-n-brand/10 px-2 py-1 text-xs font-medium text-n-brand"
-              >{{ $t('JRC_CAMPAIGNS.BRAND_BADGE') }}</span
             >
+              {{ $t('JRC_CAMPAIGNS.BRAND_BADGE') }}
+            </span>
           </div>
           <p class="mt-1 text-sm text-n-slate-10">
             {{ $t('JRC_CAMPAIGNS.SUBTITLE') }}
@@ -359,9 +365,8 @@ onMounted(fetchData);
           class="flex items-center gap-2 rounded-xl bg-n-brand px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-n-brand/90"
           @click="openNew"
         >
-          <span class="i-lucide-plus size-4" />{{
-            $t('JRC_CAMPAIGNS.NEW_CAMPAIGN')
-          }}
+          <span class="i-lucide-plus size-4" />
+          {{ $t('JRC_CAMPAIGNS.NEW_CAMPAIGN') }}
         </button>
       </div>
 
@@ -378,7 +383,8 @@ onMounted(fetchData);
           "
           @click="activeTab = tab.key"
         >
-          <span class="size-4" :class="[tab.icon]" />{{ tab.label }}
+          <span class="size-4" :class="[tab.icon]" />
+          {{ tab.label }}
         </button>
       </div>
 
@@ -447,9 +453,8 @@ onMounted(fetchData);
               class="self-end rounded-xl border border-n-strong px-3 py-2.5 text-sm font-medium text-n-slate-11 hover:bg-n-alpha-2"
               @click="showAdvancedFilters = !showAdvancedFilters"
             >
-              <span class="i-lucide-list-filter mr-2 inline-block size-4" />{{
-                $t('JRC_CAMPAIGNS.FILTERS.ADVANCED')
-              }}
+              <span class="i-lucide-list-filter mr-2 inline-block size-4" />
+              {{ $t('JRC_CAMPAIGNS.FILTERS.ADVANCED') }}
             </button>
             <button
               type="button"
@@ -467,9 +472,9 @@ onMounted(fetchData);
             v-if="showAdvancedFilters"
             class="mt-4 flex flex-wrap items-center gap-2 border-t border-n-weak pt-4"
           >
-            <span class="mr-1 text-xs font-medium text-n-slate-10">{{
-              $t('JRC_CAMPAIGNS.FILTERS.STATUS')
-            }}</span>
+            <span class="mr-1 text-xs font-medium text-n-slate-10">
+              {{ $t('JRC_CAMPAIGNS.FILTERS.STATUS') }}
+            </span>
             <button
               v-for="option in statusOptions"
               :key="option.status"
@@ -546,8 +551,9 @@ onMounted(fetchData);
               </div>
               <span
                 class="rounded-lg bg-n-alpha-2 px-2.5 py-1 text-xs text-n-slate-10"
-                >{{ $t('JRC_CAMPAIGNS.DASHBOARD.GROUP_BY_DAY') }}</span
               >
+                {{ $t('JRC_CAMPAIGNS.DASHBOARD.GROUP_BY_DAY') }}
+              </span>
             </div>
             <CampaignPerformanceChart
               v-if="analytics.series.length"
@@ -571,15 +577,15 @@ onMounted(fetchData);
             <div class="mt-5 space-y-4">
               <div v-for="item in funnel" :key="item.key">
                 <div class="mb-1.5 flex items-end justify-between gap-2">
-                  <span class="text-xs font-medium text-n-slate-10">{{
-                    item.label
-                  }}</span>
-                  <span class="text-sm font-semibold text-n-slate-12"
-                    >{{ formatNumber(item.value) }}
-                    <small class="font-normal text-n-slate-9"
-                      >{{ formatPercent(item.percentage) }}%</small
-                    ></span
-                  >
+                  <span class="text-xs font-medium text-n-slate-10">
+                    {{ item.label }}
+                  </span>
+                  <span class="text-sm font-semibold text-n-slate-12">
+                    {{ formatNumber(item.value) }}
+                    <small class="font-normal text-n-slate-9">
+                      {{ formatPercent(item.percentage) }}%
+                    </small>
+                  </span>
                 </div>
                 <progress
                   :value="item.value"
@@ -604,12 +610,14 @@ onMounted(fetchData);
             <div v-if="visibleFailureReasons.length" class="mt-5 space-y-4">
               <div v-for="reason in visibleFailureReasons" :key="reason.key">
                 <div class="mb-1.5 flex justify-between gap-3 text-xs">
-                  <span class="text-n-slate-10">{{
-                    $t(`JRC_CAMPAIGNS.FAILURES.${reason.key.toUpperCase()}`)
-                  }}</span
-                  ><span class="font-semibold text-n-slate-12">{{
-                    formatNumber(reason.count)
-                  }}</span>
+                  <span class="text-n-slate-10">
+                    {{
+                      $t(`JRC_CAMPAIGNS.FAILURES.${reason.key.toUpperCase()}`)
+                    }}
+                  </span>
+                  <span class="font-semibold text-n-slate-12">
+                    {{ formatNumber(reason.count) }}
+                  </span>
                 </div>
                 <progress
                   :value="reason.count"
@@ -649,9 +657,8 @@ onMounted(fetchData);
                 class="flex items-center gap-2 rounded-xl border border-n-strong px-3 py-2 text-xs font-medium text-n-slate-11 hover:bg-n-alpha-2"
                 @click="exportSelected"
               >
-                <span class="i-lucide-download size-4" />{{
-                  $t('JRC_CAMPAIGNS.EXPORT')
-                }}
+                <span class="i-lucide-download size-4" />
+                {{ $t('JRC_CAMPAIGNS.EXPORT') }}
               </button>
             </div>
             <div class="overflow-x-auto">
@@ -718,9 +725,10 @@ onMounted(fetchData);
                           :value="progress(campaign)"
                           max="100"
                           class="h-1.5 w-24 overflow-hidden rounded-full accent-n-brand"
-                        /><span class="text-[11px] text-n-slate-9"
-                          >{{ progress(campaign) }}%</span
-                        >
+                        />
+                        <span class="text-[11px] text-n-slate-9">
+                          {{ progress(campaign) }}%
+                        </span>
                       </div>
                     </td>
                     <td class="px-4 py-4 text-n-slate-11">
@@ -731,7 +739,8 @@ onMounted(fetchData);
                             ? 'i-lucide-mail'
                             : 'i-lucide-message-circle'
                         "
-                      />{{
+                      />
+                      {{
                         $t(
                           campaign.delivery_channel === 'email'
                             ? 'JRC_CAMPAIGNS.CHANNEL_EMAIL'
@@ -764,8 +773,9 @@ onMounted(fetchData);
                     <td class="px-4 py-4">
                       <span
                         class="rounded-full bg-n-alpha-2 px-2.5 py-1 text-xs text-n-slate-11"
-                        >{{ statusLabel(campaign.status) }}</span
                       >
+                        {{ statusLabel(campaign.status) }}
+                      </span>
                     </td>
                     <td class="px-4 py-4">
                       <div class="flex justify-end gap-1">
@@ -911,12 +921,17 @@ onMounted(fetchData);
               <div class="font-medium text-n-slate-12">{{ campaign.name }}</div>
               <div class="mt-1 text-xs text-n-slate-10">
                 {{ statusLabel(campaign.status) }} ·
-                {{ formatDate(campaign.created_at) }}
+                {{
+                  formatDate(
+                    campaign.created_at,
+                    campaign.sending_window?.timezone || 'UTC'
+                  )
+                }}
               </div>
             </div>
             <div class="flex items-center gap-4 text-sm text-n-slate-10">
-              <span>{{ formatNumber(campaign.sent_count) }}</span
-              ><span
+              <span>{{ formatNumber(campaign.sent_count) }}</span>
+              <span
                 class="i-lucide-chart-no-axes-column-increasing size-5 text-n-violet-11"
               />
             </div>

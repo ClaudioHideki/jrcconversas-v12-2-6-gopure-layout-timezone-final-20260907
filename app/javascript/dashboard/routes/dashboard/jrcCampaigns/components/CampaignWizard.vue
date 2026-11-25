@@ -1,6 +1,8 @@
 <script setup>
 import CampaignFilters from 'dashboard/routes/dashboard/jrcCustomers/components/CampaignFilters.vue';
+import { zonedTimeToUtc, formatInTimeZone } from 'date-fns-tz';
 import ConsentPanel from './ConsentPanel.vue';
+import MetaTestHistory from './MetaTestHistory.vue';
 import MetaTemplateEditor from './MetaTemplateEditor.vue';
 import {
   templateErrors,
@@ -40,6 +42,13 @@ const emit = defineEmits([
 ]);
 const { t } = useI18n();
 const { enabled: hasCustomerMaster } = useCustomerMaster();
+const panelColors = [
+  'border-n-blue-6 border-t-4 border-t-n-blue-9 bg-n-blue-2',
+  'border-n-teal-6 border-t-4 border-t-n-teal-9 bg-n-teal-2',
+  'border-n-amber-6 border-t-4 border-t-n-amber-9 bg-n-amber-2',
+  'border-n-ruby-6 border-t-4 border-t-n-ruby-9 bg-n-ruby-2',
+  'border-n-slate-6 border-t-4 border-t-n-slate-9 bg-n-slate-2',
+];
 const stepIndex = ref(0);
 const saving = ref(false);
 const showConsents = ref(false);
@@ -129,7 +138,12 @@ const form = reactive({
   rotation_mode: 'round_robin',
   delay_min_seconds: 5,
   delay_max_seconds: 20,
-  sending_window: { start: '08:00', end: '18:00', days: [1, 2, 3, 4, 5] },
+  sending_window: {
+    start: '08:00',
+    end: '18:00',
+    days: [1, 2, 3, 4, 5],
+    timezone: props.metadata.timezone || 'UTC',
+  },
   conversation_mode: 'reply_only',
   trigger_type: 'manual',
   scheduled_at: '',
@@ -193,7 +207,11 @@ const usesBroker = computed(() =>
 const testResultTitle = computed(() =>
   usesBroker.value
     ? t('JRC_CAMPAIGNS.BROKER.TEST_RESULT')
-    : t('JRC_CAMPAIGNS.EVOLUTION.TEST_RESULT')
+    : t(
+        usesEvolution.value
+          ? 'JRC_CAMPAIGNS.EVOLUTION.TEST_RESULT'
+          : 'JRC_CAMPAIGNS.META.TEST_RESULT'
+      )
 );
 const mixesWhatsAppConnectors = computed(
   () =>
@@ -771,6 +789,22 @@ const hydrateMappings = message => {
     } else message.variableMappings[variable] ||= '';
   });
 };
+const syncingTemplates = ref(false);
+const syncMetaTemplates = async () => {
+  if (syncingTemplates.value) return;
+  syncingTemplates.value = true;
+  try {
+    await JrcCampaignsAPI.syncTemplates(selectedInboxIds.value[0]);
+    emit('refreshSenders');
+  } catch (error) {
+    useAlert(
+      error?.response?.data?.errors?.join(', ') ||
+        t('JRC_CAMPAIGNS.META.SYNC_FAILED')
+    );
+  } finally {
+    syncingTemplates.value = false;
+  }
+};
 const selectTemplate = (message, value) => {
   const [name, language] = value.split('::');
   const template = templates.value.find(
@@ -884,7 +918,10 @@ const buildPayload = () => {
     trigger_type: form.trigger_type,
     scheduled_at:
       form.trigger_type === 'scheduled' && form.scheduled_at
-        ? new Date(form.scheduled_at).toISOString()
+        ? zonedTimeToUtc(
+            form.scheduled_at,
+            form.sending_window.timezone || 'UTC'
+          ).toISOString()
         : null,
     recurrence_config: form.recurrence_config,
     follow_up_config: form.follow_up_config,
@@ -1043,17 +1080,22 @@ const sendTest = async (message = activeMessage.value) => {
   );
   const evolution = ['evolution', 'broker'].includes(inbox?.connector);
   if (
-    evolution &&
+    !isEmail.value &&
     !window.confirm(
       inbox.connector === 'broker'
         ? t('JRC_CAMPAIGNS.BROKER.CONFIRM_TEST', {
             sender: inbox.phone_number,
             recipient: testDestination.value,
           })
-        : t('JRC_CAMPAIGNS.EVOLUTION.CONFIRM_TEST', {
-            sender: inbox.phone_number,
-            recipient: testDestination.value,
-          })
+        : t(
+            evolution
+              ? 'JRC_CAMPAIGNS.EVOLUTION.CONFIRM_TEST'
+              : 'JRC_CAMPAIGNS.META.CONFIRM_TEST',
+            {
+              sender: inbox.phone_number,
+              recipient: testDestination.value,
+            }
+          )
     )
   )
     return;
@@ -1067,7 +1109,7 @@ const sendTest = async (message = activeMessage.value) => {
       step: serializeStep(message),
     };
     let signature = null;
-    if (evolution) {
+    if (!isEmail.value) {
       signature = JSON.stringify(payload);
       if (!testKeys.has(signature))
         testKeys.set(signature, crypto.randomUUID());
@@ -1078,7 +1120,9 @@ const sendTest = async (message = activeMessage.value) => {
     if (data.test_delivery_id) {
       latestTest.value = { ...data, id: data.test_delivery_id };
       latestTestSignature.value = signature;
-      if (data.status === 'sent') {
+      if (
+        ['sent', 'accepted', 'held', 'delivered', 'read'].includes(data.status)
+      ) {
         clearTimeout(newTestTimer);
         newTestCoolingDown.value = true;
         newTestTimer = setTimeout(
@@ -1103,7 +1147,9 @@ const prepareNewTest = () => {
   if (
     testSending.value ||
     newTestCoolingDown.value ||
-    latestTest.value?.status !== 'sent' ||
+    !['sent', 'accepted', 'held', 'delivered', 'read'].includes(
+      latestTest.value?.status
+    ) ||
     !latestTestSignature.value
   )
     return;
@@ -1113,14 +1159,27 @@ const prepareNewTest = () => {
   latestTest.value = null;
 };
 onBeforeUnmount(() => clearTimeout(newTestTimer));
-const validateMessage = message => {
-  useAlert(
-    t(
-      messageValid(message)
-        ? 'JRC_CAMPAIGNS.ALERTS.MESSAGE_VALID'
-        : 'JRC_CAMPAIGNS.ALERTS.MESSAGE_INVALID'
-    )
-  );
+const validateMessage = async message => {
+  if (!messageValid(message)) {
+    useAlert(t('JRC_CAMPAIGNS.ALERTS.MESSAGE_INVALID'));
+    return;
+  }
+  if (message.kind !== 'template') {
+    useAlert(t('JRC_CAMPAIGNS.META.VALIDATE'));
+    return;
+  }
+  try {
+    await JrcCampaignsAPI.validateMessage({
+      inbox_id: selectedInboxIds.value[0],
+      step: serializeStep(message),
+    });
+    useAlert(t('JRC_CAMPAIGNS.META.VALIDATE'));
+  } catch (error) {
+    useAlert(
+      error?.response?.data?.errors?.join(', ') ||
+        t('JRC_CAMPAIGNS.ALERTS.MESSAGE_INVALID')
+    );
+  }
 };
 const refreshTestResult = async () => {
   try {
@@ -1215,10 +1274,13 @@ const hydrate = campaign => {
   form.rotation_mode = campaign.rotation_mode || 'round_robin';
   form.delay_min_seconds = campaign.delay_min_seconds ?? 5;
   form.delay_max_seconds = campaign.delay_max_seconds ?? 20;
-  form.sending_window = campaign.sending_window || {
-    start: '08:00',
-    end: '18:00',
-    days: [1, 2, 3, 4, 5],
+  form.sending_window = {
+    ...(campaign.sending_window || {
+      start: '08:00',
+      end: '18:00',
+      days: [1, 2, 3, 4, 5],
+    }),
+    timezone: campaign.sending_window?.timezone || 'UTC',
   };
   form.conversation_mode =
     form.delivery_channel === 'email' &&
@@ -1227,7 +1289,11 @@ const hydrate = campaign => {
       : campaign.conversation_mode || 'reply_only';
   form.trigger_type = campaign.trigger_type || 'manual';
   form.scheduled_at = campaign.scheduled_at
-    ? new Date(campaign.scheduled_at).toISOString().slice(0, 16)
+    ? formatInTimeZone(
+        campaign.scheduled_at,
+        form.sending_window.timezone || 'UTC',
+        "yyyy-MM-dd'T'HH:mm"
+      )
     : '';
   form.recurrence_config = {
     type: 'none',
@@ -1439,6 +1505,12 @@ watch(
                 status: latestTest.provider_status || latestTest.status,
               })
             }}
+            <code
+              v-if="latestTest.message_id || latestTest.external_id"
+              class="mt-1 block break-all text-xs"
+            >
+              {{ latestTest.message_id || latestTest.external_id }}
+            </code>
             <p v-if="latestTest.error_message">
               {{ latestTest.error_message }}
             </p>
@@ -1450,7 +1522,10 @@ watch(
               {{ t('JRC_CAMPAIGNS.REFRESH') }}
             </button>
             <button
-              v-if="latestTest.status === 'sent' && latestTestSignature"
+              v-if="
+                ['sent', 'delivered', 'read'].includes(latestTest.status) &&
+                latestTestSignature
+              "
               type="button"
               class="ml-2 mt-2 rounded-lg border border-n-brand px-3 py-2 text-n-brand disabled:opacity-40"
               :disabled="testSending || newTestCoolingDown"
@@ -1504,7 +1579,7 @@ watch(
                 :placeholder="$t('JRC_CAMPAIGNS.WIZARD.NAME_PLACEHOLDER')"
               />
             </label>
-            <div class="campaign-channel-panel rounded-2xl border p-5">
+            <div class="border-n-blue-6 bg-n-blue-2 rounded-2xl border p-5">
               <h4 class="text-sm font-semibold text-n-slate-12">
                 {{ $t('JRC_CAMPAIGNS.WIZARD.DELIVERY_CHANNEL') }}
               </h4>
@@ -1548,7 +1623,7 @@ watch(
                 </button>
               </div>
             </div>
-            <div class="campaign-source-panel rounded-2xl border p-5">
+            <div class="border-n-slate-6 bg-n-slate-2 rounded-2xl border p-5">
               <h4 class="text-sm font-semibold text-n-slate-12">
                 {{ $t('JRC_CAMPAIGNS.WIZARD.SOURCE') }}
               </h4>
@@ -1767,7 +1842,7 @@ watch(
                 </select>
               </label>
             </div>
-            <div class="campaign-preview-panel rounded-2xl border p-5">
+            <div class="border-n-teal-6 bg-n-teal-2 rounded-2xl border p-5">
               <div class="flex items-center justify-between gap-3">
                 <div>
                   <h4 class="text-sm font-semibold text-n-slate-12">
@@ -1830,7 +1905,7 @@ watch(
                   ]"
                   :key="item.key"
                   class="campaign-preview-card rounded-xl border p-4"
-                  :class="`campaign-preview-card-${index + 1}`"
+                  :class="panelColors[index % panelColors.length]"
                 >
                   <p class="text-xs text-n-slate-10">{{ item.label }}</p>
                   <p class="mt-2 text-xl font-semibold" :class="item.className">
@@ -2238,6 +2313,21 @@ watch(
                 <h4 class="text-sm font-semibold text-n-slate-12">
                   {{ $t('JRC_CAMPAIGNS.WIZARD.WINDOW') }}
                 </h4>
+                <label class="mt-3 block text-xs">
+                  {{ t('JRC_CAMPAIGNS.META.TIMEZONE') }}
+                  <select
+                    v-model="form.sending_window.timezone"
+                    class="mt-1 w-full rounded-lg border border-n-weak bg-n-background p-2"
+                  >
+                    <option
+                      v-for="zone in metadata.timezones || ['UTC']"
+                      :key="zone"
+                      :value="zone"
+                    >
+                      {{ zone }}
+                    </option>
+                  </select>
+                </label>
                 <div class="mt-4 grid grid-cols-2 gap-4">
                   <label class="text-xs font-medium text-n-slate-10">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.WINDOW_START') }}
@@ -2675,6 +2765,32 @@ watch(
                       />
                     </label>
                   </div>
+                  <button
+                    type="button"
+                    :disabled="syncingTemplates || !selectedInboxIds.length"
+                    class="text-xs text-n-brand"
+                    @click="syncMetaTemplates"
+                  >
+                    {{ t('JRC_CAMPAIGNS.META.SYNC') }}
+                  </button>
+                  <p
+                    v-if="selectedSendingInboxes[0]?.template_sync"
+                    class="text-xs text-n-slate-10"
+                  >
+                    {{ t('JRC_CAMPAIGNS.META.SYNCED') }}:
+                    {{
+                      selectedSendingInboxes[0].template_sync.last_success_at ||
+                      '—'
+                    }}
+                    · {{ selectedSendingInboxes[0].template_sync.approved }} /
+                    {{ selectedSendingInboxes[0].template_sync.total }}
+                    <span
+                      v-if="selectedSendingInboxes[0].template_sync.last_error"
+                      role="alert"
+                    >
+                      {{ selectedSendingInboxes[0].template_sync.last_error }}
+                    </span>
+                  </p>
                   <MetaTemplateEditor
                     :inbox-id="selectedInboxIds[0]"
                     :template="templateForMessage(activeMessage)"
@@ -3045,6 +3161,9 @@ watch(
                     </button>
                   </div>
                 </details>
+                <MetaTestHistory
+                  :timezone="form.sending_window.timezone || 'UTC'"
+                />
               </aside>
             </div>
           </div>
@@ -3113,7 +3232,7 @@ watch(
                 ]"
                 :key="card.title"
                 class="campaign-review-card rounded-2xl border p-5"
-                :class="`campaign-review-card-${index + 1}`"
+                :class="panelColors[index % panelColors.length]"
               >
                 <div class="flex items-center gap-2">
                   <span
@@ -3275,7 +3394,7 @@ watch(
         <aside class="lg:col-span-3">
           <div class="space-y-4 lg:sticky lg:top-0">
             <article
-              class="campaign-summary-panel rounded-2xl border p-5 shadow-sm"
+              class="border-n-amber-6 border-t-4 border-t-n-amber-9 bg-n-amber-2 rounded-2xl border p-5 shadow-sm"
             >
               <p
                 class="text-xs font-semibold uppercase tracking-wide text-n-slate-10"
@@ -3422,68 +3541,3 @@ watch(
     </footer>
   </div>
 </template>
-
-<style scoped>
-.campaign-channel-panel {
-  background: #eff6ff !important;
-  border-color: #93c5fd !important;
-}
-.campaign-source-panel {
-  background: #f5f3ff !important;
-  border-color: #c4b5fd !important;
-}
-.campaign-preview-panel {
-  background: #ecfeff !important;
-  border-color: #67e8f9 !important;
-}
-.campaign-preview-card-1 {
-  background: #eff6ff !important;
-  border-color: #93c5fd !important;
-  border-top: 4px solid #2563eb !important;
-}
-.campaign-preview-card-2 {
-  background: #ecfdf5 !important;
-  border-color: #86efac !important;
-  border-top: 4px solid #16a34a !important;
-}
-.campaign-preview-card-3 {
-  background: #fff7ed !important;
-  border-color: #fdba74 !important;
-  border-top: 4px solid #f97316 !important;
-}
-.campaign-preview-card-4 {
-  background: #fff1f2 !important;
-  border-color: #fda4af !important;
-  border-top: 4px solid #e11d48 !important;
-}
-.campaign-preview-card-5 {
-  background: #f5f3ff !important;
-  border-color: #c4b5fd !important;
-  border-top: 4px solid #7c3aed !important;
-}
-.campaign-preview-card-6 {
-  background: #fdf2f8 !important;
-  border-color: #f9a8d4 !important;
-  border-top: 4px solid #ec4899 !important;
-}
-.campaign-review-card-1 {
-  background: #eff6ff !important;
-  border-color: #93c5fd !important;
-  border-top: 4px solid #2563eb !important;
-}
-.campaign-review-card-2 {
-  background: #ecfdf5 !important;
-  border-color: #86efac !important;
-  border-top: 4px solid #16a34a !important;
-}
-.campaign-review-card-3 {
-  background: #f5f3ff !important;
-  border-color: #c4b5fd !important;
-  border-top: 4px solid #7c3aed !important;
-}
-.campaign-summary-panel {
-  background: #fff7ed !important;
-  border-color: #fdba74 !important;
-  border-top: 4px solid #f97316 !important;
-}
-</style>
