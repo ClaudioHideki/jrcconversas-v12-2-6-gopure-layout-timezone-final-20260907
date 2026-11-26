@@ -90,6 +90,50 @@ describe('simplified campaign flow', () => {
     );
   });
 
+  it('uses the available width and removes manual pacing only for Cloud API senders', async () => {
+    const wrapper = mount(CampaignWizard, {
+      props: {
+        metadata: {
+          ...metadata,
+          whatsapp_inboxes: [
+            { id: 8, provider: 'whatsapp_cloud' },
+            { id: 9, provider: 'default' },
+          ],
+        },
+      },
+      global: { mocks: { $t: key => key } },
+    });
+    await flushPromises();
+    wrapper.vm.stepIndex = 1;
+    wrapper.vm.form.delay_min_seconds = 30;
+    wrapper.vm.form.delay_max_seconds = 60;
+    wrapper.vm.form.inboxLinks = [{ inbox_id: 8, enabled: true }];
+    await flushPromises();
+    expect(wrapper.vm.isCloudOnly).toBe(true);
+    expect(wrapper.find('[data-testid="campaign-rhythm"]').exists()).toBe(
+      false
+    );
+    expect(wrapper.vm.buildPayload()).toMatchObject({
+      delay_min_seconds: 0,
+      delay_max_seconds: 0,
+    });
+    expect(wrapper.vm.durationLabel).toBe(
+      'JRC_CAMPAIGNS.WIZARD.CLOUD_DURATION'
+    );
+    expect(wrapper.get('main > div').classes().join(' ')).not.toContain(
+      'max-w-'
+    );
+    expect(wrapper.get('header h2').classes()).toContain('text-2xl');
+    wrapper.vm.form.inboxLinks = [{ inbox_id: 9, enabled: true }];
+    await flushPromises();
+    expect(wrapper.vm.isCloudOnly).toBe(false);
+    expect(wrapper.find('[data-testid="campaign-rhythm"]').exists()).toBe(true);
+    expect(wrapper.vm.buildPayload()).toMatchObject({
+      delay_min_seconds: 30,
+      delay_max_seconds: 60,
+    });
+  });
+
   it('keeps chart labels legible when switching between light and dark themes', async () => {
     const wrapper = mount(CampaignPerformanceChart, {
       props: { series: [{ date: '2026-11-26', sent: 4 }], labels: {} },

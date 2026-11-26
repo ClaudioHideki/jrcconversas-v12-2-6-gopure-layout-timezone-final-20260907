@@ -352,7 +352,7 @@ onMounted(fetchData);
   <div
     class="relative h-full w-full shrink-0 overflow-y-auto bg-n-background text-n-slate-12 p-4 lg:p-6"
   >
-    <div v-if="!showWizard" class="mx-auto w-full max-w-[1600px]">
+    <div v-if="!showWizard" class="w-full">
       <div class="mb-5 flex flex-wrap items-center justify-between gap-4">
         <div>
           <div class="flex items-center gap-2">

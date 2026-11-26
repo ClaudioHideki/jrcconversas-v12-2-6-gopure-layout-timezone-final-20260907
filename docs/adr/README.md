@@ -22,3 +22,5 @@ Não marcar uma proposta como aceita sem a decisão correspondente. Preserve os 
 - [0007 — Campanhas com fluxo direto e legibilidade](0007-campanhas-fluxo-direto-e-legibilidade.md)
 
 - [0008 — Exclusão e recibos de campanhas](0008-campanhas-exclusao-relatorio-leitura.md).
+
+- [0009 — Ritmo Cloud API e largura](0009-campanhas-cloud-ritmo-layout.md).

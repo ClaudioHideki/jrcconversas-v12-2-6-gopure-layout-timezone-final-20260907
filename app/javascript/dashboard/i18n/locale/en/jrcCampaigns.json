@@ -381,7 +381,10 @@
       "JARVIS_MESSAGES_PENDING": "Revise a sequência: há {messages} mensagens e {variables} variáveis identificadas com pendências.",
       "JARVIS_REVIEW_BLOCKED": "Encontrei bloqueios críticos. Corrija os itens em vermelho antes de iniciar.",
       "JARVIS_REVIEW_READY": "Campanha pronta para envio. Não encontrei bloqueios críticos.",
-      "EMAIL_COMPLIANCE": "Os e-mails serão enviados pela caixa selecionada usando a configuração SMTP ou OAuth existente. Respostas retornam para a conversa da campanha."
+      "EMAIL_COMPLIANCE": "Os e-mails serão enviados pela caixa selecionada usando a configuração SMTP ou OAuth existente. Respostas retornam para a conversa da campanha.",
+      "CLOUD_PACING_TITLE": "Envio pela API oficial da Meta",
+      "CLOUD_PACING_HELP": "Sem intervalo artificial entre destinatários. O processamento segue a fila e a capacidade da Meta, respeitando os limites da conta, os templates e a janela de envio.",
+      "CLOUD_DURATION": "Conforme fila e capacidade da Meta"
     },
     "SANITIZE": {
       "LIST_COUNTS": "{whatsapp} WhatsApp · {email} e-mail · {total} importados",
