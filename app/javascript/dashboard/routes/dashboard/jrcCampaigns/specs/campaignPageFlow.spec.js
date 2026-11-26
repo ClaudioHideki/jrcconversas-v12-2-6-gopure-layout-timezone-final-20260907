@@ -13,6 +13,7 @@ vi.mock('dashboard/api/jrcCampaigns', () => ({
     requestReview: vi.fn(),
     approve: vi.fn(),
     launch: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 enableAutoUnmount(afterEach);
@@ -56,6 +57,8 @@ const global = {
 };
 
 describe('campaign page preserves the saved draft through review and launch', () => {
+  afterEach(() => vi.restoreAllMocks());
+
   beforeEach(() => {
     vi.clearAllMocks();
     api.get.mockResolvedValue({ data: [] });
@@ -127,6 +130,41 @@ describe('campaign page preserves the saved draft through review and launch', ()
     await flushPromises();
     expect(api.launch).toHaveBeenCalledExactlyOnceWith(17);
   });
+
+  it('exposes confirmed deletion beside the campaign name and refreshes the list', async () => {
+    api.get.mockResolvedValueOnce({
+      data: [{ ...campaign, status: 'completed' }],
+    });
+    api.delete.mockResolvedValue({});
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const wrapper = mount(JrcCampaignsPage, { global });
+    await flushPromises();
+    const remove = wrapper.get(
+      'button[aria-label="JRC_CAMPAIGNS.DELETE_NAMED"]'
+    );
+    expect(remove.element.closest('td').textContent).toContain(campaign.name);
+    await remove.trigger('click');
+    expect(api.delete).not.toHaveBeenCalled();
+    confirm.mockReturnValue(true);
+    await remove.trigger('click');
+    await flushPromises();
+    expect(api.delete).toHaveBeenCalledExactlyOnceWith(17);
+    expect(wrapper.text()).not.toContain(campaign.name);
+  });
+
+  it.each(['running', 'paused'])(
+    'disables deletion for a %s campaign',
+    async status => {
+      api.get.mockResolvedValue({ data: [{ ...campaign, status }] });
+      const wrapper = mount(JrcCampaignsPage, { global });
+      await flushPromises();
+      expect(
+        wrapper.get('button[aria-label="JRC_CAMPAIGNS.DELETE_NAMED"]').element
+          .disabled
+      ).toBe(true);
+      expect(api.delete).not.toHaveBeenCalled();
+    }
+  );
 
   it('opens a new campaign with the selected sanitized list instead of treating it as an existing campaign', async () => {
     const wrapper = mount(JrcCampaignsPage, { global });

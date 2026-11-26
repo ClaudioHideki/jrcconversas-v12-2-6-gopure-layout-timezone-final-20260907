@@ -13,7 +13,9 @@ class JrcCampaigns::StatusTrackerService
       now = Time.current
       attributes = delivery_attributes(delivery, normalized_status, now, errors)
       delivery.update!(attributes) if attributes.present?
-      update_recipient(delivery.recipient, delivery, now)
+      delivery.recipient.with_lock do
+        update_recipient(delivery.recipient, delivery, now)
+      end
     end
     true
   end
@@ -55,9 +57,9 @@ class JrcCampaigns::StatusTrackerService
 
     if recipient.replied_at.present?
       attributes[:status] = 'replied'
-    elsif delivery.read_at.present?
+    elsif recipient.read_at.present? || delivery.read_at.present?
       attributes[:status] = 'read'
-    elsif delivery.delivered_at.present?
+    elsif recipient.delivered_at.present? || delivery.delivered_at.present?
       attributes[:status] = 'delivered'
     elsif delivery.failed_at.present?
       attributes.merge!(status: 'failed', failed_at: recipient.failed_at || now, error_message: delivery.error_message)

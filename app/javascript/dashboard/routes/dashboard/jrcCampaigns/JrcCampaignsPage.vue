@@ -42,6 +42,7 @@ const campaignFilter = ref('');
 const channelFilter = ref('');
 const showAdvancedFilters = ref(false);
 const statusFilters = ref([]);
+const deletingCampaignIds = ref([]);
 
 const tabs = computed(() => [
   {
@@ -303,13 +304,28 @@ const duplicateCampaign = async campaign => {
   }
 };
 const deleteCampaign = async campaign => {
-  if (!window.confirm(`${t('JRC_CAMPAIGNS.DELETE')} ${campaign.name}?`)) return;
+  if (
+    ['running', 'paused'].includes(campaign.status) ||
+    deletingCampaignIds.value.includes(campaign.id)
+  )
+    return;
+  if (
+    !window.confirm(t('JRC_CAMPAIGNS.DELETE_CONFIRM', { name: campaign.name }))
+  )
+    return;
+  deletingCampaignIds.value.push(campaign.id);
   try {
     await JrcCampaignsAPI.delete(campaign.id);
+    if (String(campaignFilter.value) === String(campaign.id))
+      campaignFilter.value = '';
     useAlert(t('JRC_CAMPAIGNS.ALERTS.DELETED'));
     await fetchData();
   } catch {
     useAlert(t('JRC_CAMPAIGNS.ALERTS.ACTION_FAILED'));
+  } finally {
+    deletingCampaignIds.value = deletingCampaignIds.value.filter(
+      id => id !== campaign.id
+    );
   }
 };
 const toggleStatus = status => {
@@ -714,6 +730,30 @@ onMounted(fetchData);
                       >
                         {{ campaign.name }}
                       </button>
+                      <button
+                        type="button"
+                        class="mt-2 flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-n-ruby-11 hover:bg-n-ruby-3 disabled:cursor-not-allowed disabled:opacity-50"
+                        :disabled="
+                          ['running', 'paused'].includes(campaign.status) ||
+                          deletingCampaignIds.includes(campaign.id)
+                        "
+                        :title="
+                          $t(
+                            ['running', 'paused'].includes(campaign.status)
+                              ? 'JRC_CAMPAIGNS.DELETE_ACTIVE_HELP'
+                              : 'JRC_CAMPAIGNS.DELETE'
+                          )
+                        "
+                        :aria-label="
+                          $t('JRC_CAMPAIGNS.DELETE_NAMED', {
+                            name: campaign.name,
+                          })
+                        "
+                        @click="deleteCampaign(campaign)"
+                      >
+                        <span class="i-lucide-trash-2 size-3" />
+                        {{ $t('JRC_CAMPAIGNS.DELETE') }}
+                      </button>
                       <div class="mt-2 flex items-center gap-2">
                         <progress
                           :value="progress(campaign)"
@@ -853,14 +893,6 @@ onMounted(fetchData);
                         >
                           <span class="i-lucide-copy size-4" />
                         </button>
-                        <button
-                          type="button"
-                          class="rounded-lg p-2 text-n-ruby-11 hover:bg-n-ruby-3"
-                          :title="$t('JRC_CAMPAIGNS.DELETE')"
-                          @click="deleteCampaign(campaign)"
-                        >
-                          <span class="i-lucide-trash-2 size-4" />
-                        </button>
                       </div>
                     </td>
                   </tr>
@@ -943,7 +975,10 @@ onMounted(fetchData);
     <CampaignReport
       v-if="reportCampaign"
       :campaign="reportCampaign"
-      @close="reportCampaign = null"
+      @close="
+        reportCampaign = null;
+        fetchData();
+      "
     />
     <CampaignApproval
       v-if="reviewCampaign"

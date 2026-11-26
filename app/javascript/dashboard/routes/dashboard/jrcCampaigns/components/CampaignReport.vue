@@ -1,29 +1,46 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { useAlert } from 'dashboard/composables';
 import JrcCampaignsAPI from 'dashboard/api/jrcCampaigns';
 
 const props = defineProps({ campaign: { type: Object, required: true } });
 const emit = defineEmits(['close']);
+const { t } = useI18n();
+const refreshing = ref(false);
 const loading = ref(true);
 const report = ref(null);
 const page = ref(1);
 
-const load = async targetPage => {
-  loading.value = true;
-  const { data } = await JrcCampaignsAPI.report(props.campaign.id, {
-    page: targetPage,
-    per_page: 50,
-  });
-  report.value = data;
-  page.value = targetPage;
-  loading.value = false;
+const load = async (targetPage, silent = false) => {
+  if (refreshing.value) return;
+  refreshing.value = true;
+  if (!report.value) loading.value = true;
+  try {
+    const { data } = await JrcCampaignsAPI.report(props.campaign.id, {
+      page: targetPage,
+      per_page: 50,
+    });
+    report.value = data;
+    page.value = targetPage;
+  } catch {
+    if (!silent) useAlert(t('JRC_CAMPAIGNS.ALERTS.REPORT_LOAD_FAILED'));
+  } finally {
+    refreshing.value = false;
+    loading.value = false;
+  }
 };
 
 const exportReport = () => {
   window.open(JrcCampaignsAPI.exportUrl(props.campaign.id), '_blank');
 };
 
-onMounted(() => load(1));
+let refreshTimer;
+onMounted(() => {
+  load(1);
+  refreshTimer = setInterval(() => load(page.value, true), 15000);
+});
+onUnmounted(() => clearInterval(refreshTimer));
 </script>
 
 <template>
@@ -40,9 +57,19 @@ onMounted(() => load(1));
           </h2>
           <p class="mt-1 text-sm text-n-slate-11">
             {{ $t('JRC_CAMPAIGNS.REPORTS.SUBTITLE') }}
+            {{ $t('JRC_CAMPAIGNS.REPORTS.READ_RECEIPT_HELP') }}
           </p>
         </div>
         <div class="flex gap-2">
+          <button
+            type="button"
+            class="flex items-center gap-2 rounded-lg border border-n-strong px-3 py-2 text-sm text-n-slate-12 disabled:opacity-50"
+            :disabled="refreshing"
+            @click="load(page)"
+          >
+            <span class="i-lucide-refresh-cw size-4" />
+            {{ $t('JRC_CAMPAIGNS.REFRESH') }}
+          </button>
           <button
             type="button"
             class="flex items-center gap-2 rounded-lg border border-n-strong px-3 py-2 text-sm text-n-slate-12"
@@ -140,7 +167,9 @@ onMounted(() => load(1));
                     <span
                       class="rounded-full bg-n-alpha-2 px-2 py-1 text-xs text-n-slate-12"
                     >
-                      {{ recipient.status }}
+                      {{
+                        $t(`JRC_CAMPAIGNS.RECIPIENT_STATUS.${recipient.status}`)
+                      }}
                     </span>
                   </td>
                   <td class="px-4 py-3 text-n-slate-11">

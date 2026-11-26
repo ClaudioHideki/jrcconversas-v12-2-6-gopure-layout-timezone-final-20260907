@@ -440,7 +440,8 @@
       "STATUS": "Status",
       "SENT_AT": "Enviado em",
       "ERROR": "Erro",
-      "NO_DATA": "Ainda não há dados de execução para esta campanha."
+      "NO_DATA": "Ainda não há dados de execução para esta campanha.",
+      "READ_RECEIPT_HELP": "Atualização automática a cada 15 segundos. A leitura só aparece quando confirmada pelo WhatsApp; sem essa confirmação, a mensagem pode permanecer como Entregue."
     },
     "ALERTS": {
       "LOAD_FAILED": "Não foi possível carregar Campanhas.",
@@ -462,7 +463,8 @@
       "TEST_FAILED": "Não foi possível enviar a mensagem de teste.",
       "MESSAGE_VALID": "Mensagem validada. O preview está pronto.",
       "MESSAGE_INVALID": "A mensagem ainda possui campos ou variáveis pendentes.",
-      "RECIPIENTS_LOAD_FAILED": "Não foi possível carregar os destinatários."
+      "RECIPIENTS_LOAD_FAILED": "Não foi possível carregar os destinatários.",
+      "REPORT_LOAD_FAILED": "Não foi possível atualizar o relatório. Tente novamente."
     },
     "DAYS": {
       "0": "Dom",
@@ -639,6 +641,20 @@
       "DELIVERED_AT": "Delivered",
       "READ_AT": "Read",
       "TEST_RESULT": "Meta test result"
+    },
+    "DELETE_CONFIRM": "Excluir a campanha “{name}” e seu histórico de disparos e relatórios? Esta ação não pode ser desfeita.",
+    "DELETE_NAMED": "Excluir campanha {name}",
+    "DELETE_ACTIVE_HELP": "Cancele a campanha antes de excluí-la.",
+    "RECIPIENT_STATUS": {
+      "queued": "Na fila",
+      "processing": "Processando",
+      "sent": "Enviada",
+      "delivered": "Entregue",
+      "read": "Lida",
+      "replied": "Respondida",
+      "failed": "Falhou",
+      "skipped": "Ignorada",
+      "canceled": "Cancelada"
     }
   }
 }

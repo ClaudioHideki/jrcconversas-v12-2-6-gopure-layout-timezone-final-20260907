@@ -18,6 +18,8 @@ Referência inicial: INIT solicitado pelo usuário em 2026-11-13. É uma trilha 
 
 ## Fase 3: Estabilização e manutenção
 
+- Exclusão visível e atualização de recibos de leitura sem inferir eventos do provedor. [ADR 0008](docs/adr/0008-campanhas-exclusao-relatorio-leitura.md).
+
 - Fluxo direto de campanhas, São Paulo para novas campanhas e contraste de textos/gráficos, preservando recusas e seleção aprovada. [ADR 0007](docs/adr/0007-campanhas-fluxo-direto-e-legibilidade.md).
 
 - Correção crítica de público manual de campanhas: separar remetente de origem e confirmar a seleção na aprovação/execução. [ADR 0006](docs/adr/0006-campanhas-selecao-manual-confirmada.md).

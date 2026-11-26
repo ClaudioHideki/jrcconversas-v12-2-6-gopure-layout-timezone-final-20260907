@@ -93,10 +93,12 @@ class Api::V1::Accounts::JrcCampaigns::CampaignsController < Api::V1::Accounts::
   end
 
   def destroy
-    return render_not_editable if @campaign.running? || @campaign.paused?
+    @campaign.with_lock do
+      return render_not_editable if @campaign.running? || @campaign.paused?
 
-    @campaign.destroy!
-    head :no_content
+      @campaign.destroy!
+      head :no_content
+    end
   end
 
   def launch
