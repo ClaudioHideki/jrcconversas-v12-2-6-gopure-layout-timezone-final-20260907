@@ -16,3 +16,5 @@ Não marcar uma proposta como aceita sem a decisão correspondente. Preserve os 
 - [0004 — Ações de produtos](0004-acoes-de-produtos.md)
 
 - [0005 — Campanhas, templates Meta, mídia e timezone](0005-campanhas-meta-midia-timezone.md)
+
+- [0006 — Seleção manual e confirmação do público](0006-campanhas-selecao-manual-confirmada.md)

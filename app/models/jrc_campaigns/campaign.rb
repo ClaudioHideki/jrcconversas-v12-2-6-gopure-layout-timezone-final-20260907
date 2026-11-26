@@ -94,6 +94,7 @@ class JrcCampaigns::Campaign < ApplicationRecord
   validate :sending_window_is_valid
   validate :recurrence_is_valid
   validate :legacy_inbox_belongs_to_account
+  validate :audience_confirmation_is_valid, if: :audience_changed?
 
   before_save :refresh_estimated_recipients, if: :audience_changed?
 
@@ -297,5 +298,15 @@ class JrcCampaigns::Campaign < ApplicationRecord
 
   def refresh_estimated_recipients
     self.estimated_recipients = JrcCampaigns::AudienceResolver.new(self).estimated_count
+  end
+
+  def audience_confirmation_is_valid
+    previous = audience_config_in_database.to_h['selection_confirmation']
+    return if previous.blank? && audience_config['selection_confirmation'].blank?
+
+    entries = JrcCampaigns::AudienceResolver.new(self).entries
+    return if audience_config['selection_confirmation'].present? && JrcCampaigns::AudienceConfirmation.new(self).valid_entries?(entries)
+
+    errors.add(:base, JrcCampaigns::AudienceConfirmation::MESSAGE)
   end
 end

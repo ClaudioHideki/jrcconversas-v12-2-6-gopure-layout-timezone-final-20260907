@@ -221,6 +221,7 @@ class Api::V1::Accounts::JrcCampaigns::CampaignsController < Api::V1::Accounts::
   def audience_preview_json(campaign, recipient_options = {})
     preview = JrcCampaigns::AudienceResolver.new(campaign).preview
     response = preview.except(:entries, :selectable_entries).merge(
+      selection_confirmation: JrcCampaigns::AudienceConfirmation.for_entries(preview[:entries], campaign.delivery_channel),
       sample: preview[:entries].first(20).map do |entry|
         recipient_json(entry, selected: true)
       end

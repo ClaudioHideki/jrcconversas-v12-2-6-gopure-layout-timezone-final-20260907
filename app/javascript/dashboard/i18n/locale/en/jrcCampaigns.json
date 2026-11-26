@@ -488,6 +488,7 @@
       "REQUEST": "Solicitação de teste #{id}"
     },
     "GOVERNANCE": {
+      "AUDIENCE_CHANGED": "The selected audience differs from the consolidated audience. Refresh the preview and review your selection before approval or sending.",
       "REVIEW": "Revisar e aprovar envio",
       "SAVE_FOR_REVIEW": "Salvar e revisar",
       "APPROVE": "Aprovar este público e configuração",

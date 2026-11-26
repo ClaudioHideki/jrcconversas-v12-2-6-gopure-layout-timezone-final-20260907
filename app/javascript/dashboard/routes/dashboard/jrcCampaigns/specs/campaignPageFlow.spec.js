@@ -32,6 +32,7 @@ const campaign = {
   name: 'QA campaign',
   status: 'draft',
   approval_valid: false,
+  estimated_recipients: 1,
   created_at: new Date().toISOString(),
   delivery_channel: 'whatsapp',
   delay_min_seconds: 60,

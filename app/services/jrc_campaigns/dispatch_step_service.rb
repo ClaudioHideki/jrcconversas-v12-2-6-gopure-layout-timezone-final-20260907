@@ -90,6 +90,9 @@ class JrcCampaigns::DispatchStepService
 
   def sending_rejection
     campaign.reload.ensure_approved!
+    return JrcCampaigns::AudienceConfirmation::MESSAGE unless JrcCampaigns::AudienceConfirmation.new(campaign).includes_recipient?(recipient)
+    return 'A mensagem não pertence à campanha aprovada.' unless step.campaign_id == campaign.id
+
     return 'Contato bloqueado.' if recipient.contact&.reload&.blocked?
     return nil if campaign.email?
 

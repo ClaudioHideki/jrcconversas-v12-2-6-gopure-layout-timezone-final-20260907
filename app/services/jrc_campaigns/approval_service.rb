@@ -14,14 +14,19 @@ class JrcCampaigns::ApprovalService
       campaign.ensure_sender_compatibility!
       @include_meta_definitions = true
       validate_templates!
+      entries = JrcCampaigns::AudienceResolver.new(campaign).entries
+      reject!(JrcCampaigns::AudienceConfirmation::MESSAGE) unless JrcCampaigns::AudienceConfirmation.new(campaign).valid_entries?(entries)
       snapshot = {
         'configuration' => configuration,
-        'recipients' => JrcCampaigns::AudienceResolver.new(campaign).entries.map do |entry|
+        'recipients' => entries.map do |entry|
           { 'contact_id' => entry.contact&.id, 'name' => entry.name, 'phone_number' => entry.phone_number,
             'email' => entry.email, 'destination' => entry.destination(campaign.delivery_channel),
             'source' => entry.source, 'metadata' => entry.metadata }
         end
       }
+      unless JrcCampaigns::AudienceConfirmation.new(campaign).valid_snapshot?(snapshot['recipients'])
+        reject!(JrcCampaigns::AudienceConfirmation::MESSAGE)
+      end
       campaign.update!(review_snapshot: snapshot, review_digest: digest(snapshot), approved_digest: nil, approved_by: nil,
                        approved_at: nil, approval_expires_at: nil)
     end
@@ -56,7 +61,8 @@ class JrcCampaigns::ApprovalService
 
   def current_review?
     snapshot = campaign.review_snapshot
-    snapshot.present? && snapshot['configuration'] == configuration && digest(snapshot) == campaign.review_digest
+    snapshot.present? && snapshot['configuration'] == configuration && digest(snapshot) == campaign.review_digest &&
+      JrcCampaigns::AudienceConfirmation.new(campaign).valid_snapshot?(snapshot['recipients'])
   rescue ArgumentError, ActiveRecord::RecordNotFound
     false
   end

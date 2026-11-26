@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import JrcCampaignsAPI from 'dashboard/api/jrcCampaigns';
 import { useAlert } from 'dashboard/composables';
@@ -11,6 +11,18 @@ const review = ref(null);
 const accepted = ref(false);
 const saving = ref(false);
 const errorMessage = ref('');
+const audienceMatches = computed(() => {
+  if (!review.value) return false;
+  const count = review.value.review_snapshot?.recipients?.length;
+  const expected = props.campaign.estimated_recipients;
+  const confirmation = review.value.audience_config?.selection_confirmation;
+  return (
+    count > 0 &&
+    (expected === undefined || Number(expected) === count) &&
+    Number(review.value.estimated_recipients) === count &&
+    (!confirmation || confirmation.count === count)
+  );
+});
 const detail = (key, value) => {
   const labels = {
     REVIEW: t('JRC_CAMPAIGNS.GOVERNANCE.REVIEW'),
@@ -31,6 +43,8 @@ onMounted(async () => {
   try {
     const { data } = await JrcCampaignsAPI.requestReview(props.campaign.id);
     review.value = data;
+    if (!audienceMatches.value)
+      errorMessage.value = t('JRC_CAMPAIGNS.GOVERNANCE.AUDIENCE_CHANGED');
   } catch (error) {
     errorMessage.value =
       error?.response?.data?.errors?.join(', ') ||
@@ -39,7 +53,7 @@ onMounted(async () => {
 });
 
 const approve = async () => {
-  if (!accepted.value || !review.value) return;
+  if (!accepted.value || !audienceMatches.value || saving.value) return;
   saving.value = true;
   try {
     await JrcCampaignsAPI.approve(
@@ -214,7 +228,7 @@ const approve = async () => {
         <button
           type="button"
           class="mt-3 rounded-lg bg-n-brand px-4 py-2 text-white disabled:opacity-40"
-          :disabled="!accepted || saving"
+          :disabled="!accepted || !audienceMatches || saving"
           @click="approve"
         >
           {{ t('JRC_CAMPAIGNS.GOVERNANCE.APPROVE') }}

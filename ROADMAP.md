@@ -18,6 +18,8 @@ Referência inicial: INIT solicitado pelo usuário em 2026-11-13. É uma trilha 
 
 ## Fase 3: Estabilização e manutenção
 
+- Correção crítica de público manual de campanhas: separar remetente de origem e confirmar a seleção na aprovação/execução. [ADR 0006](docs/adr/0006-campanhas-selecao-manual-confirmada.md).
+
 - [ ] Documentar casos de borda comprovados e dependências operacionais.
 - [ ] Otimizar rotinas repetitivas somente após medir a necessidade.
 - [ ] Revisar proveniência, isolamento e versões a cada candidata de release.

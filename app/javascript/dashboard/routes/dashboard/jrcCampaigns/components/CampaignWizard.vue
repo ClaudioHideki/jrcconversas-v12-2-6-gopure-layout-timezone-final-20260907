@@ -95,6 +95,8 @@ const newTestCoolingDown = ref(false);
 let newTestTimer;
 let audienceTimer;
 let audienceRequest = 0;
+let recipientRequest = 0;
+const audiencePreviewSignature = ref(null);
 let recipientSearchTimer;
 
 const defaultMessage = (kind = 'template') => ({
@@ -173,8 +175,21 @@ const audienceSourceSignature = computed(() =>
     stage_ids: form.audience_config.stage_ids,
     sanitized_list_id: form.audience_config.sanitized_list_id,
     customer_filters: form.audience_config.customer_filters,
-    sending_inbox_ids: selectedInboxIds.value,
   })
+);
+const audienceSelectionSignature = computed(() =>
+  JSON.stringify({
+    source: audienceSourceSignature.value,
+    inbox_ids: selectedInboxIds.value,
+    mode: form.audience_config.recipient_selection_mode,
+    keys: form.audience_config.recipient_selection_keys,
+  })
+);
+const audienceReady = computed(
+  () =>
+    audiencePreviewSignature.value === audienceSelectionSignature.value &&
+    !previewingAudience.value &&
+    audiencePreview.value.estimated_recipients !== null
 );
 const deliveryChannelLabel = computed(() =>
   t(
@@ -481,7 +496,7 @@ const currentStepValid = computed(() => {
     return (
       Boolean(form.name.trim()) &&
       sourceValid.value &&
-      audiencePreview.value.estimated_recipients !== null &&
+      audienceReady.value &&
       eligibleCount.value > 0
     );
   if (stepIndex.value === 1) return configValid.value;
@@ -909,7 +924,10 @@ const buildPayload = () => {
     name: form.name,
     delivery_channel: form.delivery_channel,
     audience_type: form.audience_type,
-    audience_config: form.audience_config,
+    audience_config: {
+      ...JSON.parse(JSON.stringify(form.audience_config)),
+      selection_confirmation: audiencePreview.value.selection_confirmation,
+    },
     rotation_mode: form.rotation_mode,
     delay_min_seconds: Number(form.delay_min_seconds),
     delay_max_seconds: Number(form.delay_max_seconds),
@@ -933,7 +951,7 @@ const refreshAudiencePreview = async () => {
   if (!sourceValid.value) return;
   audienceRequest += 1;
   const request = audienceRequest;
-  const sourceSignature = audienceSourceSignature.value;
+  const selectionSignature = audienceSelectionSignature.value;
   previewingAudience.value = true;
   try {
     const { data } = await JrcCampaignsAPI.audiencePreview({
@@ -944,13 +962,15 @@ const refreshAudiencePreview = async () => {
     });
     if (
       request === audienceRequest &&
-      sourceSignature === audienceSourceSignature.value
-    )
+      selectionSignature === audienceSelectionSignature.value
+    ) {
       audiencePreview.value = data;
+      audiencePreviewSignature.value = selectionSignature;
+    }
   } catch {
     if (
       request !== audienceRequest ||
-      sourceSignature !== audienceSourceSignature.value
+      selectionSignature !== audienceSelectionSignature.value
     )
       return;
     audiencePreview.value = {
@@ -974,6 +994,11 @@ const selectCreatedList = async list => {
 };
 const refreshRecipientManager = async () => {
   if (!sourceValid.value || !showRecipientManager.value) return;
+  recipientRequest += 1;
+  const request = recipientRequest;
+  const selectionSignature = audienceSelectionSignature.value;
+  const search = recipientSearch.value;
+  const page = recipientPagination.value.page;
   recipientManagerLoading.value = true;
   try {
     const { data } = await JrcCampaignsAPI.audiencePreview(
@@ -990,6 +1015,13 @@ const refreshRecipientManager = async () => {
         recipient_per_page: recipientPagination.value.per_page,
       }
     );
+    if (
+      request !== recipientRequest ||
+      selectionSignature !== audienceSelectionSignature.value ||
+      search !== recipientSearch.value ||
+      page !== recipientPagination.value.page
+    )
+      return;
     recipientRows.value = data.recipients || [];
     recipientPagination.value = data.recipient_pagination || {
       page: 1,
@@ -998,10 +1030,11 @@ const refreshRecipientManager = async () => {
       total_pages: 1,
     };
   } catch {
+    if (request !== recipientRequest) return;
     recipientRows.value = [];
     useAlert(t('JRC_CAMPAIGNS.ALERTS.RECIPIENTS_LOAD_FAILED'));
   } finally {
-    recipientManagerLoading.value = false;
+    if (request === recipientRequest) recipientManagerLoading.value = false;
   }
 };
 const openRecipientManager = async () => {
@@ -1016,7 +1049,10 @@ const changeRecipientPage = async page => {
 };
 const nextStep = async () => {
   if (!currentStepValid.value) return;
-  if (stepIndex.value === 0) await refreshAudiencePreview();
+  if (stepIndex.value === 0) {
+    await refreshAudiencePreview();
+    if (!currentStepValid.value) return;
+  }
   stepIndex.value += 1;
 };
 const goToStep = index => {
@@ -1030,12 +1066,27 @@ const save = async startAfterSave => {
     !messagesValid.value
   )
     return;
+  if (saving.value) return;
   saving.value = true;
   try {
+    await refreshAudiencePreview();
+    if (!audienceReady.value || eligibleCount.value <= 0) {
+      useAlert(t('JRC_CAMPAIGNS.GOVERNANCE.AUDIENCE_CHANGED'));
+      return;
+    }
+    const savedSelection = audienceSelectionSignature.value;
     const payload = { campaign: buildPayload() };
     const response = props.campaign
       ? await JrcCampaignsAPI.update(props.campaign.id, payload)
       : await JrcCampaignsAPI.create(payload);
+    if (
+      savedSelection !== audienceSelectionSignature.value ||
+      (response.data.estimated_recipients !== undefined &&
+        Number(response.data.estimated_recipients) !== eligibleCount.value)
+    ) {
+      useAlert(t('JRC_CAMPAIGNS.GOVERNANCE.AUDIENCE_CHANGED'));
+      return;
+    }
     if (startAfterSave && !response.data.approval_valid) {
       useAlert(t('JRC_CAMPAIGNS.GOVERNANCE.REVIEW_REQUIRED'));
       emit('reviewRequested', response.data);
@@ -1265,8 +1316,9 @@ const hydrate = campaign => {
       campaign.audience_config?.recipient_selection_mode === 'include'
         ? 'include'
         : 'exclude',
-    recipient_selection_keys:
-      campaign.audience_config?.recipient_selection_keys || [],
+    recipient_selection_keys: [
+      ...(campaign.audience_config?.recipient_selection_keys || []),
+    ],
   };
   form.inboxLinks = (campaign.campaign_inboxes || []).map(item => ({
     ...item,
