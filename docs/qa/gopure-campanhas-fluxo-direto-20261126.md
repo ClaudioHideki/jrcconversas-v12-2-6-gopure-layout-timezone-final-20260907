@@ -23,3 +23,9 @@ Consentimentos históricos não são criados, apagados nem atualizados para simu
 Sem mudanças em Docker Compose, workflows ou migrations. Banco dedicado de QA: `jrc_campaign_direct_20261126_test`; Redis isolado. Nenhum dado real ou configuração produtiva foi consultado/alterado. Fuso e filtros de campanhas anteriores são preservados; somente novas campanhas adotam São Paulo automaticamente.
 
 Este checkpoint é local. CI remota, publicação GHCR e deploy não executados neste incremento. As imagens publicadas anteriormente permanecem preservadas. [ADR 0007](../adr/0007-campanhas-fluxo-direto-e-legibilidade.md).
+
+## Homologação remota e publicação autorizada
+
+O usuário autorizou push, CI completa e publicação pelo workflow existente, sem deploy. A primeira execução 45819834554 no SHA 34fb7894 executou 1770 exemplos: uma falha de expectativa antiga no teste de rascunho NICO e 60 pendências já existentes. A imagem não foi gerada/publicada. O teste passou a conferir o único telefone elegível, ausência de consentimentos fabricados e todas as proteções de rascunho sem disparo; nenhum código de produção foi alterado nessa correção. A CI completa será repetida no novo checkpoint antes de publicar.
+
+Regressão NICO local após ajuste: 17 exemplos, zero falhas; sem envio externo.
