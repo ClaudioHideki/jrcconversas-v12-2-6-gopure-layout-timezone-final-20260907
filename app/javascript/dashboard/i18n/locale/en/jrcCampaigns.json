@@ -143,7 +143,7 @@
       "SOURCE": "Origem dos contatos",
       "SOURCE_IMPORT": "Importar CSV",
       "OTHER_SOURCES": "Etiquetas, caixas, CRM e listas salvas",
-      "SOURCE_IMPORT_HELP": "Escolha um arquivo com os contatos desta campanha.",
+      "SOURCE_IMPORT_HELP": "Escolha uma lista sanitizada salva ou envie um novo CSV com os contatos desta campanha.",
       "SOURCE_MANUAL": "Digitar números",
       "SOURCE_MANUAL_HELP": "Cole os números sem precisar preparar um arquivo.",
       "MANUAL_NUMBERS_HELP": "Um número por linha, com código do país e DDD. Você também pode colar nome,telefone,email.",
@@ -384,7 +384,10 @@
       "EMAIL_COMPLIANCE": "Os e-mails serão enviados pela caixa selecionada usando a configuração SMTP ou OAuth existente. Respostas retornam para a conversa da campanha.",
       "CLOUD_PACING_TITLE": "Envio pela API oficial da Meta",
       "CLOUD_PACING_HELP": "Sem intervalo artificial entre destinatários. O processamento segue a fila e a capacidade da Meta, respeitando os limites da conta, os templates e a janela de envio.",
-      "CLOUD_DURATION": "Conforme fila e capacidade da Meta"
+      "CLOUD_DURATION": "Conforme fila e capacidade da Meta",
+      "SAVED_LISTS_CSV_HELP": "Escolha uma lista já sanitizada ou selecione “Importar novo CSV” para enviar outro arquivo. A prévia considera somente a opção selecionada.",
+      "NO_SAVED_LISTS_CSV": "Ainda não há listas sanitizadas nesta conta. Importe um CSV abaixo para criar uma lista.",
+      "NEW_CSV_OPTION": "Importar novo CSV"
     },
     "SANITIZE": {
       "LIST_COUNTS": "{whatsapp} WhatsApp · {email} e-mail · {total} importados",

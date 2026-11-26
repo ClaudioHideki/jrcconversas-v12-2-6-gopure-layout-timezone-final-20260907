@@ -1704,8 +1704,56 @@ watch(
                   />
                 </button>
               </div>
+              <label
+                v-if="
+                  form.audience_type === 'sanitized_list' &&
+                  audienceInputMode !== 'manual'
+                "
+                class="mt-4 block rounded-xl border border-n-weak p-4 text-base font-medium text-n-slate-12"
+              >
+                {{ $t('JRC_CAMPAIGNS.WIZARD.SANITIZED_LIST') }}
+                <select
+                  v-model="form.audience_config.sanitized_list_id"
+                  data-testid="campaign-sanitized-list"
+                  :disabled="!audienceLists.length"
+                  class="mt-1.5 w-full rounded-xl border border-n-weak bg-n-background px-3 py-2.5"
+                >
+                  <option :value="null">
+                    {{
+                      $t(
+                        audienceInputMode === 'csv'
+                          ? 'JRC_CAMPAIGNS.WIZARD.NEW_CSV_OPTION'
+                          : 'JRC_CAMPAIGNS.WIZARD.SELECT_OPTION'
+                      )
+                    }}
+                  </option>
+                  <option
+                    v-for="list in audienceLists"
+                    :key="list.id"
+                    :value="list.id"
+                  >
+                    {{ list.name }}
+                  </option>
+                </select>
+                <span
+                  v-if="audienceInputMode === 'csv'"
+                  class="mt-2 block text-sm font-normal"
+                >
+                  {{
+                    $t(
+                      audienceLists.length
+                        ? 'JRC_CAMPAIGNS.WIZARD.SAVED_LISTS_CSV_HELP'
+                        : 'JRC_CAMPAIGNS.WIZARD.NO_SAVED_LISTS_CSV'
+                    )
+                  }}
+                </span>
+              </label>
               <CampaignAudienceInput
-                v-if="audienceInputMode"
+                v-if="
+                  audienceInputMode &&
+                  (audienceInputMode !== 'csv' ||
+                    !form.audience_config.sanitized_list_id)
+                "
                 :key="audienceInputMode"
                 :mode="audienceInputMode"
                 :campaign-name="form.name"
@@ -1853,29 +1901,6 @@ watch(
                   </label>
                 </div>
               </div>
-              <label
-                v-if="
-                  form.audience_type === 'sanitized_list' && !audienceInputMode
-                "
-                class="mt-5 block max-w-xl border-t border-n-weak pt-5 text-base font-medium text-n-slate-12"
-              >
-                {{ $t('JRC_CAMPAIGNS.WIZARD.SANITIZED_LIST') }}
-                <select
-                  v-model="form.audience_config.sanitized_list_id"
-                  class="mt-1.5 w-full rounded-xl border border-n-weak bg-n-background px-3 py-2.5"
-                >
-                  <option :value="null">
-                    {{ $t('JRC_CAMPAIGNS.WIZARD.SELECT_OPTION') }}
-                  </option>
-                  <option
-                    v-for="list in audienceLists"
-                    :key="list.id"
-                    :value="list.id"
-                  >
-                    {{ list.name }}
-                  </option>
-                </select>
-              </label>
             </div>
             <div class="border-n-teal-6 bg-n-teal-2 rounded-2xl border p-5">
               <div class="flex items-center justify-between gap-3">

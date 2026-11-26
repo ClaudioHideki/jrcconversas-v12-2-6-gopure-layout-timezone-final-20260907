@@ -26,3 +26,5 @@ Não marcar uma proposta como aceita sem a decisão correspondente. Preserve os 
 - [0009 — Ritmo Cloud API e largura](0009-campanhas-cloud-ritmo-layout.md).
 
 - [0010 — Erros de campanhas em português](0010-campanhas-erros-traduzidos.md).
+
+- [0011 — Listas sanitizadas no CSV](0011-campanhas-listas-na-importacao-csv.md).

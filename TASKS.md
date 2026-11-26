@@ -8,6 +8,7 @@
 
 
 
+
 - [ ] **CAMPANHAS-20261125:** Auditoria e correção de templates, mídia de exemplo, rastreamento Meta, janela IANA, catálogo e consentimentos. Checkpoints A–F registrados; 285 exemplos backend e 192 testes frontend, mais teste adicional de rótulo, aprovados; navegador sintético documentado. CI e candidata sem publicação em andamento. Homologação real depende de autorização específica. Ver [evidências](docs/qa/jrc-campanhas-20261125.md).
 
 Nenhuma execução funcional é iniciada por este bootstrap. As frentes já em andamento permanecem nos planos/checkpoints existentes.
@@ -20,6 +21,8 @@ Nenhuma execução funcional é iniciada por este bootstrap. As frentes já em a
 - [ ] **OPS-02:** Reconciliar correções genéricas do LAB2 preservando layout e timezone específicos.
 
 ## Concluído (Done)
+
+- [x] **CAMPANHAS-LISTAS-CSV-20261126:** Mostrar todas as listas sanitizadas da conta em Importar CSV e reutilizar a selecionada sem novo upload/cópia. [QA](docs/qa/gopure-campanhas-listas-csv-20261126.md). 219 testes frontend e build aprovados; escolha exclusiva entre lista e arquivo. Sem disparos reais/publicação/deploy.
 
 - [x] **CAMPANHAS-ERROS-PT-20261126:** Traduzir erros de relatório por código confirmado, preservar original em detalhes e isolar consulta histórica por conta/caixa. [QA](docs/qa/gopure-campanhas-erros-pt-20261126.md). 232 testes backend, 217 frontend e build aprovados. Sem envio real, publicação ou deploy.
 
