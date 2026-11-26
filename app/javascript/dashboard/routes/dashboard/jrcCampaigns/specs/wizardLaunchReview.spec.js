@@ -324,7 +324,7 @@ describe('campaign wizard launch and required human review', () => {
     expect(api.launch).not.toHaveBeenCalled();
   });
 
-  it('refreshes official-channel eligibility after recording consent without clearing the draft or sending a campaign', async () => {
+  it('refreshes official-channel eligibility directly without a consent panel, losing the draft or sending a campaign', async () => {
     const wrapper = mount(CampaignWizard, {
       props: {
         metadata: {
@@ -352,14 +352,13 @@ describe('campaign wizard launch and required human review', () => {
     });
     await flushPromises();
     wrapper.vm.form.name = 'Retained draft';
-    const manage = wrapper
-      .findAll('button')
-      .find(button => button.text() === 'JRC_CAMPAIGNS.GUIDE.MANAGE_CONSENTS');
-    await manage.trigger('click');
+    expect(wrapper.findComponent({ name: 'ConsentPanel' }).exists()).toBe(
+      false
+    );
     api.audiencePreview.mockResolvedValueOnce({
       data: { estimated_recipients: 2, sample: [] },
     });
-    wrapper.getComponent({ name: 'ConsentPanel' }).vm.$emit('changed');
+    await wrapper.vm.refreshAudiencePreview();
     await flushPromises();
     expect(wrapper.vm.form.name).toBe('Retained draft');
     expect(wrapper.vm.eligibleCount).toBe(2);

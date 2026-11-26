@@ -38,9 +38,10 @@ RSpec.describe 'Campaign sending governance' do # rubocop:disable RSpec/Describe
     expect(campaign.reload).to be_draft
   end
 
-  it 'excludes contacts without recorded positive consent' do
+  it 'includes contacts without prior registration while preserving consent records' do
     contact
-    expect(JrcCampaigns::AudienceResolver.new(campaign).entries).to be_empty
+    expect(JrcCampaigns::AudienceResolver.new(campaign).entries.map(&:phone_number)).to eq([contact.phone_number])
+    expect(JrcCampaigns::Consent.where(account: account)).to be_empty
   end
 
   context 'with a GoPure email campaign' do
@@ -270,9 +271,9 @@ RSpec.describe 'Campaign sending governance' do # rubocop:disable RSpec/Describe
     end
   end
 
-  it 'blocks test messages without opt-in' do
+  it 'still blocks freeform tests outside the Meta window without requiring opt-in registration' do
     service = JrcCampaigns::TestMessageService.new(account: account, user: admin, idempotency_key: SecureRandom.uuid, operator_confirmed: true, phone_number: contact.phone_number,
                                                    inbox_id: inbox.id, step: { kind: 'text', body: 'Hello' })
-    expect { service.perform }.to raise_error(ArgumentError, /consent/i)
+    expect { service.perform }.to raise_error(ArgumentError, /janela/i)
   end
 end

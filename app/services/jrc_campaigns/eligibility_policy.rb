@@ -6,15 +6,9 @@ class JrcCampaigns::EligibilityPolicy
     @purpose = purpose
   end
 
+  # Prior registration is optional; a recorded withdrawal and safety blocks still apply.
   def rejection_reason
-    safety_reason = safety_rejection_reason
-    return safety_reason if safety_reason
-
-    consent = JrcCampaigns::Consent.active.where(account: account, phone_number: phone_number)
-    return 'Consentimento positivo não registrado ou revogado.' unless consent.exists?
-    return 'Consentimento sem finalidade confirmada para campanhas e testes WhatsApp.' if @purpose && !consent.exists?(purpose: @purpose)
-
-    nil
+    list_rejection_reason
   end
 
   def safety_rejection_reason
@@ -25,16 +19,14 @@ class JrcCampaigns::EligibilityPolicy
     nil
   end
 
-  # QR campaigns use the explicitly selected list, without manufacturing consent.
+  # Every source and connector uses the explicitly selected audience without creating consent.
   # A recorded withdrawal still wins over a subsequent CSV/manual import.
   def list_rejection_reason
     reason = safety_rejection_reason
     return reason if reason
 
     records = JrcCampaigns::Consent.where(account: account, phone_number: phone_number)
-    if records.where.not(revoked_at: nil).exists? && !records.active.exists?
-      return 'Consentimento positivo revogado para este destinatário.'
-    end
+    return 'Consentimento positivo revogado para este destinatário.' if records.where.not(revoked_at: nil).exists? && !records.active.exists?
 
     nil
   end

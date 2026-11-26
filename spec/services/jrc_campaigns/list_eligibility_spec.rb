@@ -8,7 +8,7 @@ RSpec.describe JrcCampaigns::EligibilityPolicy do
 
   it 'allows a list destination without creating positive consent records' do
     expect { expect(policy.list_rejection_reason).to be_nil }.not_to change(JrcCampaigns::Consent, :count)
-    expect(policy.rejection_reason).to match(/Consentimento/)
+    expect(policy.rejection_reason).to be_nil
   end
 
   it 'preserves a recorded withdrawal even after importing the number again' do
@@ -37,10 +37,10 @@ RSpec.describe JrcCampaigns::EligibilityPolicy do
     expect(policy.list_rejection_reason).to eq('Destinatário na blacklist.')
   end
 
-  it 'does not present recipients as eligible before sender consent requirements are known' do
+  it 'presents eligible contacts before sender choice without consent registration' do
     create(:contact, account: account, phone_number: phone)
     campaign = JrcCampaigns::Campaign.new(account: account, created_by: admin, name: 'List preview')
-    expect(JrcCampaigns::AudienceResolver.new(campaign).entries.map(&:phone_number)).not_to include(phone)
+    expect(JrcCampaigns::AudienceResolver.new(campaign).entries.map(&:phone_number)).to include(phone)
     expect(JrcCampaigns::Consent.where(account: account)).to be_empty
   end
 
@@ -53,6 +53,7 @@ RSpec.describe JrcCampaigns::EligibilityPolicy do
     create(:contact, account: account, phone_number: phone)
     inbox = create(:inbox, account: account, channel: create(:channel_api, account: account))
     campaign = JrcCampaigns::Campaign.create!(account: account, inbox: inbox, created_by: admin, name: 'Unconfigured inbox')
-    expect(JrcCampaigns::AudienceResolver.new(campaign).entries).to be_empty
+    expect(campaign.sending_inbox_links).to be_empty
+    expect { campaign.launch! }.to raise_error(ActiveRecord::RecordInvalid)
   end
 end

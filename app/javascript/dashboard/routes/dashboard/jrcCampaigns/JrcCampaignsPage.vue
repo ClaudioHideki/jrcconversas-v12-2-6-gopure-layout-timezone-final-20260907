@@ -9,7 +9,6 @@ import CampaignPerformanceChart from './components/CampaignPerformanceChart.vue'
 import SanitizedLists from './components/SanitizedLists.vue';
 import BlacklistPanel from './components/BlacklistPanel.vue';
 import CampaignApproval from './components/CampaignApproval.vue';
-import ConsentPanel from './components/ConsentPanel.vue';
 
 const { t } = useI18n();
 const campaigns = ref([]);
@@ -45,11 +44,6 @@ const showAdvancedFilters = ref(false);
 const statusFilters = ref([]);
 
 const tabs = computed(() => [
-  {
-    key: 'consents',
-    label: t('JRC_CAMPAIGNS.GOVERNANCE.CONSENTS'),
-    icon: 'i-lucide-shield-check',
-  },
   {
     key: 'dispatches',
     label: t('JRC_CAMPAIGNS.TABS.DISPATCHES'),
@@ -201,7 +195,7 @@ const metricChange = key => {
   return Math.round(((current - previous) / previous) * 1000) / 10;
 };
 const metricChangeClass = (key, change) => {
-  if (change === null || change === 0) return 'text-n-slate-10';
+  if (change === null || change === 0) return 'text-n-slate-11';
   const positive = key === 'failed' ? change < 0 : change > 0;
   return positive ? 'text-n-teal-11' : 'text-n-ruby-11';
 };
@@ -340,7 +334,7 @@ onMounted(fetchData);
 
 <template>
   <div
-    class="relative h-full w-full shrink-0 overflow-y-auto bg-n-background p-4 lg:p-6"
+    class="relative h-full w-full shrink-0 overflow-y-auto bg-n-background text-n-slate-12 p-4 lg:p-6"
   >
     <div v-if="!showWizard" class="mx-auto w-full max-w-[1600px]">
       <div class="mb-5 flex flex-wrap items-center justify-between gap-4">
@@ -355,7 +349,7 @@ onMounted(fetchData);
               {{ $t('JRC_CAMPAIGNS.BRAND_BADGE') }}
             </span>
           </div>
-          <p class="mt-1 text-sm text-n-slate-10">
+          <p class="mt-1 text-sm text-n-slate-11">
             {{ $t('JRC_CAMPAIGNS.SUBTITLE') }}
           </p>
         </div>
@@ -379,7 +373,7 @@ onMounted(fetchData);
           :class="
             activeTab === tab.key
               ? 'border-n-brand text-n-brand'
-              : 'border-transparent text-n-slate-10 hover:text-n-slate-12'
+              : 'border-transparent text-n-slate-11 hover:text-n-slate-12'
           "
           @click="activeTab = tab.key"
         >
@@ -393,7 +387,7 @@ onMounted(fetchData);
           <div
             class="grid gap-3 md:grid-cols-2 xl:grid-cols-[220px_1fr_190px_auto_auto]"
           >
-            <label class="text-xs font-medium text-n-slate-10">
+            <label class="text-xs font-medium text-n-slate-11">
               {{ $t('JRC_CAMPAIGNS.FILTERS.PERIOD') }}
               <select
                 v-model="period"
@@ -413,7 +407,7 @@ onMounted(fetchData);
                 </option>
               </select>
             </label>
-            <label class="text-xs font-medium text-n-slate-10">
+            <label class="text-xs font-medium text-n-slate-11">
               {{ $t('JRC_CAMPAIGNS.FILTERS.CAMPAIGN') }}
               <select
                 v-model="campaignFilter"
@@ -431,7 +425,7 @@ onMounted(fetchData);
                 </option>
               </select>
             </label>
-            <label class="text-xs font-medium text-n-slate-10">
+            <label class="text-xs font-medium text-n-slate-11">
               {{ $t('JRC_CAMPAIGNS.FILTERS.CHANNEL') }}
               <select
                 v-model="channelFilter"
@@ -450,7 +444,7 @@ onMounted(fetchData);
             </label>
             <button
               type="button"
-              class="self-end rounded-xl border border-n-strong px-3 py-2.5 text-sm font-medium text-n-slate-11 hover:bg-n-alpha-2"
+              class="self-end rounded-xl border border-n-strong px-3 py-2.5 text-sm font-medium text-n-slate-12 hover:bg-n-alpha-2"
               @click="showAdvancedFilters = !showAdvancedFilters"
             >
               <span class="i-lucide-list-filter mr-2 inline-block size-4" />
@@ -458,7 +452,7 @@ onMounted(fetchData);
             </button>
             <button
               type="button"
-              class="self-end rounded-xl border border-n-strong p-2.5 text-n-slate-11 hover:bg-n-alpha-2"
+              class="self-end rounded-xl border border-n-strong p-2.5 text-n-slate-12 hover:bg-n-alpha-2"
               :title="$t('JRC_CAMPAIGNS.REFRESH')"
               @click="fetchData"
             >
@@ -472,7 +466,7 @@ onMounted(fetchData);
             v-if="showAdvancedFilters"
             class="mt-4 flex flex-wrap items-center gap-2 border-t border-n-weak pt-4"
           >
-            <span class="mr-1 text-xs font-medium text-n-slate-10">
+            <span class="mr-1 text-xs font-medium text-n-slate-11">
               {{ $t('JRC_CAMPAIGNS.FILTERS.STATUS') }}
             </span>
             <button
@@ -483,7 +477,7 @@ onMounted(fetchData);
               :class="
                 statusFilters.includes(option.status)
                   ? 'border-n-brand bg-n-brand/10 text-n-brand'
-                  : 'border-n-weak text-n-slate-10'
+                  : 'border-n-weak text-n-slate-11'
               "
               @click="toggleStatus(option.status)"
             >
@@ -500,7 +494,7 @@ onMounted(fetchData);
           >
             <div class="flex items-start justify-between gap-3">
               <div>
-                <p class="text-xs font-medium text-n-slate-10">
+                <p class="text-xs font-medium text-n-slate-11">
                   {{ metric.label }}
                 </p>
                 <p class="mt-2 text-2xl font-semibold text-n-slate-12">
@@ -530,7 +524,7 @@ onMounted(fetchData);
               {{ formatPercent(Math.abs(metricChange(metric.key))) }}%
               {{ $t('JRC_CAMPAIGNS.KPIS.VS_PREVIOUS') }}
             </p>
-            <p v-else class="mt-3 text-xs text-n-slate-9">
+            <p v-else class="mt-3 text-xs text-n-slate-11">
               {{ $t('JRC_CAMPAIGNS.KPIS.NO_PREVIOUS') }}
             </p>
           </article>
@@ -545,12 +539,12 @@ onMounted(fetchData);
                 <h2 class="font-semibold text-n-slate-12">
                   {{ $t('JRC_CAMPAIGNS.DASHBOARD.PERFORMANCE') }}
                 </h2>
-                <p class="mt-1 text-xs text-n-slate-10">
+                <p class="mt-1 text-xs text-n-slate-11">
                   {{ $t('JRC_CAMPAIGNS.DASHBOARD.REAL_DATA') }}
                 </p>
               </div>
               <span
-                class="rounded-lg bg-n-alpha-2 px-2.5 py-1 text-xs text-n-slate-10"
+                class="rounded-lg bg-n-alpha-2 px-2.5 py-1 text-xs text-n-slate-11"
               >
                 {{ $t('JRC_CAMPAIGNS.DASHBOARD.GROUP_BY_DAY') }}
               </span>
@@ -562,7 +556,7 @@ onMounted(fetchData);
             />
             <div
               v-else
-              class="flex h-72 items-center justify-center rounded-xl bg-n-alpha-1 text-sm text-n-slate-10"
+              class="flex h-72 items-center justify-center rounded-xl bg-n-alpha-1 text-sm text-n-slate-11"
             >
               {{ $t('JRC_CAMPAIGNS.DASHBOARD.NO_ANALYTICS') }}
             </div>
@@ -577,12 +571,12 @@ onMounted(fetchData);
             <div class="mt-5 space-y-4">
               <div v-for="item in funnel" :key="item.key">
                 <div class="mb-1.5 flex items-end justify-between gap-2">
-                  <span class="text-xs font-medium text-n-slate-10">
+                  <span class="text-xs font-medium text-n-slate-11">
                     {{ item.label }}
                   </span>
                   <span class="text-sm font-semibold text-n-slate-12">
                     {{ formatNumber(item.value) }}
-                    <small class="font-normal text-n-slate-9">
+                    <small class="font-normal text-n-slate-11">
                       {{ formatPercent(item.percentage) }}%
                     </small>
                   </span>
@@ -604,13 +598,13 @@ onMounted(fetchData);
             <h2 class="font-semibold text-n-slate-12">
               {{ $t('JRC_CAMPAIGNS.FAILURES.TITLE') }}
             </h2>
-            <p class="mt-1 text-xs text-n-slate-10">
+            <p class="mt-1 text-xs text-n-slate-11">
               {{ $t('JRC_CAMPAIGNS.FAILURES.SUBTITLE') }}
             </p>
             <div v-if="visibleFailureReasons.length" class="mt-5 space-y-4">
               <div v-for="reason in visibleFailureReasons" :key="reason.key">
                 <div class="mb-1.5 flex justify-between gap-3 text-xs">
-                  <span class="text-n-slate-10">
+                  <span class="text-n-slate-11">
                     {{
                       $t(`JRC_CAMPAIGNS.FAILURES.${reason.key.toUpperCase()}`)
                     }}
@@ -628,7 +622,7 @@ onMounted(fetchData);
             </div>
             <div
               v-else
-              class="mt-5 rounded-xl bg-n-alpha-1 p-5 text-center text-sm text-n-slate-10"
+              class="mt-5 rounded-xl bg-n-alpha-1 p-5 text-center text-sm text-n-slate-11"
             >
               {{ $t('JRC_CAMPAIGNS.FAILURES.EMPTY') }}
             </div>
@@ -644,7 +638,7 @@ onMounted(fetchData);
                 <h2 class="font-semibold text-n-slate-12">
                   {{ $t('JRC_CAMPAIGNS.DASHBOARD.CAMPAIGN_PERFORMANCE') }}
                 </h2>
-                <p class="mt-1 text-xs text-n-slate-10">
+                <p class="mt-1 text-xs text-n-slate-11">
                   {{
                     $t('JRC_CAMPAIGNS.DASHBOARD.CAMPAIGN_COUNT', {
                       count: filteredCampaigns.length,
@@ -654,7 +648,7 @@ onMounted(fetchData);
               </div>
               <button
                 type="button"
-                class="flex items-center gap-2 rounded-xl border border-n-strong px-3 py-2 text-xs font-medium text-n-slate-11 hover:bg-n-alpha-2"
+                class="flex items-center gap-2 rounded-xl border border-n-strong px-3 py-2 text-xs font-medium text-n-slate-12 hover:bg-n-alpha-2"
                 @click="exportSelected"
               >
                 <span class="i-lucide-download size-4" />
@@ -664,18 +658,18 @@ onMounted(fetchData);
             <div class="overflow-x-auto">
               <div
                 v-if="loading"
-                class="p-10 text-center text-sm text-n-slate-10"
+                class="p-10 text-center text-sm text-n-slate-11"
               >
                 {{ $t('JRC_CAMPAIGNS.LOADING') }}
               </div>
               <div
                 v-else-if="!filteredCampaigns.length"
-                class="p-12 text-center text-sm text-n-slate-10"
+                class="p-12 text-center text-sm text-n-slate-11"
               >
                 {{ $t('JRC_CAMPAIGNS.EMPTY_FILTERED') }}
               </div>
               <table v-else class="w-full min-w-[1120px] text-left text-sm">
-                <thead class="bg-n-alpha-2 text-xs text-n-slate-10">
+                <thead class="bg-n-alpha-2 text-xs text-n-slate-11">
                   <tr>
                     <th class="px-4 py-3">
                       {{ $t('JRC_CAMPAIGNS.TABLE.NAME') }}
@@ -726,12 +720,12 @@ onMounted(fetchData);
                           max="100"
                           class="h-1.5 w-24 overflow-hidden rounded-full accent-n-brand"
                         />
-                        <span class="text-[11px] text-n-slate-9">
+                        <span class="text-[11px] text-n-slate-11">
                           {{ progress(campaign) }}%
                         </span>
                       </div>
                     </td>
-                    <td class="px-4 py-4 text-n-slate-11">
+                    <td class="px-4 py-4 text-n-slate-12">
                       <span
                         class="mr-1 inline-block size-3 text-n-teal-11"
                         :class="
@@ -748,16 +742,16 @@ onMounted(fetchData);
                         )
                       }}
                     </td>
-                    <td class="px-4 py-4 text-n-slate-11">
+                    <td class="px-4 py-4 text-n-slate-12">
                       {{ formatNumber(campaign.sent_count) }}
                     </td>
-                    <td class="px-4 py-4 text-n-slate-11">
+                    <td class="px-4 py-4 text-n-slate-12">
                       {{ formatNumber(campaign.delivered_count) }}
                     </td>
-                    <td class="px-4 py-4 text-n-slate-11">
+                    <td class="px-4 py-4 text-n-slate-12">
                       {{ formatNumber(campaign.read_count) }}
                     </td>
-                    <td class="px-4 py-4 text-n-slate-11">
+                    <td class="px-4 py-4 text-n-slate-12">
                       {{ formatNumber(campaign.replied_count) }}
                     </td>
                     <td
@@ -765,14 +759,14 @@ onMounted(fetchData);
                       :class="
                         campaign.failed_count
                           ? 'text-n-ruby-11'
-                          : 'text-n-slate-11'
+                          : 'text-n-slate-12'
                       "
                     >
                       {{ formatNumber(campaign.failed_count) }}
                     </td>
                     <td class="px-4 py-4">
                       <span
-                        class="rounded-full bg-n-alpha-2 px-2.5 py-1 text-xs text-n-slate-11"
+                        class="rounded-full bg-n-alpha-2 px-2.5 py-1 text-xs text-n-slate-12"
                       >
                         {{ statusLabel(campaign.status) }}
                       </span>
@@ -853,7 +847,7 @@ onMounted(fetchData);
                         </button>
                         <button
                           type="button"
-                          class="rounded-lg p-2 text-n-slate-11 hover:bg-n-alpha-2"
+                          class="rounded-lg p-2 text-n-slate-12 hover:bg-n-alpha-2"
                           :title="$t('JRC_CAMPAIGNS.DUPLICATE')"
                           @click="duplicateCampaign(campaign)"
                         >
@@ -884,16 +878,12 @@ onMounted(fetchData);
         @use-list="openFromList"
       />
       <BlacklistPanel v-else-if="activeTab === 'blacklist'" />
-      <ConsentPanel
-        v-else-if="activeTab === 'consents'"
-        @navigate="$event === 'campaign' ? openNew() : (activeTab = 'sanitize')"
-      />
       <template v-else>
         <div class="mb-5">
           <h2 class="text-xl font-semibold text-n-slate-12">
             {{ $t('JRC_CAMPAIGNS.REPORTS.TITLE') }}
           </h2>
-          <p class="mt-1 text-sm text-n-slate-10">
+          <p class="mt-1 text-sm text-n-slate-11">
             {{ $t('JRC_CAMPAIGNS.REPORTS.SUBTITLE') }}
           </p>
         </div>
@@ -903,7 +893,7 @@ onMounted(fetchData);
             :key="metric.key"
             class="rounded-xl border border-n-weak p-4"
           >
-            <div class="text-xs text-n-slate-10">{{ metric.label }}</div>
+            <div class="text-xs text-n-slate-11">{{ metric.label }}</div>
             <div class="mt-1 text-2xl font-semibold text-n-slate-12">
               {{ formatNumber(analytics.summary[metric.key]) }}
             </div>
@@ -919,7 +909,7 @@ onMounted(fetchData);
           >
             <div>
               <div class="font-medium text-n-slate-12">{{ campaign.name }}</div>
-              <div class="mt-1 text-xs text-n-slate-10">
+              <div class="mt-1 text-xs text-n-slate-11">
                 {{ statusLabel(campaign.status) }} ·
                 {{
                   formatDate(
@@ -929,7 +919,7 @@ onMounted(fetchData);
                 }}
               </div>
             </div>
-            <div class="flex items-center gap-4 text-sm text-n-slate-10">
+            <div class="flex items-center gap-4 text-sm text-n-slate-11">
               <span>{{ formatNumber(campaign.sent_count) }}</span>
               <span
                 class="i-lucide-chart-no-axes-column-increasing size-5 text-n-violet-11"

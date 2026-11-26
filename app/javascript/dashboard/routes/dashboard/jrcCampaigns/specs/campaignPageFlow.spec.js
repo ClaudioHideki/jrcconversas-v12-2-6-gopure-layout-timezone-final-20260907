@@ -84,6 +84,19 @@ describe('campaign page preserves the saved draft through review and launch', ()
     api.launch.mockResolvedValue({ data: { ...campaign, status: 'running' } });
   });
 
+  it('opens directly on dispatches and omits the consent registration tab', async () => {
+    const wrapper = mount(JrcCampaignsPage, { global });
+    await flushPromises();
+    expect(wrapper.vm.activeTab).toBe('dispatches');
+    expect(wrapper.vm.tabs.map(tab => tab.key)).toEqual([
+      'dispatches',
+      'sanitize',
+      'blacklist',
+      'reports',
+    ]);
+    expect(wrapper.text()).not.toContain('JRC_CAMPAIGNS.GOVERNANCE.CONSENTS');
+  });
+
   it('opens review for the same saved ID and sends a launch request only after approval and a separate Start click', async () => {
     const wrapper = mount(JrcCampaignsPage, { global });
     await flushPromises();

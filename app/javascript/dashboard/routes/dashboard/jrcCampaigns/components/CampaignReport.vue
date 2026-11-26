@@ -38,7 +38,7 @@ onMounted(() => load(1));
           <h2 class="text-xl font-semibold text-n-slate-12">
             {{ $t('JRC_CAMPAIGNS.REPORTS.TITLE') }} · {{ campaign.name }}
           </h2>
-          <p class="mt-1 text-sm text-n-slate-10">
+          <p class="mt-1 text-sm text-n-slate-11">
             {{ $t('JRC_CAMPAIGNS.REPORTS.SUBTITLE') }}
           </p>
         </div>
@@ -53,7 +53,7 @@ onMounted(() => load(1));
           </button>
           <button
             type="button"
-            class="rounded-lg p-2 text-n-slate-11 hover:bg-n-alpha-2"
+            class="rounded-lg p-2 text-n-slate-12 hover:bg-n-alpha-2"
             @click="emit('close')"
           >
             <span class="i-lucide-x size-5" />
@@ -61,7 +61,7 @@ onMounted(() => load(1));
         </div>
       </div>
       <div class="flex-1 overflow-y-auto p-6">
-        <div v-if="loading" class="p-12 text-center text-sm text-n-slate-10">
+        <div v-if="loading" class="p-12 text-center text-sm text-n-slate-11">
           {{ $t('JRC_CAMPAIGNS.LOADING') }}
         </div>
         <template v-else-if="report">
@@ -78,7 +78,7 @@ onMounted(() => load(1));
               :key="item[0]"
               class="rounded-xl border border-n-weak p-4"
             >
-              <div class="text-xs text-n-slate-10">
+              <div class="text-xs text-n-slate-11">
                 {{ $t(`JRC_CAMPAIGNS.REPORTS.${item[0]}`) }}
               </div>
               <div class="mt-1 text-2xl font-semibold text-n-slate-12">
@@ -89,7 +89,7 @@ onMounted(() => load(1));
 
           <div class="mt-6 overflow-x-auto rounded-xl border border-n-weak">
             <table class="w-full min-w-[900px] text-left text-sm">
-              <thead class="bg-n-alpha-2 text-xs text-n-slate-10">
+              <thead class="bg-n-alpha-2 text-xs text-n-slate-11">
                 <tr>
                   <th class="px-4 py-3">
                     {{ $t('JRC_CAMPAIGNS.TABLE.NAME') }}
@@ -123,27 +123,27 @@ onMounted(() => load(1));
                   <td class="px-4 py-3 font-medium text-n-slate-12">
                     {{ recipient.name || '-' }}
                   </td>
-                  <td class="px-4 py-3 text-n-slate-11">
+                  <td class="px-4 py-3 text-n-slate-12">
                     {{
                       recipient.destination ||
                       recipient.email ||
                       recipient.phone_number
                     }}
                   </td>
-                  <td class="px-4 py-3 text-n-slate-11">
+                  <td class="px-4 py-3 text-n-slate-12">
                     {{ recipient.inbox_name || '-' }}
                   </td>
-                  <td class="px-4 py-3 text-n-slate-11">
+                  <td class="px-4 py-3 text-n-slate-12">
                     #{{ recipient.execution_number }}
                   </td>
                   <td class="px-4 py-3">
                     <span
-                      class="rounded-full bg-n-alpha-2 px-2 py-1 text-xs text-n-slate-11"
+                      class="rounded-full bg-n-alpha-2 px-2 py-1 text-xs text-n-slate-12"
                     >
                       {{ recipient.status }}
                     </span>
                   </td>
-                  <td class="px-4 py-3 text-n-slate-10">
+                  <td class="px-4 py-3 text-n-slate-11">
                     {{
                       recipient.sent_at
                         ? new Date(recipient.sent_at).toLocaleString(
@@ -163,7 +163,7 @@ onMounted(() => load(1));
                 <tr v-if="!report.recipients.length">
                   <td
                     colspan="7"
-                    class="p-10 text-center text-sm text-n-slate-10"
+                    class="p-10 text-center text-sm text-n-slate-11"
                   >
                     {{ $t('JRC_CAMPAIGNS.REPORTS.NO_DATA') }}
                   </td>
@@ -184,7 +184,7 @@ onMounted(() => load(1));
             >
               <span class="i-lucide-chevron-left size-4" aria-hidden="true" />
             </button>
-            <span class="px-2 py-1.5 text-sm text-n-slate-10">
+            <span class="px-2 py-1.5 text-sm text-n-slate-11">
               {{ page }} / {{ report.pagination.pages }}
             </span>
             <button

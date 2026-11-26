@@ -10,15 +10,18 @@ RSpec.describe 'Campaign manual audience safety', type: :request do
   let(:inbox) { create(:inbox, account: account, channel: channel) }
   let(:base) { "/api/v1/accounts/#{account.id}/jrc_campaigns/campaigns" }
   let(:size) { 5 }
+  let(:register_consents) { true }
   let(:contacts) do
     now = Time.current
     rows = Array.new(size) do |index|
       { account_id: account.id, name: "Synthetic #{index}", phone_number: "+551199#{format('%07d', index)}", created_at: now, updated_at: now }
     end
     ids = Contact.insert_all!(rows, returning: %w[id]).rows.flatten
-    JrcCampaigns::Consent.insert_all!(rows.map do |row|
-      row.except(:name).merge(recorded_by_id: admin.id, purpose: 'whatsapp_campaigns', evidence: 'Synthetic explicit consent', granted_at: now)
-    end)
+    if register_consents
+      JrcCampaigns::Consent.insert_all!(rows.map do |row|
+        row.except(:name).merge(recorded_by_id: admin.id, purpose: 'whatsapp_campaigns', evidence: 'Synthetic explicit consent', granted_at: now)
+      end)
+    end
     account.contacts.where(id: ids).order(:id).to_a
   end
   let(:keys) { contacts.first(4).map { |contact| "contact:#{contact.id}" } }
@@ -98,6 +101,31 @@ RSpec.describe 'Campaign manual audience safety', type: :request do
       post base, params: { campaign: attributes.merge(audience_config: broadened) }, headers: headers, as: :json
     end.not_to change(JrcCampaigns::Campaign, :count)
     expect(response).to have_http_status(:unprocessable_entity)
+  end
+
+  context 'with 511 contacts and no consent registration' do
+    let(:size) { 511 }
+    let(:register_consents) { false }
+
+    it 'still queues and dispatches only the four manually selected recipients' do
+      expected = contacts.first(4).map(&:phone_number)
+      campaign.request_review!
+      campaign.approve!(admin, campaign.review_digest)
+      execution = JrcCampaigns::LaunchService.new(campaign).perform
+      expect(execution.total_count).to eq(4)
+      expect(execution.recipients.pluck(:phone_number)).to match_array(expected)
+      sent_to = []
+      request = stub_request(:post, %r{https://graph.facebook.com/.*/messages}).to_return do |req|
+        destination = JSON.parse(req.body).fetch('to')
+        sent_to << "+#{destination.delete_prefix('+')}"
+        { status: 200, headers: { 'Content-Type' => 'application/json' }, body: { messages: [{ id: "wamid.synthetic.#{destination}" }] }.to_json }
+      end
+      execution.recipients.reload.each { |recipient| JrcCampaigns::DispatchStepService.new(recipient: recipient, step: campaign.steps.first).perform }
+      expect(sent_to).to match_array(expected)
+      expect(request).to have_been_requested.times(4)
+      expect(execution.recipients.reload.pluck(:status)).to eq(%w[sent sent sent sent])
+      expect(JrcCampaigns::Consent.where(account: account)).to be_empty
+    end
   end
 
   it 'rejects updates that broaden the audience or remove its confirmation' do

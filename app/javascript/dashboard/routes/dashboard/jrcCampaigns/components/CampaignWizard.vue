@@ -1,7 +1,5 @@
 <script setup>
-import CampaignFilters from 'dashboard/routes/dashboard/jrcCustomers/components/CampaignFilters.vue';
 import { zonedTimeToUtc, formatInTimeZone } from 'date-fns-tz';
-import ConsentPanel from './ConsentPanel.vue';
 import MetaTestHistory from './MetaTestHistory.vue';
 import MetaTemplateEditor from './MetaTemplateEditor.vue';
 import {
@@ -10,7 +8,6 @@ import {
   parseTemplateJson,
 } from '../templateConfiguration';
 import CampaignAudienceInput from './CampaignAudienceInput.vue';
-import { useCustomerMaster } from 'dashboard/routes/dashboard/jrcCustomers/useCustomerMaster';
 import {
   sourceInboxesForChannel,
   evolutionMinimumInterval,
@@ -41,7 +38,6 @@ const emit = defineEmits([
   'refreshSenders',
 ]);
 const { t } = useI18n();
-const { enabled: hasCustomerMaster } = useCustomerMaster();
 const panelColors = [
   'border-n-blue-6 border-t-4 border-t-n-blue-9 bg-n-blue-2',
   'border-n-teal-6 border-t-4 border-t-n-teal-9 bg-n-teal-2',
@@ -51,7 +47,6 @@ const panelColors = [
 ];
 const stepIndex = ref(0);
 const saving = ref(false);
-const showConsents = ref(false);
 const audienceInputMode = ref(null);
 const addedLists = ref([]);
 const audienceLists = computed(() => [
@@ -144,7 +139,7 @@ const form = reactive({
     start: '08:00',
     end: '18:00',
     days: [1, 2, 3, 4, 5],
-    timezone: props.metadata.timezone || 'UTC',
+    timezone: 'America/Sao_Paulo',
   },
   conversation_mode: 'reply_only',
   trigger_type: 'manual',
@@ -1474,7 +1469,7 @@ watch(
         <div class="flex min-w-0 items-center gap-3">
           <button
             type="button"
-            class="rounded-xl border border-n-weak p-2 text-n-slate-11 hover:bg-n-alpha-2"
+            class="rounded-xl border border-n-weak p-2 text-n-slate-12 hover:bg-n-alpha-2"
             :title="$t('JRC_CAMPAIGNS.CLOSE')"
             @click="emit('close')"
           >
@@ -1499,7 +1494,7 @@ watch(
         </div>
         <button
           type="button"
-          class="rounded-xl p-2 text-n-slate-10 hover:bg-n-alpha-2"
+          class="rounded-xl p-2 text-n-slate-11 hover:bg-n-alpha-2"
           :title="$t('JRC_CAMPAIGNS.CLOSE')"
           @click="emit('close')"
         >
@@ -1511,7 +1506,7 @@ watch(
           <button
             type="button"
             class="flex min-w-0 items-center gap-2"
-            :class="index <= stepIndex ? 'text-n-brand' : 'text-n-slate-9'"
+            :class="index <= stepIndex ? 'text-n-brand' : 'text-n-slate-11'"
             :disabled="index > stepIndex"
             @click="goToStep(index)"
           >
@@ -1585,41 +1580,16 @@ watch(
             >
               {{ t('JRC_CAMPAIGNS.EVOLUTION.NEW_TEST') }}
             </button>
-            <p v-if="newTestCoolingDown" class="mt-2 text-n-slate-11">
+            <p v-if="newTestCoolingDown" class="mt-2 text-n-slate-12">
               {{ t('JRC_CAMPAIGNS.EVOLUTION.WAIT_INTERVAL') }}
             </p>
           </div>
           <div v-if="stepIndex === 0" class="space-y-5">
-            <section
-              v-if="
-                !isEmail &&
-                ((!usesEvolution && selectedInboxIds.length > 0) ||
-                  showConsents)
-              "
-              class="rounded-xl border border-n-blue-5 bg-n-blue-2 p-4"
-            >
-              <p class="text-sm text-n-slate-12">
-                {{ t('JRC_CAMPAIGNS.GUIDE.WIZARD_CONSENT_HELP') }}
-              </p>
-              <button
-                type="button"
-                class="mt-2 text-sm font-semibold text-n-blue-11"
-                :aria-expanded="showConsents"
-                @click="showConsents = !showConsents"
-              >
-                {{ t('JRC_CAMPAIGNS.GUIDE.MANAGE_CONSENTS') }}
-              </button>
-              <ConsentPanel
-                v-if="showConsents"
-                embedded
-                @changed="refreshAudiencePreview"
-              />
-            </section>
             <div>
               <h3 class="text-xl font-semibold text-n-slate-12">
                 {{ $t('JRC_CAMPAIGNS.WIZARD.AUDIENCE_TITLE') }}
               </h3>
-              <p class="mt-1 text-sm text-n-slate-10">
+              <p class="mt-1 text-sm text-n-slate-11">
                 {{ $t('JRC_CAMPAIGNS.WIZARD.AUDIENCE_SUBTITLE') }}
               </p>
             </div>
@@ -1635,7 +1605,7 @@ watch(
               <h4 class="text-sm font-semibold text-n-slate-12">
                 {{ $t('JRC_CAMPAIGNS.WIZARD.DELIVERY_CHANNEL') }}
               </h4>
-              <p class="mt-1 text-xs text-n-slate-10">
+              <p class="mt-1 text-xs text-n-slate-11">
                 {{ $t('JRC_CAMPAIGNS.WIZARD.DELIVERY_CHANNEL_HELP') }}
               </p>
               <div class="mt-4 grid gap-3 sm:grid-cols-2">
@@ -1652,7 +1622,7 @@ watch(
                   @click="form.delivery_channel = channel.key"
                 >
                   <span
-                    class="flex size-9 items-center justify-center rounded-xl bg-n-alpha-2 text-n-slate-11"
+                    class="flex size-9 items-center justify-center rounded-xl bg-n-alpha-2 text-n-slate-12"
                   >
                     <span
                       class="size-5 shrink-0"
@@ -1665,7 +1635,7 @@ watch(
                   >
                     {{ channel.label }}
                   </span>
-                  <span class="mt-1 block text-xs leading-5 text-n-slate-10">
+                  <span class="mt-1 block text-xs leading-5 text-n-slate-11">
                     {{ channel.description }}
                   </span>
                   <span
@@ -1697,7 +1667,7 @@ watch(
                   @click="selectAudience(source.key)"
                 >
                   <span
-                    class="flex size-9 items-center justify-center rounded-xl bg-n-alpha-2 text-n-slate-11"
+                    class="flex size-9 items-center justify-center rounded-xl bg-n-alpha-2 text-n-slate-12"
                   >
                     <span class="size-5" :class="[source.icon]" />
                   </span>
@@ -1706,7 +1676,7 @@ watch(
                   >
                     {{ source.label }}
                   </span>
-                  <span class="mt-1 block text-xs leading-5 text-n-slate-10">
+                  <span class="mt-1 block text-xs leading-5 text-n-slate-11">
                     {{ source.description }}
                   </span>
                   <span
@@ -1730,7 +1700,7 @@ watch(
               />
               <details class="mt-4 rounded-xl border border-n-weak p-3">
                 <summary
-                  class="cursor-pointer text-sm font-medium text-n-slate-11"
+                  class="cursor-pointer text-sm font-medium text-n-slate-12"
                 >
                   {{ t('JRC_CAMPAIGNS.WIZARD.OTHER_SOURCES') }}
                 </summary>
@@ -1812,7 +1782,7 @@ watch(
                 </div>
                 <div
                   v-if="!availableSourceInboxes.length"
-                  class="rounded-xl bg-n-alpha-2 p-4 text-sm text-n-slate-10"
+                  class="rounded-xl bg-n-alpha-2 p-4 text-sm text-n-slate-11"
                 >
                   {{
                     $t('JRC_CAMPAIGNS.WIZARD.NO_SOURCE_INBOXES', {
@@ -1900,13 +1870,13 @@ watch(
                   <h4 class="text-sm font-semibold text-n-slate-12">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.AUDIENCE_PREVIEW') }}
                   </h4>
-                  <p class="mt-1 text-xs text-n-slate-10">
+                  <p class="mt-1 text-xs text-n-slate-11">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.AUDIENCE_PREVIEW_HELP') }}
                   </p>
                 </div>
                 <button
                   type="button"
-                  class="rounded-xl border border-n-strong px-3 py-2 text-xs font-medium text-n-slate-11"
+                  class="rounded-xl border border-n-strong px-3 py-2 text-xs font-medium text-n-slate-12"
                   :disabled="previewingAudience || !sourceValid"
                   @click="refreshAudiencePreview"
                 >
@@ -1947,7 +1917,7 @@ watch(
                     {
                       key: 'duplicate_count',
                       label: $t('JRC_CAMPAIGNS.WIZARD.DUPLICATES'),
-                      className: 'text-n-slate-11',
+                      className: 'text-n-slate-12',
                     },
                     {
                       key: 'manually_excluded_count',
@@ -1959,7 +1929,7 @@ watch(
                   class="campaign-preview-card rounded-xl border p-4"
                   :class="panelColors[index % panelColors.length]"
                 >
-                  <p class="text-xs text-n-slate-10">{{ item.label }}</p>
+                  <p class="text-xs text-n-slate-11">{{ item.label }}</p>
                   <p class="mt-2 text-xl font-semibold" :class="item.className">
                     {{
                       audiencePreview[item.key] === null
@@ -2019,7 +1989,7 @@ watch(
                     <p class="text-sm font-semibold text-n-slate-12">
                       {{ $t('JRC_CAMPAIGNS.WIZARD.RECIPIENT_MANAGER_TITLE') }}
                     </p>
-                    <p class="mt-1 text-xs text-n-slate-10">
+                    <p class="mt-1 text-xs text-n-slate-11">
                       {{
                         $t('JRC_CAMPAIGNS.WIZARD.RECIPIENT_SELECTION_COUNT', {
                           selected: formatNumber(eligibleCount),
@@ -2033,14 +2003,14 @@ watch(
                   <div class="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      class="rounded-lg border border-n-strong px-3 py-1.5 text-xs font-medium text-n-slate-11"
+                      class="rounded-lg border border-n-strong px-3 py-1.5 text-xs font-medium text-n-slate-12"
                       @click="setAllRecipients(true)"
                     >
                       {{ $t('JRC_CAMPAIGNS.WIZARD.SELECT_ALL_RECIPIENTS') }}
                     </button>
                     <button
                       type="button"
-                      class="rounded-lg border border-n-strong px-3 py-1.5 text-xs font-medium text-n-slate-11"
+                      class="rounded-lg border border-n-strong px-3 py-1.5 text-xs font-medium text-n-slate-12"
                       @click="setAllRecipients(false)"
                     >
                       {{ $t('JRC_CAMPAIGNS.WIZARD.DESELECT_ALL_RECIPIENTS') }}
@@ -2049,7 +2019,7 @@ watch(
                 </div>
                 <div class="relative mt-4">
                   <span
-                    class="i-lucide-search absolute left-3 top-1/2 size-4 -translate-y-1/2 text-n-slate-9"
+                    class="i-lucide-search absolute left-3 top-1/2 size-4 -translate-y-1/2 text-n-slate-11"
                   />
                   <input
                     v-model="recipientSearch"
@@ -2063,13 +2033,13 @@ watch(
                 >
                   <p
                     v-if="recipientManagerLoading"
-                    class="px-3 py-6 text-center text-xs text-n-slate-10"
+                    class="px-3 py-6 text-center text-xs text-n-slate-11"
                   >
                     {{ $t('JRC_CAMPAIGNS.WIZARD.LOADING_RECIPIENTS') }}
                   </p>
                   <p
                     v-else-if="!recipientRows.length"
-                    class="px-3 py-6 text-center text-xs text-n-slate-10"
+                    class="px-3 py-6 text-center text-xs text-n-slate-11"
                   >
                     {{ $t('JRC_CAMPAIGNS.WIZARD.NO_RECIPIENTS_FOUND') }}
                   </p>
@@ -2093,7 +2063,7 @@ watch(
                             $t('JRC_CAMPAIGNS.WIZARD.UNNAMED_CONTACT')
                           }}
                         </span>
-                        <span class="block truncate text-n-slate-10">
+                        <span class="block truncate text-n-slate-11">
                           {{ isEmail ? contact.email : contact.phone_number }}
                         </span>
                       </span>
@@ -2114,7 +2084,7 @@ watch(
                   >
                     {{ $t('JRC_CAMPAIGNS.WIZARD.PREVIOUS_PAGE') }}
                   </button>
-                  <span class="text-xs text-n-slate-10">
+                  <span class="text-xs text-n-slate-11">
                     {{
                       $t('JRC_CAMPAIGNS.WIZARD.RECIPIENT_PAGE', {
                         page: recipientPagination.page,
@@ -2140,17 +2110,11 @@ watch(
           </div>
 
           <div v-else-if="stepIndex === 1" class="space-y-5">
-            <CampaignFilters
-              v-if="
-                hasCustomerMaster && form.audience_type !== 'sanitized_list'
-              "
-              v-model="form.audience_config.customer_filters"
-            />
             <div>
               <h3 class="text-xl font-semibold text-n-slate-12">
                 {{ $t('JRC_CAMPAIGNS.WIZARD.CONFIG_TITLE') }}
               </h3>
-              <p class="mt-1 text-sm text-n-slate-10">
+              <p class="mt-1 text-sm text-n-slate-11">
                 {{ $t('JRC_CAMPAIGNS.WIZARD.CONFIG_SUBTITLE') }}
               </p>
               <p
@@ -2172,7 +2136,7 @@ watch(
                     )
                   }}
                 </h4>
-                <p class="mt-1 text-xs text-n-slate-10">
+                <p class="mt-1 text-xs text-n-slate-11">
                   {{ $t('JRC_CAMPAIGNS.GUIDE.SENDER_HELP') }}
                 </p>
                 <button
@@ -2206,7 +2170,7 @@ watch(
                           {{ inbox.name }}
                         </span>
                         <span
-                          class="block break-words text-xs tabular-nums text-n-slate-11"
+                          class="block break-words text-xs tabular-nums text-n-slate-12"
                         >
                           {{
                             inbox.connector === 'evolution'
@@ -2240,7 +2204,7 @@ watch(
                     >
                       <button
                         type="button"
-                        class="rounded p-1 text-n-slate-10 hover:bg-n-alpha-2"
+                        class="rounded p-1 text-n-slate-11 hover:bg-n-alpha-2"
                         :title="$t('JRC_CAMPAIGNS.WIZARD.MOVE_UP')"
                         @click="moveInbox(inbox.id, -1)"
                       >
@@ -2248,7 +2212,7 @@ watch(
                       </button>
                       <button
                         type="button"
-                        class="rounded p-1 text-n-slate-10 hover:bg-n-alpha-2"
+                        class="rounded p-1 text-n-slate-11 hover:bg-n-alpha-2"
                         :title="$t('JRC_CAMPAIGNS.WIZARD.MOVE_DOWN')"
                         @click="moveInbox(inbox.id, 1)"
                       >
@@ -2294,7 +2258,7 @@ watch(
                         {{ mode.label }}
                       </span>
                       <span
-                        class="mt-1 block text-xs leading-5 text-n-slate-10"
+                        class="mt-1 block text-xs leading-5 text-n-slate-11"
                       >
                         {{ mode.description }}
                       </span>
@@ -2303,7 +2267,7 @@ watch(
                 </div>
                 <div
                   v-else
-                  class="mt-4 rounded-xl bg-n-alpha-2 p-4 text-sm text-n-slate-10"
+                  class="mt-4 rounded-xl bg-n-alpha-2 p-4 text-sm text-n-slate-11"
                 >
                   {{
                     $t(
@@ -2328,7 +2292,7 @@ watch(
                   {{ $t('JRC_CAMPAIGNS.WIZARD.RHYTHM') }}
                 </h4>
                 <div class="mt-4 grid grid-cols-2 gap-3">
-                  <label class="text-xs font-medium text-n-slate-10">
+                  <label class="text-xs font-medium text-n-slate-11">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.DELAY_MIN') }}
                     <input
                       v-model.number="form.delay_min_seconds"
@@ -2337,7 +2301,7 @@ watch(
                       class="mt-1.5 w-full rounded-xl border border-n-weak bg-n-background px-3 py-2.5 text-sm text-n-slate-12"
                     />
                   </label>
-                  <label class="text-xs font-medium text-n-slate-10">
+                  <label class="text-xs font-medium text-n-slate-11">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.DELAY_MAX') }}
                     <input
                       v-model.number="form.delay_max_seconds"
@@ -2354,7 +2318,7 @@ watch(
                   <p class="mt-1 text-lg font-semibold text-n-slate-12">
                     {{ rateRange }}
                   </p>
-                  <p class="mt-1 text-xs text-n-slate-9">
+                  <p class="mt-1 text-xs text-n-slate-11">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.GLOBAL_RATE_HELP') }}
                   </p>
                 </div>
@@ -2365,23 +2329,23 @@ watch(
                 <h4 class="text-sm font-semibold text-n-slate-12">
                   {{ $t('JRC_CAMPAIGNS.WIZARD.WINDOW') }}
                 </h4>
-                <label class="mt-3 block text-xs">
-                  {{ t('JRC_CAMPAIGNS.META.TIMEZONE') }}
-                  <select
-                    v-model="form.sending_window.timezone"
-                    class="mt-1 w-full rounded-lg border border-n-weak bg-n-background p-2"
-                  >
-                    <option
-                      v-for="zone in metadata.timezones || ['UTC']"
-                      :key="zone"
-                      :value="zone"
-                    >
-                      {{ zone }}
-                    </option>
-                  </select>
-                </label>
+                <div
+                  class="mt-3 rounded-lg border border-n-strong bg-n-slate-2 p-3 text-sm"
+                  data-testid="campaign-timezone"
+                >
+                  <span class="font-medium">
+                    {{ t('JRC_CAMPAIGNS.META.TIMEZONE') }}
+                  </span>
+                  <p class="mt-1 font-semibold text-n-slate-12">
+                    {{
+                      form.sending_window.timezone === 'America/Sao_Paulo'
+                        ? t('JRC_CAMPAIGNS.META.SAO_PAULO_TIMEZONE')
+                        : form.sending_window.timezone
+                    }}
+                  </p>
+                </div>
                 <div class="mt-4 grid grid-cols-2 gap-4">
-                  <label class="text-xs font-medium text-n-slate-10">
+                  <label class="text-xs font-medium text-n-slate-11">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.WINDOW_START') }}
                     <input
                       v-model="form.sending_window.start"
@@ -2389,7 +2353,7 @@ watch(
                       class="mt-1.5 w-full rounded-xl border border-n-weak bg-n-background px-3 py-2.5 text-sm"
                     />
                   </label>
-                  <label class="text-xs font-medium text-n-slate-10">
+                  <label class="text-xs font-medium text-n-slate-11">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.WINDOW_END') }}
                     <input
                       v-model="form.sending_window.end"
@@ -2406,7 +2370,7 @@ watch(
                     :class="
                       form.sending_window.days.includes(day)
                         ? 'border-n-brand bg-n-brand/5 text-n-brand'
-                        : 'border-n-weak text-n-slate-10'
+                        : 'border-n-weak text-n-slate-11'
                     "
                   >
                     <input
@@ -2424,7 +2388,7 @@ watch(
                   {{ $t('JRC_CAMPAIGNS.WIZARD.OPERATION') }}
                 </h4>
                 <div class="mt-4 grid gap-3 sm:grid-cols-2">
-                  <label class="text-xs font-medium text-n-slate-10">
+                  <label class="text-xs font-medium text-n-slate-11">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.CONVERSATION_MODE') }}
                     <select
                       v-model="form.conversation_mode"
@@ -2441,7 +2405,7 @@ watch(
                       </option>
                     </select>
                   </label>
-                  <label class="text-xs font-medium text-n-slate-10">
+                  <label class="text-xs font-medium text-n-slate-11">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.TRIGGER') }}
                     <select
                       v-model="form.trigger_type"
@@ -2457,7 +2421,7 @@ watch(
                   </label>
                   <label
                     v-if="form.trigger_type === 'scheduled'"
-                    class="text-xs font-medium text-n-slate-10"
+                    class="text-xs font-medium text-n-slate-11"
                   >
                     {{ $t('JRC_CAMPAIGNS.WIZARD.SCHEDULED_AT') }}
                     <input
@@ -2466,7 +2430,7 @@ watch(
                       class="mt-1.5 w-full rounded-xl border border-n-weak bg-n-background px-3 py-2.5 text-sm"
                     />
                   </label>
-                  <label class="text-xs font-medium text-n-slate-10">
+                  <label class="text-xs font-medium text-n-slate-11">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.RECURRENCE') }}
                     <select
                       v-model="form.recurrence_config.type"
@@ -2491,7 +2455,7 @@ watch(
                   </label>
                   <label
                     v-if="form.recurrence_config.type === 'custom'"
-                    class="text-xs font-medium text-n-slate-10"
+                    class="text-xs font-medium text-n-slate-11"
                   >
                     {{ $t('JRC_CAMPAIGNS.WIZARD.CUSTOM_INTERVAL_DAYS') }}
                     <input
@@ -2508,11 +2472,11 @@ watch(
               <h4 class="text-sm font-semibold text-n-slate-12">
                 {{ $t('JRC_CAMPAIGNS.WIZARD.ON_REPLY_ACTIONS') }}
               </h4>
-              <p class="mt-1 text-xs text-n-slate-10">
+              <p class="mt-1 text-xs text-n-slate-11">
                 {{ $t('JRC_CAMPAIGNS.WIZARD.ON_REPLY_HELP') }}
               </p>
               <div class="mt-4 grid gap-4 md:grid-cols-2">
-                <label class="text-xs font-medium text-n-slate-10">
+                <label class="text-xs font-medium text-n-slate-11">
                   {{ $t('JRC_CAMPAIGNS.WIZARD.ON_REPLY_LABEL') }}
                   <select
                     v-model="form.follow_up_config.on_reply_label_id"
@@ -2530,7 +2494,7 @@ watch(
                     </option>
                   </select>
                 </label>
-                <label class="text-xs font-medium text-n-slate-10">
+                <label class="text-xs font-medium text-n-slate-11">
                   {{ $t('JRC_CAMPAIGNS.WIZARD.ON_REPLY_STAGE') }}
                   <select
                     v-model="form.follow_up_config.on_reply_stage_id"
@@ -2557,7 +2521,7 @@ watch(
               <h3 class="text-xl font-semibold text-n-slate-12">
                 {{ $t('JRC_CAMPAIGNS.WIZARD.MESSAGES_TITLE') }}
               </h3>
-              <p class="mt-1 text-sm text-n-slate-10">
+              <p class="mt-1 text-sm text-n-slate-11">
                 {{ $t('JRC_CAMPAIGNS.WIZARD.MESSAGES_SUBTITLE') }}
               </p>
             </div>
@@ -2581,7 +2545,7 @@ watch(
                     {{ $t('JRC_CAMPAIGNS.WIZARD.SEQUENCE') }}
                   </h4>
                   <span
-                    class="rounded-full bg-n-alpha-2 px-2 py-1 text-[10px] text-n-slate-10"
+                    class="rounded-full bg-n-alpha-2 px-2 py-1 text-[10px] text-n-slate-11"
                   >
                     {{ form.steps.length }}
                   </span>
@@ -2614,7 +2578,7 @@ watch(
                             {{ messageTypeLabel(message.kind) }}
                           </span>
                           <span
-                            class="mt-1 block truncate text-[11px] text-n-slate-9"
+                            class="mt-1 block truncate text-[11px] text-n-slate-11"
                           >
                             {{
                               message.subject ||
@@ -2629,7 +2593,7 @@ watch(
                     </button>
                     <div
                       v-if="index < form.steps.length - 1"
-                      class="flex items-center justify-center gap-2 py-1 text-[10px] text-n-slate-9"
+                      class="flex items-center justify-center gap-2 py-1 text-[10px] text-n-slate-11"
                     >
                       <span class="h-4 w-px bg-n-weak" />
                       <span v-if="message.delay_after_seconds">
@@ -2666,7 +2630,7 @@ watch(
                   <div class="flex gap-1">
                     <button
                       type="button"
-                      class="rounded-lg p-2 text-n-slate-10 hover:bg-n-alpha-2"
+                      class="rounded-lg p-2 text-n-slate-11 hover:bg-n-alpha-2"
                       :disabled="activeMessageIndex === 0"
                       :title="$t('JRC_CAMPAIGNS.WIZARD.MOVE_UP')"
                       @click="moveMessage(activeMessageIndex, -1)"
@@ -2675,7 +2639,7 @@ watch(
                     </button>
                     <button
                       type="button"
-                      class="rounded-lg p-2 text-n-slate-10 hover:bg-n-alpha-2"
+                      class="rounded-lg p-2 text-n-slate-11 hover:bg-n-alpha-2"
                       :disabled="activeMessageIndex === form.steps.length - 1"
                       :title="$t('JRC_CAMPAIGNS.WIZARD.MOVE_DOWN')"
                       @click="moveMessage(activeMessageIndex, 1)"
@@ -2694,7 +2658,7 @@ watch(
                   </div>
                 </div>
                 <div class="mt-4 grid grid-cols-2 gap-3">
-                  <label class="text-xs font-medium text-n-slate-10">
+                  <label class="text-xs font-medium text-n-slate-11">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.TYPE') }}
                     <input
                       v-if="isEmail"
@@ -2727,7 +2691,7 @@ watch(
                       </option>
                     </select>
                   </label>
-                  <label class="text-xs font-medium text-n-slate-10">
+                  <label class="text-xs font-medium text-n-slate-11">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.DELAY_AFTER') }}
                     <input
                       v-model.number="activeMessage.delay_after_seconds"
@@ -2741,7 +2705,7 @@ watch(
                   v-if="activeMessage.kind === 'email'"
                   class="mt-4 space-y-4"
                 >
-                  <label class="block text-xs font-medium text-n-slate-10">
+                  <label class="block text-xs font-medium text-n-slate-11">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.EMAIL_SUBJECT') }}
                     <input
                       v-model="activeMessage.subject"
@@ -2751,7 +2715,7 @@ watch(
                       "
                     />
                   </label>
-                  <label class="block text-xs font-medium text-n-slate-10">
+                  <label class="block text-xs font-medium text-n-slate-11">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.EMAIL_BODY') }}
                     <textarea
                       v-model="activeMessage.body"
@@ -2760,7 +2724,7 @@ watch(
                       :placeholder="$t('JRC_CAMPAIGNS.WIZARD.BODY_PLACEHOLDER')"
                     />
                   </label>
-                  <label class="block text-xs font-medium text-n-slate-10">
+                  <label class="block text-xs font-medium text-n-slate-11">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.EMAIL_ATTACHMENT') }}
                     <input
                       type="file"
@@ -2771,13 +2735,13 @@ watch(
                     />
                     <span
                       v-if="uploadingStep === activeMessageIndex"
-                      class="mt-1 block text-xs text-n-slate-9"
+                      class="mt-1 block text-xs text-n-slate-11"
                     >
                       {{ $t('JRC_CAMPAIGNS.WIZARD.UPLOADING') }}
                     </span>
                     <span
                       v-else-if="activeMessage.file_name"
-                      class="mt-1 block text-xs text-n-slate-9"
+                      class="mt-1 block text-xs text-n-slate-11"
                     >
                       {{ activeMessage.file_name }}
                     </span>
@@ -2788,7 +2752,7 @@ watch(
                   class="mt-4 space-y-4"
                 >
                   <div class="grid gap-3 sm:grid-cols-2">
-                    <label class="text-xs font-medium text-n-slate-10">
+                    <label class="text-xs font-medium text-n-slate-11">
                       {{ $t('JRC_CAMPAIGNS.WIZARD.TEMPLATE_NAME') }}
                       <select
                         :value="`${activeMessage.template_name}::${activeMessage.template_language}`"
@@ -2809,7 +2773,7 @@ watch(
                         </option>
                       </select>
                     </label>
-                    <label class="text-xs font-medium text-n-slate-10">
+                    <label class="text-xs font-medium text-n-slate-11">
                       {{ $t('JRC_CAMPAIGNS.WIZARD.TEMPLATE_LANGUAGE') }}
                       <input
                         v-model="activeMessage.template_language"
@@ -2827,7 +2791,7 @@ watch(
                   </button>
                   <p
                     v-if="selectedSendingInboxes[0]?.template_sync"
-                    class="text-xs text-n-slate-10"
+                    class="text-xs text-n-slate-11"
                   >
                     {{ t('JRC_CAMPAIGNS.META.SYNCED') }}:
                     {{
@@ -2853,7 +2817,7 @@ watch(
                   />
                   <button
                     type="button"
-                    class="text-xs font-medium text-n-slate-10 hover:text-n-brand"
+                    class="text-xs font-medium text-n-slate-11 hover:text-n-brand"
                     @click="syncAdvancedParams(activeMessage)"
                   >
                     <span class="i-lucide-code-2 mr-1 inline-block size-3" />
@@ -2861,7 +2825,7 @@ watch(
                   </button>
                   <label
                     v-if="activeMessage.advancedOpen"
-                    class="block text-xs font-medium text-n-slate-10"
+                    class="block text-xs font-medium text-n-slate-11"
                   >
                     {{ $t('JRC_CAMPAIGNS.WIZARD.TEMPLATE_PARAMS') }}
                     <textarea
@@ -2873,7 +2837,7 @@ watch(
                 </div>
                 <label
                   v-else-if="activeMessage.kind === 'text'"
-                  class="mt-4 block text-xs font-medium text-n-slate-10"
+                  class="mt-4 block text-xs font-medium text-n-slate-11"
                 >
                   {{ $t('JRC_CAMPAIGNS.WIZARD.BODY') }}
                   <textarea
@@ -2882,12 +2846,12 @@ watch(
                     class="mt-1.5 w-full rounded-xl border border-n-weak bg-n-background px-3 py-2.5 text-sm"
                     :placeholder="$t('JRC_CAMPAIGNS.WIZARD.BODY_PLACEHOLDER')"
                   />
-                  <span class="mt-1 block font-normal text-n-slate-9">
+                  <span class="mt-1 block font-normal text-n-slate-11">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.SPINTAX_HELP') }}
                   </span>
                 </label>
                 <div v-else class="mt-4 space-y-3">
-                  <label class="block text-xs font-medium text-n-slate-10">
+                  <label class="block text-xs font-medium text-n-slate-11">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.MEDIA') }}
                     <input
                       type="file"
@@ -2898,18 +2862,18 @@ watch(
                     />
                     <span
                       v-if="uploadingStep === activeMessageIndex"
-                      class="mt-1 block text-xs text-n-slate-9"
+                      class="mt-1 block text-xs text-n-slate-11"
                     >
                       {{ $t('JRC_CAMPAIGNS.WIZARD.UPLOADING') }}
                     </span>
                     <span
                       v-else-if="activeMessage.file_name"
-                      class="mt-1 block text-xs text-n-slate-9"
+                      class="mt-1 block text-xs text-n-slate-11"
                     >
                       {{ activeMessage.file_name }}
                     </span>
                   </label>
-                  <label class="block text-xs font-medium text-n-slate-10">
+                  <label class="block text-xs font-medium text-n-slate-11">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.MEDIA_URL') }}
                     <input
                       v-model="activeMessage.media_url"
@@ -2917,7 +2881,7 @@ watch(
                       @input="activeMessage.media_asset_id = null"
                     />
                   </label>
-                  <label class="block text-xs font-medium text-n-slate-10">
+                  <label class="block text-xs font-medium text-n-slate-11">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.BODY') }}
                     <textarea
                       v-model="activeMessage.body"
@@ -2938,7 +2902,7 @@ watch(
                   </label>
                   <label
                     v-if="activeMessage.only_if_no_reply"
-                    class="mt-3 block text-xs font-medium text-n-slate-10"
+                    class="mt-3 block text-xs font-medium text-n-slate-11"
                   >
                     {{ $t('JRC_CAMPAIGNS.WIZARD.FOLLOW_UP_HOURS') }}
                     <input
@@ -2965,7 +2929,7 @@ watch(
                   <label
                     v-for="inbox in selectedSendingInboxes"
                     :key="inbox.id"
-                    class="mb-3 block text-xs font-medium text-n-slate-10 last:mb-0"
+                    class="mb-3 block text-xs font-medium text-n-slate-11 last:mb-0"
                   >
                     {{ inbox.name }}
                     <select
@@ -3178,10 +3142,10 @@ watch(
                   >
                     {{ $t('JRC_CAMPAIGNS.WIZARD.OPTIONAL_TEST') }}
                   </summary>
-                  <p class="mt-1 text-xs text-n-slate-10">
+                  <p class="mt-1 text-xs text-n-slate-11">
                     {{ $t('JRC_CAMPAIGNS.WIZARD.MESSAGE_TEST_HELP') }}
                   </p>
-                  <p v-if="usesEvolution" class="mt-2 text-xs text-n-slate-11">
+                  <p v-if="usesEvolution" class="mt-2 text-xs text-n-slate-12">
                     {{ t('JRC_CAMPAIGNS.EVOLUTION.CONTINUOUS_HELP') }}
                   </p>
                   <input
@@ -3198,7 +3162,7 @@ watch(
                   <div class="mt-3 grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      class="rounded-xl border border-n-strong px-3 py-2 text-xs font-medium text-n-slate-11"
+                      class="rounded-xl border border-n-strong px-3 py-2 text-xs font-medium text-n-slate-12"
                       @click="validateMessage(activeMessage)"
                     >
                       {{ $t('JRC_CAMPAIGNS.WIZARD.TEST_MESSAGE') }}
@@ -3226,7 +3190,7 @@ watch(
                 <h3 class="text-xl font-semibold text-n-slate-12">
                   {{ $t('JRC_CAMPAIGNS.WIZARD.REVIEW_TITLE') }}
                 </h3>
-                <p class="mt-1 text-sm text-n-slate-10">
+                <p class="mt-1 text-sm text-n-slate-11">
                   {{ $t('JRC_CAMPAIGNS.WIZARD.REVIEW_SUBTITLE') }}
                 </p>
               </div>
@@ -3300,7 +3264,7 @@ watch(
                   <p
                     v-for="line in card.lines"
                     :key="line"
-                    class="text-xs leading-5 text-n-slate-10"
+                    class="text-xs leading-5 text-n-slate-11"
                   >
                     {{ line || $t('JRC_CAMPAIGNS.NOT_AVAILABLE') }}
                   </p>
@@ -3371,7 +3335,7 @@ watch(
                   v-if="eligibleCount === 0"
                   class="mt-3 text-xs text-n-slate-12"
                 >
-                  {{ t('JRC_CAMPAIGNS.CONSENT_IMPORT.AUDIENCE_HELP') }}
+                  {{ t('JRC_CAMPAIGNS.WIZARD.NO_RECIPIENTS_HELP') }}
                 </p>
                 <button
                   type="button"
@@ -3415,7 +3379,7 @@ watch(
               >
                 {{ $t('JRC_CAMPAIGNS.WIZARD.OPTIONAL_TEST') }}
               </summary>
-              <p v-if="usesEvolution" class="mt-2 text-xs text-n-slate-11">
+              <p v-if="usesEvolution" class="mt-2 text-xs text-n-slate-12">
                 {{ t('JRC_CAMPAIGNS.EVOLUTION.CONTINUOUS_HELP') }}
               </p>
               <div class="mt-3 flex flex-wrap gap-3">
@@ -3449,7 +3413,7 @@ watch(
               class="border-n-amber-6 border-t-4 border-t-n-amber-9 bg-n-amber-2 rounded-2xl border p-5 shadow-sm"
             >
               <p
-                class="text-xs font-semibold uppercase tracking-wide text-n-slate-10"
+                class="text-xs font-semibold uppercase tracking-wide text-n-slate-11"
               >
                 {{ $t('JRC_CAMPAIGNS.WIZARD.SUMMARY_TITLE') }}
               </p>
@@ -3500,12 +3464,12 @@ watch(
                   class="flex gap-3"
                 >
                   <span
-                    class="flex size-8 shrink-0 items-center justify-center rounded-xl bg-n-alpha-2 text-n-slate-10"
+                    class="flex size-8 shrink-0 items-center justify-center rounded-xl bg-n-alpha-2 text-n-slate-11"
                   >
                     <span class="size-4" :class="[item.icon]" />
                   </span>
                   <div>
-                    <p class="text-[11px] text-n-slate-9">{{ item.label }}</p>
+                    <p class="text-[11px] text-n-slate-11">{{ item.label }}</p>
                     <p class="mt-0.5 text-sm font-medium text-n-slate-12">
                       {{ item.value }}
                     </p>
