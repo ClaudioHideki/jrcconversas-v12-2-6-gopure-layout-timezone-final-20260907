@@ -17,6 +17,10 @@ RSpec.describe 'Campaign connector isolation' do
       'template_params' => { 'processed_params' => { 'header' => { 'media_type' => 'image', 'media_asset_id' => asset.id } } } }
   end
 
+  around do |example|
+    travel_to(Time.utc(2026, 11, 25, 15)) { example.run }
+  end
+
   before do
     inbox
     channel.update!(message_templates: [{ 'name' => 'cloud_image', 'language' => 'pt_BR', 'status' => 'APPROVED',

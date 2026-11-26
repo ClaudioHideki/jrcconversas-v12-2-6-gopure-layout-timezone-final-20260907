@@ -11,6 +11,13 @@ RSpec.describe 'Campaign sending governance' do # rubocop:disable RSpec/Describe
                                    inbox: inbox, name: 'Pilot')
   end
 
+  around do |example|
+    travel_to(Time.utc(2026, 11, 25, 15))
+    example.run
+  ensure
+    travel_back
+  end
+
   before do
     stub_request(:post, 'https://waba.360dialog.io/v1/configs/webhook')
     stub_request(:get, 'https://waba.360dialog.io/v1/configs/templates').to_return(

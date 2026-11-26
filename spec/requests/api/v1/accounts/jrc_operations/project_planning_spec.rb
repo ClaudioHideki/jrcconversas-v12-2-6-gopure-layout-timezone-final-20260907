@@ -3,7 +3,7 @@ require 'rails_helper'
 # Real Rails/PostgreSQL/ActiveStorage tests. These are not executed by the Node
 # structural suite; use a dedicated test database with the existing migrations.
 RSpec.describe 'JRC Projects planning checkpoint 3C', type: :request do
-  let(:account) { create(:account) }
+  let(:account) { create(:account, reporting_timezone: 'America/Sao_Paulo') }
   let(:admin) { create(:user, account: account, role: :administrator) }
   let(:member) { create(:user, account: account, role: :agent) }
   let(:headers) { admin.create_new_auth_token.merge('X-Request-Id' => 'planning-3c-request') }
@@ -17,9 +17,16 @@ RSpec.describe 'JRC Projects planning checkpoint 3C', type: :request do
   let(:base) { "/api/v1/accounts/#{account.id}/projects/projects/#{project.id}" }
   let(:backlog) { project.board_columns.find_by!(status_key: 'backlog') }
   let(:task) do
-    project.tasks.create!(account: account, created_by: admin, board_column: backlog, status: 'backlog', title: 'Delivery task', estimated_minutes: 120)
+    project.tasks.create!(account: account, created_by: admin, board_column: backlog, status: 'backlog', title: 'Delivery task',
+                          estimated_minutes: 120)
   end
   let(:milestone) { project.milestones.create!(account: account, name: 'Acceptance', due_on: Date.current + 7) }
+
+  around do |example|
+    travel_to(Time.utc(2026, 11, 25, 15)) do
+      Time.use_zone('America/Sao_Paulo') { example.run }
+    end
+  end
 
   before do
     account.account_users.find_by!(user: member).update!(jrc_projects_enabled: true)
@@ -30,7 +37,7 @@ RSpec.describe 'JRC Projects planning checkpoint 3C', type: :request do
   it 'creates, edits, completes and removes a milestone with correlation and no duplicate completion event' do
     phase = project.phases.create!(account: account, name: 'Delivery phase')
     post "#{base}/milestones", params: { record: { name: 'First delivery', due_on: '2026-10-10', status: 'open', phase_id: phase.id,
-                                                description: 'Ignored: no such field', owner_id: member.id, progress: 50 } }, headers: headers, as: :json
+                                                   description: 'Ignored: no such field', owner_id: member.id, progress: 50 } }, headers: headers, as: :json
     expect(response).to have_http_status(:created)
     record = JrcProjects::Milestone.find(response.parsed_body.dig('data', 'id'))
     expect(record).to have_attributes(name: 'First delivery', phase_id: phase.id)
@@ -45,7 +52,8 @@ RSpec.describe 'JRC Projects planning checkpoint 3C', type: :request do
     delete "#{base}/milestones/#{record.id}", headers: headers
     expect(response).to have_http_status(:no_content)
     events = JrcProjects::AuditEvent.where(account: account, auditable_type: 'JrcProjects::Milestone', auditable_id: record.id)
-    expect(events.pluck(:action)).to contain_exactly('projects.milestone.created', 'projects.milestone.updated', 'projects.milestone.completed', 'projects.milestone.deleted')
+    expect(events.pluck(:action)).to contain_exactly('projects.milestone.created', 'projects.milestone.updated', 'projects.milestone.completed',
+                                                     'projects.milestone.deleted')
     expect(events.pluck(:correlation_id).uniq).to eq(['planning-3c-request'])
     get base, headers: headers
     expect(response.parsed_body.dig('data', 'recent_activity').map { |event| event['action'] }).to include('projects.milestone.deleted')
@@ -56,7 +64,7 @@ RSpec.describe 'JRC Projects planning checkpoint 3C', type: :request do
     foreign_account.enable_features!('jrc_projects')
     foreign_user = create(:user, account: foreign_account, role: :administrator)
     foreign_project = JrcProjects::Projects::Create.call(account: foreign_account, actor: foreign_user,
-      attributes: { name: 'Foreign project' }, idempotency_key: SecureRandom.uuid)
+                                                         attributes: { name: 'Foreign project' }, idempotency_key: SecureRandom.uuid)
     [other_project, foreign_project].each do |outside|
       phase = outside.phases.create!(account: outside.account, name: 'Foreign phase')
       post "#{base}/milestones", params: { record: { name: 'Invalid phase', phase_id: phase.id } }, headers: headers, as: :json
@@ -132,8 +140,8 @@ RSpec.describe 'JRC Projects planning checkpoint 3C', type: :request do
     expect(response).to have_http_status(:no_content)
     expect(ActiveStorage::Attachment.exists?(attachment.id)).to be(false)
     events = JrcProjects::AuditEvent.where(account: account, auditable_type: 'JrcProjects::Project', auditable_id: project.id,
-                                          action: %w[projects.attachment.added projects.attachment.removed])
-    expect(events.pluck(:correlation_id)).to eq(['planning-3c-request', 'planning-3c-request'])
+                                           action: %w[projects.attachment.added projects.attachment.removed])
+    expect(events.pluck(:correlation_id)).to eq(%w[planning-3c-request planning-3c-request])
   end
 
   it 'does not infer an uploader when no matching upload audit exists and rejects an attachment from another project' do
@@ -150,7 +158,8 @@ RSpec.describe 'JRC Projects planning checkpoint 3C', type: :request do
   it 'calculates budget from approved time, preserves reported commitment and audits changes' do
     patch "#{base}/budget", params: { budget: { planned_cents: 20_000, committed_cents: 5_000, currency: 'BRL' } }, headers: headers, as: :json
     expect(response).to have_http_status(:ok)
-    post "#{base}/time_entries", params: { time_entry: { task_id: task.id, minutes: 90, worked_on: Date.current } }, headers: member_headers, as: :json
+    post "#{base}/time_entries", params: { time_entry: { task_id: task.id, minutes: 90, worked_on: Date.current } }, headers: member_headers,
+                                 as: :json
     expect(response).to have_http_status(:created)
     id = response.parsed_body.dig('data', 'id')
     patch "#{base}/time_entries/#{id}", params: { time_entry: { status: 'approved', hourly_cost_cents: 6_000 } }, headers: headers, as: :json
@@ -162,17 +171,21 @@ RSpec.describe 'JRC Projects planning checkpoint 3C', type: :request do
     project.time_entries.create!(account: account, user: admin, minutes: 60, worked_on: Date.current, status: 'approved')
     get "#{base}/budget", headers: headers
     expect(response.parsed_body.fetch('data')).to include('planned_cents' => 20_000, 'committed_cents' => 5_000,
-      'actual_cents' => 9_000, 'remaining_cents' => 11_000, 'basis' => 'approved_time_entries')
-    expect(JrcProjects::AuditEvent.where(account: account, auditable_id: project.id, action: 'projects.budget.updated').last!.correlation_id).to eq('planning-3c-request')
+                                                          'actual_cents' => 9_000, 'remaining_cents' => 11_000, 'basis' => 'approved_time_entries')
+    expect(JrcProjects::AuditEvent.where(account: account, auditable_id: project.id,
+                                         action: 'projects.budget.updated').last!.correlation_id).to eq('planning-3c-request')
   end
 
   it 'consolidates actual task, team, time and milestone totals without mixing projects' do
     task.update!(due_on: Date.current - 1)
     completed_column = project.board_columns.find_by!(status_key: 'completed')
-    project.tasks.create!(account: account, created_by: admin, board_column: completed_column, status: 'completed', title: 'Done', estimated_minutes: 60, due_on: Date.current - 1)
+    project.tasks.create!(account: account, created_by: admin, board_column: completed_column, status: 'completed', title: 'Done',
+                          estimated_minutes: 60, due_on: Date.current - 1)
     canceled_column = project.boards.first!.board_columns.create!(account: account, name: 'Canceled', status_key: 'canceled', position: 5)
-    project.tasks.create!(account: account, created_by: admin, board_column: canceled_column, status: 'canceled', title: 'Canceled', estimated_minutes: 30, due_on: Date.current - 1)
-    project.tasks.create!(account: account, created_by: admin, board_column: backlog, status: 'backlog', title: 'Subtask', parent: task, estimated_minutes: 45)
+    project.tasks.create!(account: account, created_by: admin, board_column: canceled_column, status: 'canceled', title: 'Canceled',
+                          estimated_minutes: 30, due_on: Date.current - 1)
+    project.tasks.create!(account: account, created_by: admin, board_column: backlog, status: 'backlog', title: 'Subtask', parent: task,
+                          estimated_minutes: 45)
     project.time_entries.create!(account: account, user: member, task: task, minutes: 90, worked_on: Date.current)
     project.time_entries.create!(account: account, user: admin, minutes: 60, worked_on: Date.current, status: 'approved')
     project.time_entries.create!(account: account, user: admin, minutes: 30, worked_on: Date.current, status: 'rejected')
@@ -183,9 +196,12 @@ RSpec.describe 'JRC Projects planning checkpoint 3C', type: :request do
     get base, headers: headers
     data = response.parsed_body.fetch('data')
     expect(data).to include('tasks_total' => 4, 'tasks_completed' => 1, 'progress' => 25, 'contact' => nil)
-    expect(data.fetch('overview')).to include('overdue_tasks' => 1, 'team_size' => 2, 'estimated_minutes' => 255, 'worked_minutes' => 150, 'approved_minutes' => 60)
+    expect(data.fetch('overview')).to include('overdue_tasks' => 1, 'team_size' => 2, 'estimated_minutes' => 255, 'worked_minutes' => 150,
+                                              'approved_minutes' => 60)
     expect(data.dig('overview', 'upcoming_milestones').map { |row| row['id'] }).to eq([milestone.id])
-    expect(data.fetch('recent_activity').none? { |event| event['auditable_type'] == 'JrcProjects::Project' && event['auditable_id'] == other_project.id }).to be(true)
+    expect(data.fetch('recent_activity').none? do |event|
+      event['auditable_type'] == 'JrcProjects::Project' && event['auditable_id'] == other_project.id
+    end).to be(true)
   end
 
   it 'does not expose financial amounts through project details, time entries or activity to an ordinary member' do
@@ -197,7 +213,9 @@ RSpec.describe 'JRC Projects planning checkpoint 3C', type: :request do
     expect(response).to have_http_status(:ok)
     data = response.parsed_body.fetch('data')
     expect(data).not_to have_key('budget')
-    expect(data.fetch('recent_activity').none? { |event| event.key?('before_data') || event.key?('after_data') || event['action'] == 'projects.budget.updated' }).to be(true)
+    expect(data.fetch('recent_activity').none? do |event|
+      event.key?('before_data') || event.key?('after_data') || event['action'] == 'projects.budget.updated'
+    end).to be(true)
     get "#{base}/time_entries", headers: member_headers
     expect(response.parsed_body.fetch('data').none? { |row| row.key?('hourly_cost_cents') }).to be(true)
     get "#{base}/budget", headers: member_headers
@@ -242,7 +260,8 @@ RSpec.describe 'JRC Projects planning checkpoint 3C', type: :request do
       expect(response).to have_http_status(:unprocessable_entity)
       delete "#{base}/dependencies/#{edge.id}", headers: headers
       expect(response).to have_http_status(:unprocessable_entity)
-      patch "#{base}/boards/#{backlog.board_id}/columns/#{backlog.id}", params: { board_column: { name: 'Forbidden rename' } }, headers: headers, as: :json
+      patch "#{base}/boards/#{backlog.board_id}/columns/#{backlog.id}", params: { board_column: { name: 'Forbidden rename' } }, headers: headers,
+                                                                        as: :json
       expect(response).to have_http_status(:unprocessable_entity)
       post "#{base}/time_entries", params: { time_entry: { minutes: 60, worked_on: Date.current } }, headers: headers, as: :json
       expect(response).to have_http_status(:unprocessable_entity)

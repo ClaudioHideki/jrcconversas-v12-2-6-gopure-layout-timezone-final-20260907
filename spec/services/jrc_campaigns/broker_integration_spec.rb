@@ -30,7 +30,9 @@ RSpec.describe 'Broker campaign transport', type: :request do
 
   around do |example|
     with_modified_env('JRC_BROKER_ENABLED' => 'true', 'JRC_BROKER_ALLOWED_ORIGINS' => origin, 'FRONTEND_URL' => 'https://central.example.test',
-                      'JRC_BROKER_CREDENTIAL_KEY' => Base64.strict_encode64('s' * 32)) { example.run }
+                      'JRC_BROKER_CREDENTIAL_KEY' => Base64.strict_encode64('s' * 32)) do
+      travel_to(Time.utc(2026, 11, 25, 15)) { example.run }
+    end
   end
 
   before do
