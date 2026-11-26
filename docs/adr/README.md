@@ -24,3 +24,5 @@ Não marcar uma proposta como aceita sem a decisão correspondente. Preserve os 
 - [0008 — Exclusão e recibos de campanhas](0008-campanhas-exclusao-relatorio-leitura.md).
 
 - [0009 — Ritmo Cloud API e largura](0009-campanhas-cloud-ritmo-layout.md).
+
+- [0010 — Erros de campanhas em português](0010-campanhas-erros-traduzidos.md).

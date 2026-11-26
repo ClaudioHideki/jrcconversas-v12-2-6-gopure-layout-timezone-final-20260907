@@ -89,6 +89,32 @@ RSpec.describe 'Campaign deletion and receipt reports', type: :request do
     expect(recipient.reload.read_at).to be_nil
   end
 
+  {
+    '131049' => 'This message was not delivered to maintain healthy ecosystem engagement.',
+    '131026' => 'Message undeliverable'
+  }.each do |code, title|
+    it "reports confirmed provider code #{code} without changing original evidence" do
+      delivery
+      JrcCampaigns::MetaStatusService.record(inbox: inbox, external_id: delivery.external_id, status: 'failed',
+                                             errors: [{ code: code, title: title }])
+      original = recipient.reload.attributes
+      get "#{path}/report", headers: headers
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body['recipients'].first).to include('error_code' => code, 'error_message' => title)
+      expect(recipient.reload.attributes).to eq(original)
+    end
+  end
+
+  it 'does not attribute an error code from a foreign inbox to this recipient' do
+    delivery.update!(status: 'failed', error_message: 'Unknown error')
+    recipient.update!(status: 'failed', error_message: 'Unknown error')
+    other = create(:inbox)
+    JrcCampaigns::StatusEvent.create!(inbox: other, external_id: delivery.external_id, status: 'failed', occurred_at: Time.current,
+                                      fingerprint: SecureRandom.hex, provider_errors: [{ 'code' => '131049', 'title' => 'Foreign evidence' }])
+    get "#{path}/report", headers: headers
+    expect(response.parsed_body['recipients'].first).to include('error_code' => nil, 'error_message' => 'Unknown error')
+  end
+
   it 'leaves delivery unconfirmed as read when no read callback is received' do
     delivery
     JrcCampaigns::MetaStatusService.record(inbox: inbox, external_id: delivery.external_id, status: 'delivered')

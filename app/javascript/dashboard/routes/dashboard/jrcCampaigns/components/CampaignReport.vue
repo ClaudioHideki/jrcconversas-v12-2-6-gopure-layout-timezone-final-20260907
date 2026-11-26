@@ -31,6 +31,28 @@ const load = async (targetPage, silent = false) => {
   }
 };
 
+const errorKeysByCode = new Map([
+  ['131049', 'ECOSYSTEM'],
+  ['131026', 'UNDELIVERABLE'],
+]);
+const legacyErrorKeys = new Map([
+  [
+    'this message was not delivered to maintain healthy ecosystem engagement',
+    'ECOSYSTEM',
+  ],
+  ['message undeliverable', 'UNDELIVERABLE'],
+]);
+const errorMessage = recipient => {
+  const original = String(recipient.error_message || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[.\s]+$/, '');
+  const key = recipient.error_code
+    ? errorKeysByCode.get(String(recipient.error_code))
+    : legacyErrorKeys.get(original);
+  return t(`JRC_CAMPAIGNS.REPORTS.ERROR_MESSAGES.${key || 'UNKNOWN'}`);
+};
+
 const exportReport = () => {
   window.open(JrcCampaignsAPI.exportUrl(props.campaign.id), '_blank');
 };
@@ -186,7 +208,30 @@ onUnmounted(() => clearInterval(refreshTimer));
                     }}
                   </td>
                   <td class="max-w-xs px-4 py-3 text-xs text-n-ruby-11">
-                    {{ recipient.error_message || '-' }}
+                    <template
+                      v-if="recipient.error_message || recipient.error_code"
+                    >
+                      <p>{{ errorMessage(recipient) }}</p>
+                      <p v-if="recipient.error_code" class="mt-1 font-semibold">
+                        {{
+                          $t('JRC_CAMPAIGNS.REPORTS.ERROR_CODE', {
+                            code: recipient.error_code,
+                          })
+                        }}
+                      </p>
+                      <details
+                        v-if="recipient.error_message"
+                        class="mt-2 text-n-slate-12"
+                      >
+                        <summary class="cursor-pointer">
+                          {{ $t('JRC_CAMPAIGNS.REPORTS.ERROR_DETAILS') }}
+                        </summary>
+                        <p class="mt-1 break-words">
+                          {{ recipient.error_message }}
+                        </p>
+                      </details>
+                    </template>
+                    <template v-else>-</template>
                   </td>
                 </tr>
                 <tr v-if="!report.recipients.length">

@@ -18,6 +18,8 @@ Referência inicial: INIT solicitado pelo usuário em 2026-11-13. É uma trilha 
 
 ## Fase 3: Estabilização e manutenção
 
+- Explicações de erros em português com código e evidência original preservados. [ADR 0010](docs/adr/0010-campanhas-erros-traduzidos.md).
+
 - Ritmo específico Cloud API e assistente em largura disponível. [ADR 0009](docs/adr/0009-campanhas-cloud-ritmo-layout.md).
 
 - Exclusão visível e atualização de recibos de leitura sem inferir eventos do provedor. [ADR 0008](docs/adr/0008-campanhas-exclusao-relatorio-leitura.md).

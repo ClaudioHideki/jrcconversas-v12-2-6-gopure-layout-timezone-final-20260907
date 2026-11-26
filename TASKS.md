@@ -7,6 +7,7 @@
 
 
 
+
 - [ ] **CAMPANHAS-20261125:** Auditoria e correção de templates, mídia de exemplo, rastreamento Meta, janela IANA, catálogo e consentimentos. Checkpoints A–F registrados; 285 exemplos backend e 192 testes frontend, mais teste adicional de rótulo, aprovados; navegador sintético documentado. CI e candidata sem publicação em andamento. Homologação real depende de autorização específica. Ver [evidências](docs/qa/jrc-campanhas-20261125.md).
 
 Nenhuma execução funcional é iniciada por este bootstrap. As frentes já em andamento permanecem nos planos/checkpoints existentes.
@@ -19,6 +20,8 @@ Nenhuma execução funcional é iniciada por este bootstrap. As frentes já em a
 - [ ] **OPS-02:** Reconciliar correções genéricas do LAB2 preservando layout e timezone específicos.
 
 ## Concluído (Done)
+
+- [x] **CAMPANHAS-ERROS-PT-20261126:** Traduzir erros de relatório por código confirmado, preservar original em detalhes e isolar consulta histórica por conta/caixa. [QA](docs/qa/gopure-campanhas-erros-pt-20261126.md). 232 testes backend, 217 frontend e build aprovados. Sem envio real, publicação ou deploy.
 
 - [x] **CAMPANHAS-CLOUD-20261126:** Remover ritmo manual Cloud API no formulário e agendamento, mantendo demais provedores; ampliar assistente e legibilidade. [QA](docs/qa/gopure-campanhas-layout-cloud-20261126.md). 229 testes backend, 212 frontend, navegador sintético e build aprovados. Sem disparos reais/publicação/deploy.
 

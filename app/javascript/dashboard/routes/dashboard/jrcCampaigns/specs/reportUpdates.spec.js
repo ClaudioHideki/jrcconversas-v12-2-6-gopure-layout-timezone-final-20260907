@@ -57,6 +57,38 @@ describe('campaign report receipt updates', () => {
     expect(api.report).toHaveBeenCalledTimes(calls);
   });
 
+  it.each([
+    ['131049', 'Unchanged provider text', 'A Meta restringiu'],
+    [
+      '131026',
+      'This message was not delivered to maintain healthy ecosystem engagement.',
+      'Não foi possível entregar',
+    ],
+    [
+      null,
+      'This message was not delivered to maintain healthy ecosystem engagement.',
+      'A Meta restringiu',
+    ],
+    [null, 'Message undeliverable', 'Não foi possível entregar'],
+    ['999999', 'Message undeliverable', 'O envio apresentou uma falha'],
+  ])(
+    'translates error code %s while preserving original technical evidence',
+    async (code, original, expected) => {
+      const data = result('failed');
+      data.recipients[0].error_code = code;
+      data.recipients[0].error_message = original;
+      api.report.mockResolvedValue({ data });
+      const wrapper = render();
+      await flushPromises();
+      const cell = wrapper.get('tbody td:last-child');
+      expect(cell.get('p').text()).toContain(expected);
+      const details = cell.get('details');
+      expect(details.attributes('open')).toBeUndefined();
+      expect(details.get('p').text()).toBe(original);
+      if (code) expect(cell.text()).toContain(`Código do provedor: ${code}`);
+    }
+  );
+
   it('keeps the confirmed state on refresh failure and allows manual retry', async () => {
     const wrapper = render();
     await flushPromises();

@@ -8,7 +8,8 @@ class JrcCampaigns::ReportService
   def as_json
     scope = campaign.recipients.includes(:contact, :inbox, :execution, :deliveries).order(id: :desc)
     total = scope.count
-    recipients = scope.offset((page - 1) * per_page).limit(per_page)
+    recipients = scope.offset((page - 1) * per_page).limit(per_page).to_a
+    @provider_error_codes = provider_error_codes(recipients)
 
     {
       timezone: campaign.sending_window['timezone'].presence || 'UTC',
@@ -39,10 +40,30 @@ class JrcCampaigns::ReportService
                              :started_at, :completed_at])
   end
 
+  def provider_error_codes(recipients)
+    deliveries = recipients.flat_map(&:deliveries).select { |delivery| delivery.failed? && delivery.external_id.present? }
+    return {} if deliveries.empty?
+
+    events = JrcCampaigns::StatusEvent.joins(:inbox)
+                                      .where(inboxes: { account_id: campaign.account_id },
+                                             inbox_id: deliveries.map(&:inbox_id), external_id: deliveries.map(&:external_id), status: 'failed')
+                                      .order(id: :desc)
+    events.pluck(:inbox_id, :external_id, :provider_errors).each_with_object({}) do |(inbox_id, external_id, errors), result|
+      code = Array(errors).first.to_h['code'].presence
+      result[[inbox_id, external_id]] ||= code.to_s if code
+    end
+  end
+
+  def recipient_error_code(recipient)
+    delivery = recipient.deliveries.select(&:failed?).max_by(&:id)
+    @provider_error_codes[[delivery.inbox_id, delivery.external_id]] if delivery
+  end
+
   def recipient_json(recipient)
     recipient.as_json(only: [:id, :name, :phone_number, :email, :destination, :source, :status, :scheduled_at, :sent_at, :delivered_at, :read_at,
                              :replied_at,
                              :failed_at, :error_message]).merge(
+                               error_code: recipient_error_code(recipient),
                                contact_id: recipient.contact_id,
                                inbox_id: recipient.inbox_id,
                                inbox_name: recipient.inbox&.name,

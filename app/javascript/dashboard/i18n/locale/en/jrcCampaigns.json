@@ -444,7 +444,14 @@
       "SENT_AT": "Enviado em",
       "ERROR": "Erro",
       "NO_DATA": "Ainda não há dados de execução para esta campanha.",
-      "READ_RECEIPT_HELP": "Atualização automática a cada 15 segundos. A leitura só aparece quando confirmada pelo WhatsApp; sem essa confirmação, a mensagem pode permanecer como Entregue."
+      "READ_RECEIPT_HELP": "Atualização automática a cada 15 segundos. A leitura só aparece quando confirmada pelo WhatsApp; sem essa confirmação, a mensagem pode permanecer como Entregue.",
+      "ERROR_CODE": "Código do provedor: {code}",
+      "ERROR_DETAILS": "Detalhes técnicos",
+      "ERROR_MESSAGES": {
+        "ECOSYSTEM": "A Meta restringiu a entrega desta mensagem de marketing para este destinatário. Aguarde pelo menos 24 horas antes de uma nova tentativa; a liberação não é garantida.",
+        "UNDELIVERABLE": "Não foi possível entregar a mensagem. Confira o número e se o destinatário consegue enviar uma mensagem ao WhatsApp remetente e está com o aplicativo atualizado.",
+        "UNKNOWN": "O envio apresentou uma falha. Consulte o código e os detalhes técnicos para identificar a causa."
+      }
     },
     "ALERTS": {
       "LOAD_FAILED": "Não foi possível carregar Campanhas.",
