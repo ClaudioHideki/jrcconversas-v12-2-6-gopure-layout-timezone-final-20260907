@@ -52,6 +52,7 @@ const global = {
     CampaignWizard: Wizard,
     SanitizedLists: Lists,
     CampaignPerformanceChart: true,
+    VDropdown: { template: '<div><slot /><slot name="popper" /></div>' },
   },
   mocks: { $t: key => key },
 };
@@ -131,7 +132,7 @@ describe('campaign page preserves the saved draft through review and launch', ()
     expect(api.launch).toHaveBeenCalledExactlyOnceWith(17);
   });
 
-  it('exposes confirmed deletion beside the campaign name and refreshes the list', async () => {
+  it('exposes confirmed deletion in the campaign actions and refreshes the list', async () => {
     api.get.mockResolvedValueOnce({
       data: [{ ...campaign, status: 'completed' }],
     });
@@ -142,7 +143,7 @@ describe('campaign page preserves the saved draft through review and launch', ()
     const remove = wrapper.get(
       'button[aria-label="JRC_CAMPAIGNS.DELETE_NAMED"]'
     );
-    expect(remove.element.closest('td').textContent).toContain(campaign.name);
+    expect(remove.element.closest('tr').textContent).toContain(campaign.name);
     await remove.trigger('click');
     expect(api.delete).not.toHaveBeenCalled();
     confirm.mockReturnValue(true);

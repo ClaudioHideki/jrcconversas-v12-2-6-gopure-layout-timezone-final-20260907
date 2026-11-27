@@ -28,3 +28,5 @@ Não marcar uma proposta como aceita sem a decisão correspondente. Preserve os 
 - [0010 — Erros de campanhas em português](0010-campanhas-erros-traduzidos.md).
 
 - [0011 — Listas sanitizadas no CSV](0011-campanhas-listas-na-importacao-csv.md).
+
+- [0012 — Painel de disparos e aprovação legível](0012-campanhas-layout-disparos-aprovacao.md).

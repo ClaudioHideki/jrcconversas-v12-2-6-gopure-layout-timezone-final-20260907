@@ -56,7 +56,12 @@
       "REPLIES": "Respostas",
       "FAILURES": "Falhas",
       "VS_PREVIOUS": "vs. período anterior",
-      "NO_PREVIOUS": "Sem base no período anterior"
+      "NO_PREVIOUS": "Sem base no período anterior",
+      "TOTAL_SENT": "Total de mensagens enviadas",
+      "RATE_DELIVERED": "Taxa de entrega: {rate}%",
+      "RATE_READ": "Taxa de leitura: {rate}%",
+      "RATE_REPLIED": "Taxa de resposta: {rate}%",
+      "RATE_FAILED": "Taxa de falha: {rate}%"
     },
     "FILTERS": {
       "PERIOD": "Período",
@@ -284,9 +289,9 @@
       "CONFIG_TITLE": "Configure o envio da campanha",
       "CONFIG_SUBTITLE": "Ajuste como, quando e por onde sua campanha será enviada.",
       "ROUND_ROBIN_HELP": "Distribui os contatos igualmente entre as caixas selecionadas.",
-      "LEAST_USED": "Menor utilização",
+      "LEAST_USED": "Remetente menos utilizado",
       "LEAST_USED_HELP": "Prioriza a caixa com menos destinatários programados no dia.",
-      "PRIORITY": "Prioridade",
+      "PRIORITY": "Por prioridade",
       "PRIORITY_HELP": "Usa a ordem configurada e envia pela primeira caixa prioritária.",
       "LEGACY_ROTATION": "Esta campanha usa um modo legado. Ele continuará preservado até você escolher um dos modos atuais.",
       "INBOX_CONNECTED": "Conectada",
@@ -519,7 +524,7 @@
       "INTERVAL": "Intervalo de envio",
       "SECONDS": "{min}–{max} segundos",
       "HOURS": "{count} horas",
-      "WINDOW": "Dias (0=domingo) e horário permitido",
+      "WINDOW": "Dias e horário de envio",
       "INBOXES": "Caixas de envio",
       "ROTATION": "Distribuição entre caixas",
       "RECURRENCE": "Recorrência",
@@ -668,6 +673,19 @@
       "failed": "Falhou",
       "skipped": "Ignorada",
       "canceled": "Cancelada"
+    },
+    "ACTIONS_NAMED": "Ações de {name}",
+    "REVIEW_LAYOUT": {
+      "CHECK_BEFORE_APPROVING": "Confira o envio antes de aprovar",
+      "POLICY_SHORT": "A aprovação vale por 48 horas para estas mensagens, esta configuração e os destinatários listados abaixo.",
+      "POLICY_DETAILS": "Ver regras da aprovação",
+      "SUMMARY": "Resumo do envio",
+      "NO_INTERVAL": "Sem intervalo adicional entre destinatários",
+      "EVERY_DAYS": "A cada {count} dias",
+      "MESSAGE_NUMBER": "Mensagem {count}",
+      "TEMPLATE_CONTENT": "O envio usa o conteúdo do template aprovado. Confira o nome e os arquivos desta mensagem.",
+      "TECHNICAL": "Detalhes técnicos",
+      "APPROVAL_ONLY": "A aprovação registra a revisão deste público e configuração."
     }
   }
 }
