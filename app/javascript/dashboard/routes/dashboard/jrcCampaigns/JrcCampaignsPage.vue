@@ -844,53 +844,281 @@ onMounted(fetchData);
       />
       <BlacklistPanel v-else-if="activeTab === 'blacklist'" />
       <template v-else>
-        <div class="mb-5">
-          <h2 class="text-xl font-semibold text-n-slate-12">
-            {{ $t('JRC_CAMPAIGNS.REPORTS.TITLE') }}
-          </h2>
-          <p class="mt-1 text-sm text-n-slate-11">
-            {{ $t('JRC_CAMPAIGNS.REPORTS.SUBTITLE') }}
-          </p>
+        <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 class="text-2xl font-semibold text-n-slate-12">
+              {{ $t('JRC_CAMPAIGNS.REPORT_LAYOUT.TITLE') }}
+            </h2>
+            <p class="mb-0 mt-1 text-sm text-n-slate-11">
+              {{ $t('JRC_CAMPAIGNS.REPORT_LAYOUT.SUBTITLE') }}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="flex items-center gap-2 rounded-xl border border-n-teal-7 bg-n-background px-4 py-2.5 text-sm font-semibold text-n-teal-11 hover:bg-n-teal-2"
+            @click="exportSelected"
+          >
+            <span class="i-lucide-download size-4" />
+            {{ $t('JRC_CAMPAIGNS.EXPORT') }}
+          </button>
         </div>
-        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <section class="rounded-2xl border border-n-weak bg-n-background p-4">
           <div
+            class="grid gap-3 md:grid-cols-2 xl:grid-cols-[220px_1fr_190px_auto_auto]"
+          >
+            <label class="text-sm font-medium text-n-slate-11">
+              {{ $t('JRC_CAMPAIGNS.FILTERS.PERIOD') }}
+              <select
+                v-model="period"
+                class="mt-1.5 w-full rounded-xl border border-n-weak bg-n-background px-3 py-2.5 text-sm text-n-slate-12"
+              >
+                <option value="7">
+                  {{ $t('JRC_CAMPAIGNS.FILTERS.LAST_7_DAYS') }}
+                </option>
+                <option value="30">
+                  {{ $t('JRC_CAMPAIGNS.FILTERS.LAST_30_DAYS') }}
+                </option>
+                <option value="90">
+                  {{ $t('JRC_CAMPAIGNS.FILTERS.LAST_90_DAYS') }}
+                </option>
+                <option value="all">
+                  {{ $t('JRC_CAMPAIGNS.FILTERS.ALL_PERIOD') }}
+                </option>
+              </select>
+            </label>
+            <label class="text-sm font-medium text-n-slate-11">
+              {{ $t('JRC_CAMPAIGNS.FILTERS.CAMPAIGN') }}
+              <select
+                v-model="campaignFilter"
+                class="mt-1.5 w-full rounded-xl border border-n-weak bg-n-background px-3 py-2.5 text-sm text-n-slate-12"
+              >
+                <option value="">
+                  {{ $t('JRC_CAMPAIGNS.FILTERS.ALL_CAMPAIGNS') }}
+                </option>
+                <option
+                  v-for="campaign in campaigns"
+                  :key="campaign.id"
+                  :value="campaign.id"
+                >
+                  {{ campaign.name }}
+                </option>
+              </select>
+            </label>
+            <label class="text-sm font-medium text-n-slate-11">
+              {{ $t('JRC_CAMPAIGNS.FILTERS.CHANNEL') }}
+              <select
+                v-model="channelFilter"
+                class="mt-1.5 w-full rounded-xl border border-n-weak bg-n-background px-3 py-2.5 text-sm text-n-slate-12"
+              >
+                <option value="">
+                  {{ $t('JRC_CAMPAIGNS.FILTERS.ALL_CHANNELS') }}
+                </option>
+                <option value="whatsapp">
+                  {{ $t('JRC_CAMPAIGNS.CHANNEL_WHATSAPP') }}
+                </option>
+                <option value="email">
+                  {{ $t('JRC_CAMPAIGNS.CHANNEL_EMAIL') }}
+                </option>
+              </select>
+            </label>
+            <button
+              type="button"
+              class="self-end rounded-xl border border-n-strong px-3 py-2.5 text-sm font-medium text-n-slate-12 hover:bg-n-alpha-2"
+              @click="showAdvancedFilters = !showAdvancedFilters"
+            >
+              <span class="i-lucide-list-filter mr-2 inline-block size-4" />
+              {{ $t('JRC_CAMPAIGNS.FILTERS.ADVANCED') }}
+            </button>
+            <button
+              type="button"
+              class="self-end rounded-xl border border-n-strong p-2.5 text-n-slate-12 hover:bg-n-alpha-2"
+              :title="$t('JRC_CAMPAIGNS.REFRESH')"
+              @click="fetchData"
+            >
+              <span
+                class="i-lucide-refresh-cw size-5"
+                :class="{ 'animate-spin': loading || analyticsLoading }"
+              />
+            </button>
+          </div>
+          <div
+            v-if="showAdvancedFilters"
+            class="mt-4 flex flex-wrap items-center gap-2 border-t border-n-weak pt-4"
+          >
+            <span class="mr-1 text-sm font-medium text-n-slate-11">
+              {{ $t('JRC_CAMPAIGNS.FILTERS.STATUS') }}
+            </span>
+            <button
+              v-for="option in statusOptions"
+              :key="option.status"
+              type="button"
+              class="rounded-full border px-3 py-1.5 text-xs font-medium"
+              :class="
+                statusFilters.includes(option.status)
+                  ? 'border-n-brand bg-n-brand/10 text-n-brand'
+                  : 'border-n-weak text-n-slate-11'
+              "
+              @click="toggleStatus(option.status)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </section>
+
+        <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <article
             v-for="metric in dashboardMetrics"
             :key="metric.key"
-            class="rounded-xl border border-n-weak p-4"
+            class="min-w-0 rounded-xl border border-n-weak bg-n-background p-3 shadow-sm"
           >
-            <div class="text-xs text-n-slate-11">{{ metric.label }}</div>
-            <div class="mt-1 text-2xl font-semibold text-n-slate-12">
-              {{ formatNumber(analytics.summary[metric.key]) }}
-            </div>
-          </div>
-        </div>
-        <div class="mt-6 overflow-hidden rounded-xl border border-n-weak">
-          <button
-            v-for="campaign in filteredCampaigns"
-            :key="campaign.id"
-            type="button"
-            class="flex w-full items-center justify-between border-b border-n-weak p-4 text-left last:border-b-0 hover:bg-n-alpha-1"
-            @click="reportCampaign = campaign"
-          >
-            <div>
-              <div class="font-medium text-n-slate-12">{{ campaign.name }}</div>
-              <div class="mt-1 text-sm text-n-slate-11">
-                {{ statusLabel(campaign.status) }} ·
-                {{
-                  formatDate(
-                    campaign.created_at,
-                    campaign.sending_window?.timezone || 'UTC'
-                  )
-                }}
+            <div
+              class="flex flex-wrap items-center gap-3 rounded-lg p-3"
+              :class="metric.iconClass"
+            >
+              <span class="size-6 shrink-0" :class="metric.icon" />
+              <div class="min-w-0 flex-1">
+                <p class="m-0 text-sm font-medium">{{ metric.label }}</p>
+                <p class="m-0 mt-1 text-2xl font-bold">
+                  {{ formatNumber(analytics.summary[metric.key]) }}
+                </p>
               </div>
+              <span v-if="metric.key !== 'sent'" class="text-sm font-semibold">
+                {{ formatPercent(metricRate(metric.key)) }}%
+              </span>
             </div>
-            <div class="flex items-center gap-4 text-sm text-n-slate-11">
-              <span>{{ formatNumber(campaign.sent_count) }}</span>
-              <span
-                class="i-lucide-chart-no-axes-column-increasing size-5 text-n-violet-11"
-              />
-            </div>
-          </button>
+          </article>
+        </div>
+        <section
+          class="mt-5 overflow-hidden rounded-2xl border border-n-weak bg-n-background shadow-sm"
+        >
+          <div class="border-b border-n-weak px-4 py-4 sm:px-5">
+            <h3 class="text-lg font-semibold">
+              {{ $t('JRC_CAMPAIGNS.REPORT_LAYOUT.RESULTS') }}
+            </h3>
+            <p class="m-0 mt-1 text-sm text-n-slate-11">
+              {{
+                $t('JRC_CAMPAIGNS.DASHBOARD.CAMPAIGN_COUNT', {
+                  count: filteredCampaigns.length,
+                })
+              }}
+            </p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[1000px] text-left text-sm">
+              <thead class="bg-n-teal-2 text-n-slate-12">
+                <tr>
+                  <th class="px-4 py-3">
+                    {{ $t('JRC_CAMPAIGNS.REPORTS.CAMPAIGN') }}
+                  </th>
+                  <th class="px-3 py-3">
+                    {{ $t('JRC_CAMPAIGNS.TABLE.CHANNEL') }}
+                  </th>
+                  <th class="px-3 py-3">
+                    {{ $t('JRC_CAMPAIGNS.TABLE.CREATED') }}
+                  </th>
+                  <th class="px-3 py-3">
+                    {{ $t('JRC_CAMPAIGNS.TABLE.STATUS') }}
+                  </th>
+                  <th
+                    v-for="metric in dashboardMetrics"
+                    :key="metric.key"
+                    class="px-3 py-3 text-right"
+                  >
+                    {{ metric.label }}
+                  </th>
+                  <th class="px-4 py-3 text-right">
+                    {{ $t('JRC_CAMPAIGNS.TABLE.ACTIONS') }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="campaign in filteredCampaigns"
+                  :key="campaign.id"
+                  class="border-t border-n-weak hover:bg-n-teal-2/50"
+                >
+                  <td class="px-4 py-3 font-semibold">
+                    <button
+                      type="button"
+                      class="max-w-64 break-words text-left hover:text-n-teal-11"
+                      @click="reportCampaign = campaign"
+                    >
+                      {{ campaign.name }}
+                    </button>
+                  </td>
+                  <td class="px-3 py-3">
+                    <span class="flex items-center gap-2">
+                      <span
+                        class="size-4 shrink-0 text-n-teal-11"
+                        :class="
+                          campaign.delivery_channel === 'email'
+                            ? 'i-lucide-mail'
+                            : 'i-lucide-message-circle'
+                        "
+                      />
+                      {{
+                        $t(
+                          campaign.delivery_channel === 'email'
+                            ? 'JRC_CAMPAIGNS.CHANNEL_EMAIL'
+                            : 'JRC_CAMPAIGNS.CHANNEL_WHATSAPP'
+                        )
+                      }}
+                    </span>
+                  </td>
+                  <td class="px-3 py-3 text-n-slate-11">
+                    {{
+                      formatDate(
+                        campaign.created_at,
+                        campaign.sending_window?.timezone || 'UTC'
+                      )
+                    }}
+                  </td>
+                  <td class="px-3 py-3">
+                    <span
+                      class="inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold"
+                      :class="statusClass(campaign.status)"
+                    >
+                      {{ statusLabel(campaign.status) }}
+                    </span>
+                  </td>
+                  <td
+                    v-for="metric in dashboardMetrics"
+                    :key="metric.key"
+                    class="px-3 py-3 text-right tabular-nums"
+                  >
+                    {{ formatNumber(campaign[`${metric.key}_count`]) }}
+                  </td>
+                  <td class="px-4 py-3 text-right">
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-n-teal-7 px-3 py-2 font-semibold text-n-teal-11 hover:bg-n-teal-2"
+                      @click="reportCampaign = campaign"
+                    >
+                      <span
+                        class="i-lucide-chart-no-axes-column-increasing size-4"
+                      />
+                      {{ $t('JRC_CAMPAIGNS.REPORT_LAYOUT.VIEW') }}
+                    </button>
+                  </td>
+                </tr>
+                <tr v-if="!filteredCampaigns.length">
+                  <td colspan="10" class="p-8 text-center text-n-slate-11">
+                    {{ $t('JRC_CAMPAIGNS.EMPTY_FILTERED') }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <div
+          class="mt-4 flex items-center gap-3 rounded-xl border border-n-weak bg-n-background p-4"
+        >
+          <span
+            class="i-lucide-chart-no-axes-column-increasing size-8 shrink-0 rounded-lg bg-n-teal-3 p-2 text-n-teal-11"
+          />
+          <p class="m-0 text-sm text-n-slate-11">
+            {{ $t('JRC_CAMPAIGNS.REPORT_LAYOUT.DETAIL_HINT') }}
+          </p>
         </div>
       </template>
     </div>

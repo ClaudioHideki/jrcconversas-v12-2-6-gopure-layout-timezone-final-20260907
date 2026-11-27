@@ -18,6 +18,8 @@ Referência inicial: INIT solicitado pelo usuário em 2026-11-13. É uma trilha 
 
 ## Fase 3: Estabilização e manutenção
 
+- Assistente centralizado, rótulos Validar contatos/Validar e relatórios tabulares, mantendo lógica e listas importadas. [ADR 0013](docs/adr/0013-campanhas-layout-assistente-relatorios.md).
+
 - Painel de disparos com ações completas em menu e aprovação legível, preservando o fluxo validado. [ADR 0012](docs/adr/0012-campanhas-layout-disparos-aprovacao.md).
 
 - Reutilizar listas sanitizadas diretamente na importação CSV do assistente. [ADR 0011](docs/adr/0011-campanhas-listas-na-importacao-csv.md).

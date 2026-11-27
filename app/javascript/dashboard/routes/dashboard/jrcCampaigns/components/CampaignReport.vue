@@ -66,23 +66,43 @@ onUnmounted(() => clearInterval(refreshTimer));
 </script>
 
 <template>
-  <div class="fixed inset-0 z-50 flex items-stretch justify-end bg-black/40">
+  <div
+    class="fixed inset-0 z-50 flex items-stretch justify-end bg-n-slate-12/40"
+    role="dialog"
+    aria-modal="true"
+    :aria-label="$t('JRC_CAMPAIGNS.REPORT_LAYOUT.DETAIL_TITLE')"
+  >
     <div
-      class="flex h-full w-full max-w-6xl flex-col bg-n-background shadow-xl"
+      class="flex h-full min-w-0 w-full max-w-7xl flex-col bg-n-background text-n-slate-12 shadow-xl"
     >
       <div
-        class="flex items-center justify-between border-b border-n-weak px-6 py-4"
+        class="flex shrink-0 flex-wrap items-start justify-between gap-4 border-b border-n-weak px-4 py-4 sm:px-6"
       >
-        <div>
-          <h2 class="text-xl font-semibold text-n-slate-12">
-            {{ $t('JRC_CAMPAIGNS.REPORTS.TITLE') }} · {{ campaign.name }}
-          </h2>
-          <p class="mt-1 text-sm text-n-slate-11">
-            {{ $t('JRC_CAMPAIGNS.REPORTS.SUBTITLE') }}
-            {{ $t('JRC_CAMPAIGNS.REPORTS.READ_RECEIPT_HELP') }}
+        <div class="min-w-0">
+          <p class="m-0 text-sm font-semibold text-n-teal-11">
+            {{ $t('JRC_CAMPAIGNS.REPORT_LAYOUT.DETAIL_TITLE') }}
+          </p>
+          <div class="mt-1 flex flex-wrap items-center gap-3">
+            <h2 class="m-0 break-words text-2xl font-bold sm:text-3xl">
+              {{ campaign.name }}
+            </h2>
+            <span
+              v-if="campaign.status"
+              class="rounded-full px-3 py-1 text-sm font-semibold"
+              :class="
+                campaign.status === 'completed'
+                  ? 'bg-n-teal-3 text-n-teal-11'
+                  : 'bg-n-alpha-2 text-n-slate-12'
+              "
+            >
+              {{ $t(`JRC_CAMPAIGNS.STATUS.${campaign.status}`) }}
+            </span>
+          </div>
+          <p class="mb-0 mt-2 text-sm text-n-slate-11">
+            {{ $t('JRC_CAMPAIGNS.REPORT_LAYOUT.AUTO_REFRESH') }}
           </p>
         </div>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <button
             type="button"
             class="flex items-center gap-2 rounded-lg border border-n-strong px-3 py-2 text-sm text-n-slate-12 disabled:opacity-50"
@@ -103,13 +123,14 @@ onUnmounted(() => clearInterval(refreshTimer));
           <button
             type="button"
             class="rounded-lg p-2 text-n-slate-12 hover:bg-n-alpha-2"
+            :aria-label="$t('JRC_CAMPAIGNS.CLOSE')"
             @click="emit('close')"
           >
             <span class="i-lucide-x size-5" />
           </button>
         </div>
       </div>
-      <div class="flex-1 overflow-y-auto p-6">
+      <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
         <div v-if="loading" class="p-12 text-center text-sm text-n-slate-11">
           {{ $t('JRC_CAMPAIGNS.LOADING') }}
         </div>
@@ -117,28 +138,76 @@ onUnmounted(() => clearInterval(refreshTimer));
           <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
             <div
               v-for="item in [
-                ['TOTAL', report.summary.total],
-                ['SENT', report.summary.sent],
-                ['DELIVERED', report.summary.delivered],
-                ['READ', report.summary.read],
-                ['REPLIED', report.summary.replied],
-                ['FAILED', report.summary.failed],
+                [
+                  'TOTAL',
+                  report.summary.total,
+                  'bg-n-teal-2 text-n-teal-11',
+                  'i-lucide-users-round',
+                ],
+                [
+                  'SENT',
+                  report.summary.sent,
+                  'bg-n-blue-2 text-n-blue-11',
+                  'i-lucide-send',
+                ],
+                [
+                  'DELIVERED',
+                  report.summary.delivered,
+                  'bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
+                  'i-lucide-circle-check',
+                ],
+                [
+                  'READ',
+                  report.summary.read,
+                  'bg-n-violet-2 text-n-violet-11',
+                  'i-lucide-eye',
+                ],
+                [
+                  'REPLIED',
+                  report.summary.replied,
+                  'bg-n-teal-2 text-n-teal-11',
+                  'i-lucide-messages-square',
+                ],
+                [
+                  'FAILED',
+                  report.summary.failed,
+                  'bg-n-ruby-2 text-n-ruby-11',
+                  'i-lucide-triangle-alert',
+                ],
               ]"
               :key="item[0]"
-              class="rounded-xl border border-n-weak p-4"
+              class="flex min-w-0 items-start gap-3 rounded-xl border border-n-weak p-4"
+              :class="item[2]"
             >
-              <div class="text-xs text-n-slate-11">
-                {{ $t(`JRC_CAMPAIGNS.REPORTS.${item[0]}`) }}
-              </div>
-              <div class="mt-1 text-2xl font-semibold text-n-slate-12">
-                {{ item[1] }}
+              <span class="mt-1 size-6 shrink-0" :class="item[3]" />
+              <div class="min-w-0">
+                <div class="text-sm font-medium">
+                  {{ $t(`JRC_CAMPAIGNS.REPORTS.${item[0]}`) }}
+                </div>
+                <div class="mt-1 text-2xl font-bold tabular-nums">
+                  {{ new Intl.NumberFormat().format(Number(item[1] || 0)) }}
+                </div>
               </div>
             </div>
           </div>
 
-          <div class="mt-6 overflow-x-auto rounded-xl border border-n-weak">
+          <p
+            class="my-4 flex items-center gap-2 rounded-xl bg-n-blue-2 p-3 text-sm text-n-blue-11"
+          >
+            <span class="i-lucide-info size-4 shrink-0" />
+            {{ $t('JRC_CAMPAIGNS.REPORTS.READ_RECEIPT_HELP') }}
+          </p>
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 class="m-0 text-lg font-semibold">
+              {{ $t('JRC_CAMPAIGNS.REPORT_LAYOUT.RECIPIENT_RESULTS') }}
+            </h3>
+            <span class="text-sm text-n-slate-11">
+              {{ $t('JRC_CAMPAIGNS.REPORT_LAYOUT.ALL_RESULTS') }}
+            </span>
+          </div>
+          <div class="overflow-x-auto rounded-xl border border-n-weak">
             <table class="w-full min-w-[900px] text-left text-sm">
-              <thead class="bg-n-alpha-2 text-xs text-n-slate-11">
+              <thead class="bg-n-alpha-2 text-sm text-n-slate-12">
                 <tr>
                   <th class="px-4 py-3">
                     {{ $t('JRC_CAMPAIGNS.TABLE.NAME') }}
@@ -167,9 +236,11 @@ onUnmounted(() => clearInterval(refreshTimer));
                 <tr
                   v-for="recipient in report.recipients"
                   :key="recipient.id"
-                  class="border-t border-n-weak"
+                  class="border-t border-n-weak hover:bg-n-teal-2/30"
                 >
-                  <td class="px-4 py-3 font-medium text-n-slate-12">
+                  <td
+                    class="min-w-[140px] px-4 py-3 font-medium text-n-slate-12"
+                  >
                     {{ recipient.name || '-' }}
                   </td>
                   <td class="px-4 py-3 text-n-slate-12">
@@ -187,7 +258,18 @@ onUnmounted(() => clearInterval(refreshTimer));
                   </td>
                   <td class="px-4 py-3">
                     <span
-                      class="rounded-full bg-n-alpha-2 px-2 py-1 text-xs text-n-slate-12"
+                      class="inline-flex rounded-full px-3 py-1 text-sm font-medium"
+                      :class="
+                        recipient.status === 'failed'
+                          ? 'bg-n-ruby-3 text-n-ruby-11'
+                          : recipient.status === 'read'
+                            ? 'bg-n-violet-3 text-n-violet-11'
+                            : ['delivered', 'replied'].includes(
+                                  recipient.status
+                                )
+                              ? 'bg-n-teal-3 text-n-teal-11'
+                              : 'bg-n-alpha-2 text-n-slate-12'
+                      "
                     >
                       {{
                         $t(`JRC_CAMPAIGNS.RECIPIENT_STATUS.${recipient.status}`)
@@ -207,11 +289,16 @@ onUnmounted(() => clearInterval(refreshTimer));
                         : '-'
                     }}
                   </td>
-                  <td class="max-w-xs px-4 py-3 text-xs text-n-ruby-11">
+                  <td class="max-w-sm px-4 py-3 text-sm text-n-ruby-11">
                     <template
                       v-if="recipient.error_message || recipient.error_code"
                     >
-                      <p>{{ errorMessage(recipient) }}</p>
+                      <p
+                        class="line-clamp-2 font-medium"
+                        :title="errorMessage(recipient)"
+                      >
+                        {{ errorMessage(recipient) }}
+                      </p>
                       <p v-if="recipient.error_code" class="mt-1 font-semibold">
                         {{
                           $t('JRC_CAMPAIGNS.REPORTS.ERROR_CODE', {
@@ -223,11 +310,18 @@ onUnmounted(() => clearInterval(refreshTimer));
                         v-if="recipient.error_message"
                         class="mt-2 text-n-slate-12"
                       >
-                        <summary class="cursor-pointer">
+                        <summary
+                          class="cursor-pointer font-medium text-n-teal-11 underline"
+                        >
                           {{ $t('JRC_CAMPAIGNS.REPORTS.ERROR_DETAILS') }}
                         </summary>
-                        <p class="mt-1 break-words">
+                        <p
+                          class="mt-2 break-words rounded-lg bg-n-ruby-2 p-3 text-sm text-n-slate-12"
+                        >
                           {{ recipient.error_message }}
+                        </p>
+                        <p class="mt-2 text-sm leading-6 text-n-slate-12">
+                          {{ errorMessage(recipient) }}
                         </p>
                       </details>
                     </template>
@@ -246,29 +340,45 @@ onUnmounted(() => clearInterval(refreshTimer));
             </table>
           </div>
 
-          <div
-            v-if="report.pagination.pages > 1"
-            class="mt-4 flex justify-end gap-2"
-          >
-            <button
-              type="button"
-              class="rounded-lg border border-n-weak px-3 py-1.5 text-sm disabled:opacity-40"
-              :disabled="page <= 1"
-              @click="load(page - 1)"
+          <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <p class="m-0 text-sm text-n-slate-11">
+              {{
+                $t('JRC_CAMPAIGNS.REPORT_LAYOUT.PAGE_NOTE', {
+                  page,
+                  pages: report.pagination.pages,
+                  count: report.recipients.length,
+                })
+              }}
+            </p>
+            <div
+              v-if="report.pagination.pages > 1"
+              class="flex items-center gap-2"
             >
-              <span class="i-lucide-chevron-left size-4" aria-hidden="true" />
-            </button>
-            <span class="px-2 py-1.5 text-sm text-n-slate-11">
-              {{ page }} / {{ report.pagination.pages }}
-            </span>
-            <button
-              type="button"
-              class="rounded-lg border border-n-weak px-3 py-1.5 text-sm disabled:opacity-40"
-              :disabled="page >= report.pagination.pages"
-              @click="load(page + 1)"
-            >
-              <span class="i-lucide-chevron-right size-4" aria-hidden="true" />
-            </button>
+              <button
+                type="button"
+                class="rounded-lg border border-n-weak px-3 py-1.5 text-sm disabled:opacity-40"
+                :aria-label="$t('JRC_CAMPAIGNS.REPORT_LAYOUT.PREVIOUS_PAGE')"
+                :disabled="page <= 1"
+                @click="load(page - 1)"
+              >
+                <span class="i-lucide-chevron-left size-4" aria-hidden="true" />
+              </button>
+              <span class="px-2 py-1.5 text-sm text-n-slate-11">
+                {{ page }} / {{ report.pagination.pages }}
+              </span>
+              <button
+                type="button"
+                class="rounded-lg border border-n-weak px-3 py-1.5 text-sm disabled:opacity-40"
+                :aria-label="$t('JRC_CAMPAIGNS.REPORT_LAYOUT.NEXT_PAGE')"
+                :disabled="page >= report.pagination.pages"
+                @click="load(page + 1)"
+              >
+                <span
+                  class="i-lucide-chevron-right size-4"
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
           </div>
         </template>
       </div>

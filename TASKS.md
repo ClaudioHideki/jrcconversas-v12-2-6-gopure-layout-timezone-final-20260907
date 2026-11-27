@@ -11,6 +11,8 @@
 
 
 
+
+
 - [ ] **CAMPANHAS-20261125:** Auditoria e correção de templates, mídia de exemplo, rastreamento Meta, janela IANA, catálogo e consentimentos. Checkpoints A–F registrados; 285 exemplos backend e 192 testes frontend, mais teste adicional de rótulo, aprovados; navegador sintético documentado. CI e candidata sem publicação em andamento. Homologação real depende de autorização específica. Ver [evidências](docs/qa/jrc-campanhas-20261125.md).
 
 Nenhuma execução funcional é iniciada por este bootstrap. As frentes já em andamento permanecem nos planos/checkpoints existentes.
@@ -23,6 +25,8 @@ Nenhuma execução funcional é iniciada por este bootstrap. As frentes já em a
 - [ ] **OPS-02:** Reconciliar correções genéricas do LAB2 preservando layout e timezone específicos.
 
 ## Concluído (Done)
+
+- [x] **CAMPANHAS-LAYOUT-FLUXO-20261127:** Assistente centralizado, relatórios tabulares/detalhados e rótulos Validar contatos/Validar. Todas as listas salvas em Importar CSV preservadas; scripts Vue idênticos à base, 219 testes e build aprovados, navegador sintético conferido. [QA](docs/qa/gopure-campanhas-layout-fluxo-20261127.md). Sem publicação/deploy.
 
 - [x] **CAMPANHAS-LAYOUT-DISPAROS-20261127:** Painel com indicadores coloridos, ações completas em menu e revisão legível sem JSON aberto/rolagem lateral. 219 testes existentes, ESLint e build Vite aprovados; navegador sintético desktop/celular e temas conferidos. [QA](docs/qa/gopure-campanhas-layout-disparos-20261127.md). Somente interface; sem publicação/deploy.
 

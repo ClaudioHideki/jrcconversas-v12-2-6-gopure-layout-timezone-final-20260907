@@ -30,3 +30,5 @@ Não marcar uma proposta como aceita sem a decisão correspondente. Preserve os 
 - [0011 — Listas sanitizadas no CSV](0011-campanhas-listas-na-importacao-csv.md).
 
 - [0012 — Painel de disparos e aprovação legível](0012-campanhas-layout-disparos-aprovacao.md).
+
+- [0013 — Assistente e relatórios de campanhas](0013-campanhas-layout-assistente-relatorios.md).
