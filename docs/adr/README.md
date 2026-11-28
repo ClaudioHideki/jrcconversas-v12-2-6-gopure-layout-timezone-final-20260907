@@ -32,3 +32,5 @@ Não marcar uma proposta como aceita sem a decisão correspondente. Preserve os 
 - [0012 — Painel de disparos e aprovação legível](0012-campanhas-layout-disparos-aprovacao.md).
 
 - [0013 — Assistente e relatórios de campanhas](0013-campanhas-layout-assistente-relatorios.md).
+
+- [0014 — Colagem de links completos no atendimento](0014-atendimento-colagem-links-completos.md).

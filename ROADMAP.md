@@ -18,6 +18,8 @@ Referência inicial: INIT solicitado pelo usuário em 2026-11-13. É uma trilha 
 
 ## Fase 3: Estabilização e manutenção
 
+- Atendimento: preservar URLs completas ao colar hyperlinks em canais sem marca link, mantendo campanhas intactas. [ADR 0014](docs/adr/0014-atendimento-colagem-links-completos.md).
+
 - Assistente centralizado, rótulos Validar contatos/Validar e relatórios tabulares, mantendo lógica e listas importadas. [ADR 0013](docs/adr/0013-campanhas-layout-assistente-relatorios.md).
 
 - Painel de disparos com ações completas em menu e aprovação legível, preservando o fluxo validado. [ADR 0012](docs/adr/0012-campanhas-layout-disparos-aprovacao.md).

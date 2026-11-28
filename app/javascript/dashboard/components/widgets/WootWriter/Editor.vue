@@ -73,6 +73,7 @@ import { createTypingIndicator } from '@chatwoot/utils';
 import { checkFileSizeLimit } from 'shared/helpers/FileHelper';
 import { uploadFile } from 'dashboard/helper/uploadHelper';
 import { INBOX_TYPES } from 'dashboard/helper/inbox';
+import { preservePastedLinkUrls } from 'dashboard/helper/editorPasteHelper';
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -761,6 +762,8 @@ function createEditorView() {
   editorView = new EditorView(editor.value, {
     state: state,
     editable: () => !props.disabled,
+    transformPastedHTML: html =>
+      editorSchema.value.marks.link ? html : preservePastedLinkUrls(html),
     nodeViews: {
       image: imageResizeView,
     },
